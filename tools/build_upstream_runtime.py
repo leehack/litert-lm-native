@@ -148,7 +148,11 @@ def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None)
         for config in target.get("bazel_configs", [target.get("bazel_config")])
         if config
     ]
-    command = bazel_command() + [
+    command = bazel_command()
+    output_user_root = os.environ.get("BAZEL_OUTPUT_USER_ROOT")
+    if output_user_root:
+        command.append(f"--output_user_root={output_user_root}")
+    command += [
         "build",
         *configs,
         target["bazel_target"],

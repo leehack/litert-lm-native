@@ -12,6 +12,16 @@ on:
         required: false
         default: false
         type: boolean
+      target_platform:
+        description: "Runtime platform to build, or all"
+        required: false
+        default: all
+        type: string
+      target_arch:
+        description: "Runtime arch to build, or all"
+        required: false
+        default: all
+        type: string
 
 permissions:
   contents: write
@@ -20,6 +30,7 @@ jobs:
   build-upstream-runtime:
     name: Build upstream runtime (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -56,22 +67,38 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Node.js for Bazelisk fallback
+        if: (inputs.target_platform == 'all' || inputs.target_platform == matrix.platform) && (inputs.target_arch == 'all' || inputs.target_arch == matrix.arch)
         uses: actions/setup-node@v4
         with:
           node-version: "24"
 
       - name: Set up Android NDK
         id: setup-ndk
-        if: matrix.platform == 'android'
+        if: matrix.platform == 'android' && (inputs.target_platform == 'all' || inputs.target_platform == matrix.platform) && (inputs.target_arch == 'all' || inputs.target_arch == matrix.arch)
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r28b
           add-to-path: false
 
+      - name: Cache Bazel
+        if: (inputs.target_platform == 'all' || inputs.target_platform == matrix.platform) && (inputs.target_arch == 'all' || inputs.target_arch == matrix.arch)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazelisk
+            ~/Library/Caches/bazelisk
+            .bazel-output-root
+          key: bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.upstream_tag }}-${{ hashFiles('tools/build_upstream_runtime.py') }}
+          restore-keys: |
+            bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-
+
       - name: Build upstream LiteRT-LM runtime
+        if: (inputs.target_platform == 'all' || inputs.target_platform == matrix.platform) && (inputs.target_arch == 'all' || inputs.target_arch == matrix.arch)
         shell: bash
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          BAZEL_OUTPUT_USER_ROOT: ${{ github.workspace }}/.bazel-output-root
         run: |
           python3 tools/build_upstream_runtime.py \
             --upstream-tag "${{ inputs.upstream_tag }}" \
@@ -80,6 +107,7 @@ jobs:
             --jobs "${{ matrix.jobs }}"
 
       - uses: actions/upload-artifact@v4
+        if: (inputs.target_platform == 'all' || inputs.target_platform == matrix.platform) && (inputs.target_arch == 'all' || inputs.target_arch == matrix.arch)
         with:
           name: upstream-runtime-${{ matrix.platform }}-${{ matrix.arch }}
           path: bin
@@ -128,6 +156,7 @@ jobs:
           path: shim-bin
 
   package:
+    if: inputs.target_platform == 'all' && inputs.target_arch == 'all'
     needs:
       - build-upstream-runtime
       - build-shim
