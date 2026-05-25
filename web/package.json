@@ -1,0 +1,14 @@
+{
+  "name": "@litert-lm-native/web",
+  "version": "0.1.0-dev",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "node ./src/index.js --self-test",
+    "test": "node ./src/index.js --self-test"
+  }
+}

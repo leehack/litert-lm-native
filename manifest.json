@@ -1,0 +1,10 @@
+{
+  "artifacts": [],
+  "package": "litert-lm-native",
+  "schemaVersion": 1,
+  "upstream": {
+    "commit": null,
+    "repository": "google-ai-edge/LiteRT-LM",
+    "tag": "v0.12.0"
+  }
+}

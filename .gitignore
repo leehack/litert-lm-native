@@ -1,0 +1,20 @@
+.DS_Store
+.dart_tool/
+.idea/
+.vscode/
+build/
+dist/
+downloads/
+node_modules/
+*.log
+*.profraw
+
+# Keep output directories but not generated native payloads.
+bin/**/*.dylib
+bin/**/*.dll
+bin/**/*.exe
+bin/**/*.so
+bin/**/*.a
+bin/**/*.framework
+bin/**/*.xcframework
+!bin/**/.gitkeep
