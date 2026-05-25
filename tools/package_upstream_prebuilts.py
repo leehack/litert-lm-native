@@ -31,6 +31,7 @@ LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 
 def download_source(tag: str, output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading upstream source archive for {tag}", flush=True)
     request = urllib.request.Request(
         UPSTREAM_SOURCE_URL.format(tag=tag),
         headers={"User-Agent": "litert-lm-native-prebuilt-packager"},
@@ -44,6 +45,7 @@ def download_source(tag: str, output: Path) -> None:
 
 
 def extract_source(archive: Path, output_dir: Path) -> Path:
+    print(f"Extracting {archive}", flush=True)
     with tarfile.open(archive, "r:gz") as tar:
         tar.extractall(output_dir, filter="data")
     roots = [path for path in output_dir.iterdir() if path.is_dir()]
@@ -57,7 +59,7 @@ def copy_prebuilts(source_root: Path, clean: bool) -> int:
     for upstream_name, (platform, arch) in PREBUILT_TARGETS.items():
         source_dir = source_root / "prebuilt" / upstream_name
         if not source_dir.is_dir():
-            print(f"missing upstream prebuilt dir: {source_dir}")
+            print(f"missing upstream prebuilt dir: {source_dir}", flush=True)
             continue
         target_dir = BIN_DIR / platform / arch
         if clean and target_dir.exists():
@@ -69,6 +71,7 @@ def copy_prebuilts(source_root: Path, clean: bool) -> int:
                 continue
             shutil.copy2(file, target_dir / file.name)
             copied += 1
+        print(f"Packaged {upstream_name} -> {target_dir}", flush=True)
     return copied
 
 
@@ -94,7 +97,7 @@ def main() -> int:
             source_root = extract_source(archive, temp_dir / "src")
             copied = copy_prebuilts(source_root, clean=args.clean)
 
-    print(f"Copied {copied} upstream prebuilt libraries")
+    print(f"Copied {copied} upstream prebuilt libraries", flush=True)
     return 0
 
 

@@ -50,7 +50,7 @@ def main() -> int:
     assets = release.get("assets", [])
     for asset in assets:
         name = asset["name"]
-        print(f"Downloading upstream release asset: {name}")
+        print(f"Downloading upstream release asset: {name}", flush=True)
         subprocess.run(
             [
                 "gh",
@@ -69,7 +69,7 @@ def main() -> int:
             check=True,
         )
 
-    print(f"Downloaded {len(assets)} official release assets")
+    print(f"Downloaded {len(assets)} official release assets", flush=True)
     return 0
 
 
