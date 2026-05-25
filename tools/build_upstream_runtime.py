@@ -128,14 +128,28 @@ def patch_upstream_build(source_root: Path) -> None:
     build_path = source_root / "c" / "BUILD"
     text = build_path.read_text(encoding="utf-8")
     if "name = \"libLiteRtLm.so\"" in text:
-        return
-    insert_before = "\ncc_test(\n    name = \"engine_test\","
-    if insert_before not in text:
-        raise RuntimeError("Could not find insertion point in upstream c/BUILD")
-    build_path.write_text(
-        text.replace(insert_before, SHARED_TARGETS + insert_before),
-        encoding="utf-8",
-    )
+        patched_build = text
+    else:
+        insert_before = "\ncc_test(\n    name = \"engine_test\","
+        if insert_before not in text:
+            raise RuntimeError("Could not find insertion point in upstream c/BUILD")
+        patched_build = text.replace(insert_before, SHARED_TARGETS + insert_before)
+    build_path.write_text(patched_build, encoding="utf-8")
+
+    workspace_path = source_root / "WORKSPACE"
+    workspace_text = workspace_path.read_text(encoding="utf-8")
+    zlib_url = 'url = "https://zlib.net/fossils/zlib-1.3.1.tar.gz",'
+    if zlib_url in workspace_text:
+        workspace_path.write_text(
+            workspace_text.replace(
+                zlib_url,
+                """urls = [
+        "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz",
+        "https://zlib.net/fossils/zlib-1.3.1.tar.gz",
+    ],""",
+            ),
+            encoding="utf-8",
+        )
 
 
 def bazel_command() -> list[str]:
@@ -231,7 +245,10 @@ def main() -> int:
         stage_runtime(output, args.platform, args.arch)
         return 0
 
-    with tempfile.TemporaryDirectory(prefix="litert-lm-native-build-") as tmp:
+    with tempfile.TemporaryDirectory(
+        prefix="litert-lm-native-build-",
+        ignore_cleanup_errors=os.name == "nt",
+    ) as tmp:
         source_root = download_upstream(args.upstream_tag, Path(tmp))
         patch_upstream_build(source_root)
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)

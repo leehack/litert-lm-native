@@ -95,7 +95,7 @@ jobs:
             .bazel-output-root
           key: bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.upstream_tag }}-${{ hashFiles('tools/build_upstream_runtime.py') }}
           restore-keys: |
-            bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-
+            bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.upstream_tag }}-
 
       - name: Build upstream LiteRT-LM runtime
         shell: bash
