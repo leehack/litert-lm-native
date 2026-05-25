@@ -19,6 +19,7 @@ NATIVE_EXTENSIONS = {
     ".dll",
     ".lib",
     ".a",
+    ".zip",
     ".framework",
     ".xcframework",
 }

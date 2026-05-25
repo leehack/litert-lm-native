@@ -21,6 +21,7 @@ jobs:
         run: |
           python3 -m py_compile \
             tools/fetch_upstream.py \
+            tools/build_upstream_runtime.py \
             tools/package_release.py \
             tools/validate_artifacts.py \
             tools/package_upstream_prebuilts.py \

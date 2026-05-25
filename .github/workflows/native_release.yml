@@ -17,6 +17,77 @@ permissions:
   contents: write
 
 jobs:
+  build-upstream-runtime:
+    name: Build upstream runtime (${{ matrix.platform }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+            arch: arm64
+            jobs: "3"
+          - os: macos-13
+            platform: macos
+            arch: x64
+            jobs: "3"
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            jobs: "3"
+          - os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            jobs: "3"
+          - os: windows-latest
+            platform: windows
+            arch: x64
+            jobs: "3"
+          - os: macos-latest
+            platform: ios
+            arch: arm64
+            jobs: "3"
+          - os: ubuntu-latest
+            platform: android
+            arch: arm64
+            jobs: "3"
+          - os: ubuntu-latest
+            platform: android
+            arch: x64
+            jobs: "3"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js for Bazelisk fallback
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Set up Android NDK
+        id: setup-ndk
+        if: matrix.platform == 'android'
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28b
+          add-to-path: false
+
+      - name: Build upstream LiteRT-LM runtime
+        shell: bash
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          python3 tools/build_upstream_runtime.py \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --jobs "${{ matrix.jobs }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: upstream-runtime-${{ matrix.platform }}-${{ matrix.arch }}
+          path: bin
+
   build-shim:
     name: Build shim (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
@@ -61,7 +132,9 @@ jobs:
           path: shim-bin
 
   package:
-    needs: build-shim
+    needs:
+      - build-upstream-runtime
+      - build-shim
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +150,16 @@ jobs:
           pattern: shim-*
           path: shim-bin
           merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: upstream-runtime-*
+          path: runtime-bin
+          merge-multiple: true
+
+      - name: Add upstream runtime libraries to package
+        run: |
+          cp -R runtime-bin/* bin/
 
       - name: Add shim libraries to package
         run: |
@@ -116,7 +199,7 @@ jobs:
           gh release create "${{ inputs.upstream_tag }}" \
             --repo "${{ github.repository }}" \
             --title "LiteRT-LM ${{ inputs.upstream_tag }}" \
-            --notes "Packaged LiteRT-LM upstream prebuilts and official release assets for ${{ inputs.upstream_tag }}." \
+            --notes "Packaged LiteRT-LM upstream runtime libraries, upstream prebuilts, and official release assets for ${{ inputs.upstream_tag }}." \
             "${args[@]}" \
             release/* \
             manifest.json \

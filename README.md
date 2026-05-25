@@ -50,6 +50,8 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
 - `bin/`: generated release payloads by platform and architecture.
 - `web/`: web package scaffold for JS/Wasm/WebGPU/WebNN integration.
 - `tools/fetch_upstream.py`: resolves and downloads upstream release assets.
+- `tools/build_upstream_runtime.py`: builds upstream LiteRT-LM C runtime
+  libraries from tagged source with Bazel/Bazelisk.
 - `tools/package_release.py`: builds local manifest and checksums.
 - `tools/validate_artifacts.py`: validates manifest, checksums, and layout.
 - `docs/platform_strategy.md`: platform and distribution strategy.
@@ -81,17 +83,20 @@ python3 tools/validate_artifacts.py
 - `Validate`: builds the scaffold shim, validates package metadata, and checks
   Python/web tooling on pushes and pull requests.
 - `Native Build & Release`: manually packages a selected upstream LiteRT-LM tag.
-  It builds the current shim for host macOS/Linux/Windows, copies upstream
-  `prebuilt/` runtime libraries for Android, Apple, Linux, and Windows, includes
-  official upstream release assets when available, then publishes a GitHub
-  release with `manifest.json` and `SHA256SUMS`.
+  It builds upstream C runtime libraries for Android arm64/x64, macOS
+  arm64/x64, iOS arm64, Linux x64/arm64, and Windows x64, builds the current
+  compatibility shim for host macOS/Linux/Windows, copies upstream `prebuilt/`
+  companion libraries for Android, Apple, Linux, and Windows, includes official
+  upstream release assets when available, then publishes a GitHub release with
+  `manifest.json` and `SHA256SUMS`.
 - `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
   when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
   not published yet.
 
-The current release workflow packages upstream-provided prebuilts. Full
-from-source builds for every target and the production C ABI implementation are
-the next layer on top of this conveyor.
+The current release workflow uses upstream's public C API (`c/engine.h`) as the
+production FFI boundary. The local compatibility shim remains in the package for
+experimentation, but downstream loaders should prefer the upstream runtime
+library when it is present.
 
 ## Consumer Contract
 
