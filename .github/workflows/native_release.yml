@@ -27,61 +27,65 @@ permissions:
   contents: write
 
 jobs:
+  runtime-matrix:
+    name: Prepare runtime matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        shell: python
+        run: |
+          import json
+          import os
+
+          targets = [
+              {"os": "macos-latest", "platform": "macos", "arch": "arm64", "jobs": "3"},
+              {"os": "macos-13", "platform": "macos", "arch": "x64", "jobs": "3"},
+              {"os": "ubuntu-latest", "platform": "linux", "arch": "x64", "jobs": "3"},
+              {"os": "ubuntu-24.04-arm", "platform": "linux", "arch": "arm64", "jobs": "3"},
+              {"os": "windows-latest", "platform": "windows", "arch": "x64", "jobs": "3"},
+              {"os": "ubuntu-latest", "platform": "android", "arch": "arm64", "jobs": "3"},
+              {"os": "ubuntu-latest", "platform": "android", "arch": "x64", "jobs": "3"},
+          ]
+          platform = "${{ inputs.target_platform }}"
+          arch = "${{ inputs.target_arch }}"
+          selected = [
+              target for target in targets
+              if (platform == "all" or target["platform"] == platform)
+              and (arch == "all" or target["arch"] == arch)
+          ]
+          if not selected:
+              raise SystemExit(f"No runtime targets matched {platform}/{arch}")
+          output_path = os.environ["GITHUB_OUTPUT"]
+          with open(output_path, "a", encoding="utf-8") as output:
+              output.write(f"matrix={json.dumps({'include': selected})}\n")
+
   build-upstream-runtime:
     name: Build upstream runtime (${{ matrix.platform }}-${{ matrix.arch }})
+    needs: runtime-matrix
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            platform: macos
-            arch: arm64
-            jobs: "3"
-          - os: macos-13
-            platform: macos
-            arch: x64
-            jobs: "3"
-          - os: ubuntu-latest
-            platform: linux
-            arch: x64
-            jobs: "3"
-          - os: ubuntu-24.04-arm
-            platform: linux
-            arch: arm64
-            jobs: "3"
-          - os: windows-latest
-            platform: windows
-            arch: x64
-            jobs: "3"
-          - os: ubuntu-latest
-            platform: android
-            arch: arm64
-            jobs: "3"
-          - os: ubuntu-latest
-            platform: android
-            arch: x64
-            jobs: "3"
+      matrix: ${{ fromJSON(needs.runtime-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Node.js for Bazelisk fallback
-        if: (inputs.target_platform == 'all' || inputs.target_platform == matrix.platform) && (inputs.target_arch == 'all' || inputs.target_arch == matrix.arch)
         uses: actions/setup-node@v4
         with:
           node-version: "24"
 
       - name: Set up Android NDK
         id: setup-ndk
-        if: matrix.platform == 'android' && (inputs.target_platform == 'all' || inputs.target_platform == matrix.platform) && (inputs.target_arch == 'all' || inputs.target_arch == matrix.arch)
+        if: matrix.platform == 'android'
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r28b
           add-to-path: false
 
       - name: Cache Bazel
-        if: (inputs.target_platform == 'all' || inputs.target_platform == matrix.platform) && (inputs.target_arch == 'all' || inputs.target_arch == matrix.arch)
         uses: actions/cache@v4
         with:
           path: |
@@ -94,7 +98,6 @@ jobs:
             bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-
 
       - name: Build upstream LiteRT-LM runtime
-        if: (inputs.target_platform == 'all' || inputs.target_platform == matrix.platform) && (inputs.target_arch == 'all' || inputs.target_arch == matrix.arch)
         shell: bash
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
@@ -107,7 +110,6 @@ jobs:
             --jobs "${{ matrix.jobs }}"
 
       - uses: actions/upload-artifact@v4
-        if: (inputs.target_platform == 'all' || inputs.target_platform == matrix.platform) && (inputs.target_arch == 'all' || inputs.target_arch == matrix.arch)
         with:
           name: upstream-runtime-${{ matrix.platform }}-${{ matrix.arch }}
           path: bin
