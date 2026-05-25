@@ -1,0 +1,21 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure scaffold
+        run: cmake -S . -B build/scaffold -DLITERT_LM_NATIVE_BUILD_SHIM=ON
+      - name: Build scaffold
+        run: cmake --build build/scaffold --parallel 4
+      - name: Validate release metadata
+        run: |
+          python3 tools/package_release.py --upstream-tag v0.12.0
+          python3 tools/validate_artifacts.py
+      - name: Web scaffold self-test
+        run: node web/src/index.js --self-test
