@@ -38,8 +38,31 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check release completeness
+        id: complete
+        if: steps.existing.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf release-check
+          mkdir -p release-check
+          if gh release download "${{ steps.upstream.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern manifest.json \
+            --dir release-check; then
+            if python3 tools/validate_release_manifest.py \
+              release-check/manifest.json \
+              --upstream-tag "${{ steps.upstream.outputs.tag }}"; then
+              echo "complete=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "complete=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Dispatch native release
-        if: steps.existing.outputs.exists == 'false'
+        if: steps.existing.outputs.exists == 'false' || steps.complete.outputs.complete == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -47,6 +70,6 @@ jobs:
             --repo "${{ github.repository }}" \
             -f upstream_tag="${{ steps.upstream.outputs.tag }}"
 
-      - name: No-op when release exists
-        if: steps.existing.outputs.exists == 'true'
-        run: echo "Release ${{ steps.upstream.outputs.tag }} already exists."
+      - name: No-op when release is complete
+        if: steps.existing.outputs.exists == 'true' && steps.complete.outputs.complete == 'true'
+        run: echo "Release ${{ steps.upstream.outputs.tag }} already exists and is complete."
