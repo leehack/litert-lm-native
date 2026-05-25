@@ -196,11 +196,26 @@ jobs:
           if [ "${{ inputs.prerelease }}" = "true" ]; then
             args+=(--prerelease)
           fi
-          gh release create "${{ inputs.upstream_tag }}" \
-            --repo "${{ github.repository }}" \
-            --title "LiteRT-LM ${{ inputs.upstream_tag }}" \
-            --notes "Packaged LiteRT-LM upstream runtime libraries, upstream prebuilts, and official release assets for ${{ inputs.upstream_tag }}." \
-            "${args[@]}" \
-            release/* \
-            manifest.json \
-            SHA256SUMS
+          notes="Packaged LiteRT-LM upstream runtime libraries, upstream prebuilts, and official release assets for ${{ inputs.upstream_tag }}."
+          if gh release view "${{ inputs.upstream_tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release edit "${{ inputs.upstream_tag }}" \
+              --repo "${{ github.repository }}" \
+              --title "LiteRT-LM ${{ inputs.upstream_tag }}" \
+              --notes "$notes" \
+              "${args[@]}"
+            gh release upload "${{ inputs.upstream_tag }}" \
+              --repo "${{ github.repository }}" \
+              --clobber \
+              release/* \
+              manifest.json \
+              SHA256SUMS
+          else
+            gh release create "${{ inputs.upstream_tag }}" \
+              --repo "${{ github.repository }}" \
+              --title "LiteRT-LM ${{ inputs.upstream_tag }}" \
+              --notes "$notes" \
+              "${args[@]}" \
+              release/* \
+              manifest.json \
+              SHA256SUMS
+          fi
