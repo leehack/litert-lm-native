@@ -202,6 +202,7 @@ jobs:
 
       - name: Generate manifest and checksums
         run: |
+          python3 tools/validate_runtime_artifacts.py --upstream-tag "${{ inputs.upstream_tag }}"
           python3 tools/package_release.py --upstream-tag "${{ inputs.upstream_tag }}"
           python3 tools/validate_artifacts.py
 

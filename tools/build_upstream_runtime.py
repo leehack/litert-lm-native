@@ -62,6 +62,13 @@ RUNTIME_TARGETS = {
     },
 }
 
+REQUIRED_C_API_SYMBOLS = [
+    b"litert_lm_engine_settings_create",
+    b"litert_lm_engine_create",
+    b"litert_lm_conversation_create",
+    b"litert_lm_conversation_send_message_stream",
+]
+
 SHARED_TARGETS = """
 
 # Added by litert-lm-native packaging. Upstream publishes the C API as a static
@@ -185,6 +192,21 @@ def stage_runtime(output: Path, platform: str, arch: str) -> Path:
     return staged
 
 
+def validate_exported_symbols(output: Path) -> None:
+    data = output.read_bytes()
+    missing = [
+        symbol.decode("ascii")
+        for symbol in REQUIRED_C_API_SYMBOLS
+        if symbol not in data
+    ]
+    if missing:
+        raise RuntimeError(
+            f"{output} does not contain required LiteRT-LM C API symbols: "
+            + ", ".join(missing)
+        )
+    print(f"Validated LiteRT-LM C API symbols in {output}", flush=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=f"Build the upstream {UPSTREAM_REPO} C runtime library."
@@ -205,6 +227,7 @@ def main() -> int:
         source_root = args.source_root.resolve()
         patch_upstream_build(source_root)
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)
+        validate_exported_symbols(output)
         stage_runtime(output, args.platform, args.arch)
         return 0
 
@@ -212,6 +235,7 @@ def main() -> int:
         source_root = download_upstream(args.upstream_tag, Path(tmp))
         patch_upstream_build(source_root)
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)
+        validate_exported_symbols(output)
         stage_runtime(output, args.platform, args.arch)
     return 0
 

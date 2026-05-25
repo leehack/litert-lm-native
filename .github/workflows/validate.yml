@@ -26,5 +26,6 @@ jobs:
             tools/validate_artifacts.py \
             tools/package_upstream_prebuilts.py \
             tools/package_official_release_assets.py
+            tools/validate_runtime_artifacts.py
       - name: Web scaffold self-test
         run: node web/src/index.js --self-test
