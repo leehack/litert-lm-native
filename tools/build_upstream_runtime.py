@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import tarfile
@@ -59,12 +60,6 @@ RUNTIME_TARGETS = {
         "output": "bazel-bin/c/LiteRtLm.dll",
         "library": "LiteRtLm.dll",
     },
-    ("ios", "arm64"): {
-        "bazel_target": "//swift:CLiteRTLM",
-        "bazel_config": "ios_arm64",
-        "output_glob": "bazel-bin/swift/CLiteRTLM*.zip",
-        "library": "CLiteRTLM.xcframework.zip",
-    },
 }
 
 SHARED_TARGETS = """
@@ -103,7 +98,10 @@ cc_binary(
 def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
     printable = " ".join(command)
     print(f"+ {printable}", flush=True)
-    subprocess.run(command, cwd=cwd, env=env, check=True)
+    if os.name == "nt":
+        subprocess.run(printable, cwd=cwd, env=env, check=True, shell=True)
+    else:
+        subprocess.run(command, cwd=cwd, env=env, check=True)
 
 
 def download_upstream(tag: str, work_dir: Path) -> Path:

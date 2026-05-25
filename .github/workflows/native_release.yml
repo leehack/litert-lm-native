@@ -44,10 +44,6 @@ jobs:
             platform: windows
             arch: x64
             jobs: "3"
-          - os: macos-latest
-            platform: ios
-            arch: arm64
-            jobs: "3"
           - os: ubuntu-latest
             platform: android
             arch: arm64

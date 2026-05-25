@@ -84,11 +84,11 @@ python3 tools/validate_artifacts.py
   Python/web tooling on pushes and pull requests.
 - `Native Build & Release`: manually packages a selected upstream LiteRT-LM tag.
   It builds upstream C runtime libraries for Android arm64/x64, macOS
-  arm64/x64, iOS arm64, Linux x64/arm64, and Windows x64, builds the current
-  compatibility shim for host macOS/Linux/Windows, copies upstream `prebuilt/`
-  companion libraries for Android, Apple, Linux, and Windows, includes official
-  upstream release assets when available, then publishes a GitHub release with
-  `manifest.json` and `SHA256SUMS`.
+  arm64/x64, Linux x64/arm64, and Windows x64, builds the current compatibility
+  shim for host macOS/Linux/Windows, copies upstream `prebuilt/` companion
+  libraries for Android, Apple, Linux, and Windows, includes official upstream
+  release assets such as the iOS `CLiteRTLM.xcframework` when available, then
+  publishes a GitHub release with `manifest.json` and `SHA256SUMS`.
 - `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
   when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
   not published yet.

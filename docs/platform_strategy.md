@@ -10,6 +10,8 @@ The release automation publishes three kinds of artifacts:
 
 - upstream LiteRT-LM C runtime libraries built from the tagged source archive
 - upstream `prebuilt/` companion libraries copied from the tagged source archive
+- official upstream release assets, including the iOS `CLiteRTLM.xcframework`
+  archive when Google publishes it
 - `litert_lm_native` shim libraries built by this repo for host macOS, Linux,
   and Windows
 
