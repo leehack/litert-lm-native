@@ -1,0 +1,52 @@
+name: Auto Upstream Release
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve latest upstream release
+        id: upstream
+        run: |
+          python3 tools/fetch_upstream.py --latest --metadata-only > upstream.json
+          tag="$(python3 - <<'PY'
+          import json
+          print(json.load(open('upstream.json'))['tag'])
+          PY
+          )"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          cat upstream.json
+
+      - name: Check existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.upstream.outputs.tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch native release
+        if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run native_release.yml \
+            --repo "${{ github.repository }}" \
+            -f upstream_tag="${{ steps.upstream.outputs.tag }}"
+
+      - name: No-op when release exists
+        if: steps.existing.outputs.exists == 'true'
+        run: echo "Release ${{ steps.upstream.outputs.tag }} already exists."

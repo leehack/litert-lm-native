@@ -76,6 +76,23 @@ python3 tools/package_release.py --upstream-tag v0.12.0
 python3 tools/validate_artifacts.py
 ```
 
+## Release Automation
+
+- `Validate`: builds the scaffold shim, validates package metadata, and checks
+  Python/web tooling on pushes and pull requests.
+- `Native Build & Release`: manually packages a selected upstream LiteRT-LM tag.
+  It builds the current shim for host macOS/Linux/Windows, copies upstream
+  `prebuilt/` runtime libraries for Android, Apple, Linux, and Windows, includes
+  official upstream release assets when available, then publishes a GitHub
+  release with `manifest.json` and `SHA256SUMS`.
+- `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
+  when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
+  not published yet.
+
+The current release workflow packages upstream-provided prebuilts. Full
+from-source builds for every target and the production C ABI implementation are
+the next layer on top of this conveyor.
+
 ## Consumer Contract
 
 Downstream packages should read `manifest.json`, choose a target by platform,

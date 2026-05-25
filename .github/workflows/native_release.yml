@@ -1,0 +1,123 @@
+name: Native Build & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: "google-ai-edge/LiteRT-LM tag to package"
+        required: true
+        type: string
+      prerelease:
+        description: "Publish as a prerelease"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-shim:
+    name: Build shim (${{ matrix.platform }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+            arch: arm64
+            library: liblitert_lm_native.dylib
+            output: build/scaffold/liblitert_lm_native.dylib
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            library: liblitert_lm_native.so
+            output: build/scaffold/liblitert_lm_native.so
+          - os: windows-latest
+            platform: windows
+            arch: x64
+            library: litert_lm_native.dll
+            output: build/scaffold/Release/litert_lm_native.dll
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure scaffold shim
+        run: cmake -S . -B build/scaffold -DLITERT_LM_NATIVE_BUILD_SHIM=ON
+
+      - name: Build scaffold shim
+        run: cmake --build build/scaffold --config Release --parallel 4
+
+      - name: Stage shim artifact
+        shell: bash
+        run: |
+          mkdir -p "shim-bin/${{ matrix.platform }}/${{ matrix.arch }}"
+          cp "${{ matrix.output }}" \
+            "shim-bin/${{ matrix.platform }}/${{ matrix.arch }}/${{ matrix.library }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shim-${{ matrix.platform }}-${{ matrix.arch }}
+          path: shim-bin
+
+  package:
+    needs: build-shim
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package upstream prebuilt libraries
+        run: |
+          python3 tools/package_upstream_prebuilts.py \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --clean
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: shim-*
+          path: shim-bin
+          merge-multiple: true
+
+      - name: Add shim libraries to package
+        run: |
+          cp -R shim-bin/* bin/
+
+      - name: Package official upstream release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/package_official_release_assets.py \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --clean
+
+      - name: Generate manifest and checksums
+        run: |
+          python3 tools/package_release.py --upstream-tag "${{ inputs.upstream_tag }}"
+          python3 tools/validate_artifacts.py
+
+      - name: Create release archives
+        run: |
+          mkdir -p release
+          tar -czf "release/litert-lm-native-prebuilts-${{ inputs.upstream_tag }}.tar.gz" \
+            bin manifest.json SHA256SUMS
+          if [ -d dist ]; then
+            tar -czf "release/litert-lm-native-official-assets-${{ inputs.upstream_tag }}.tar.gz" \
+              dist
+          fi
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          args=()
+          if [ "${{ inputs.prerelease }}" = "true" ]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${{ inputs.upstream_tag }}" \
+            --repo "${{ github.repository }}" \
+            --title "LiteRT-LM ${{ inputs.upstream_tag }}" \
+            --notes "Packaged LiteRT-LM upstream prebuilts and official release assets for ${{ inputs.upstream_tag }}." \
+            "${args[@]}" \
+            release/* \
+            manifest.json \
+            SHA256SUMS

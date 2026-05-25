@@ -13,9 +13,17 @@ DIST_DIR = REPO_ROOT / "dist"
 MANIFEST_PATH = REPO_ROOT / "manifest.json"
 SHA256SUMS_PATH = REPO_ROOT / "SHA256SUMS"
 
-NATIVE_EXTENSIONS = {".so", ".dylib", ".dll", ".a", ".framework", ".xcframework"}
+NATIVE_EXTENSIONS = {
+    ".so",
+    ".dylib",
+    ".dll",
+    ".lib",
+    ".a",
+    ".framework",
+    ".xcframework",
+}
 WEB_EXTENSIONS = {".js", ".mjs", ".cjs", ".wasm", ".json", ".data"}
-ARCHIVE_EXTENSIONS = {".zip", ".tgz", ".gz"}
+ARCHIVE_SUFFIXES = (".zip", ".tgz", ".tar.gz")
 
 
 def sha256_file(path: Path) -> str:
@@ -46,7 +54,7 @@ def iter_artifacts() -> list[Path]:
                 artifacts.append(path)
     if DIST_DIR.exists():
         for path in DIST_DIR.rglob("*"):
-            if path.is_file() and path.suffix in ARCHIVE_EXTENSIONS:
+            if path.is_file() and path.name.endswith(ARCHIVE_SUFFIXES):
                 artifacts.append(path)
     return sorted(artifacts)
 
