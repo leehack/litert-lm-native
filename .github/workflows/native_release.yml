@@ -191,7 +191,11 @@ jobs:
             args+=(--prerelease)
           fi
           notes="Packaged LiteRT-LM upstream runtime libraries, upstream prebuilts, and official release assets for ${{ inputs.upstream_tag }}."
-          if env -u GH_TOKEN -u GITHUB_TOKEN gh release view "${{ inputs.upstream_tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+          status="$(curl -L -sS \
+            -o /tmp/litert-release.json \
+            -w "%{http_code}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ inputs.upstream_tag }}")"
+          if [ "$status" = "200" ]; then
             gh release edit "${{ inputs.upstream_tag }}" \
               --repo "${{ github.repository }}" \
               --title "LiteRT-LM ${{ inputs.upstream_tag }}" \
@@ -218,14 +222,20 @@ jobs:
         run: |
           rm -rf published-release-check
           mkdir -p published-release-check
-          env -u GH_TOKEN -u GITHUB_TOKEN gh release view "${{ inputs.upstream_tag }}" \
-            --repo "${{ github.repository }}" \
-            --json assets \
-            > published-release-check/release.json
-          env -u GH_TOKEN -u GITHUB_TOKEN gh release download "${{ inputs.upstream_tag }}" \
-            --repo "${{ github.repository }}" \
-            --pattern manifest.json \
-            --dir published-release-check
+          curl -L -f -sS \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ inputs.upstream_tag }}" \
+            -o published-release-check/release.json
+          manifest_url="$(python3 - <<'PY'
+          import json
+          release = json.load(open('published-release-check/release.json', encoding='utf-8'))
+          for asset in release.get('assets', []):
+            if asset.get('name') == 'manifest.json':
+              print(asset['browser_download_url'])
+              break
+          PY
+          )"
+          test -n "$manifest_url"
+          curl -L -f -sS "$manifest_url" -o published-release-check/manifest.json
           python3 tools/validate_release_manifest.py \
             published-release-check/manifest.json \
             --upstream-tag "${{ inputs.upstream_tag }}" \
