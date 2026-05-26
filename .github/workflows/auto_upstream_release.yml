@@ -46,13 +46,18 @@ jobs:
         run: |
           rm -rf release-check
           mkdir -p release-check
+          gh release view "${{ steps.upstream.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --json assets \
+            > release-check/release.json
           if gh release download "${{ steps.upstream.outputs.tag }}" \
             --repo "${{ github.repository }}" \
             --pattern manifest.json \
             --dir release-check; then
             if python3 tools/validate_release_manifest.py \
               release-check/manifest.json \
-              --upstream-tag "${{ steps.upstream.outputs.tag }}"; then
+              --upstream-tag "${{ steps.upstream.outputs.tag }}" \
+              --release-metadata release-check/release.json; then
               echo "complete=true" >> "$GITHUB_OUTPUT"
             else
               echo "complete=false" >> "$GITHUB_OUTPUT"
