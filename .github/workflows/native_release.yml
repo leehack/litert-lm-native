@@ -70,7 +70,13 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.runtime-matrix.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        shell: bash
+        run: |
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth=1 origin "${{ github.sha }}"
+          git checkout --detach FETCH_HEAD
 
       - name: Set up Node.js for Bazelisk fallback
         uses: actions/setup-node@v4
@@ -138,7 +144,13 @@ jobs:
             library: litert_lm_native.dll
             output: build/scaffold/Release/litert_lm_native.dll
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        shell: bash
+        run: |
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth=1 origin "${{ github.sha }}"
+          git checkout --detach FETCH_HEAD
 
       - name: Configure scaffold shim
         run: cmake -S . -B build/scaffold -DLITERT_LM_NATIVE_BUILD_SHIM=ON
@@ -165,7 +177,13 @@ jobs:
       - build-shim
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        shell: bash
+        run: |
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch --depth=1 origin "${{ github.sha }}"
+          git checkout --detach FETCH_HEAD
 
       - name: Package upstream prebuilt libraries
         run: |
