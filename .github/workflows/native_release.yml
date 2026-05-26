@@ -254,3 +254,22 @@ jobs:
               manifest.json \
               SHA256SUMS
           fi
+
+      - name: Validate published GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf published-release-check
+          mkdir -p published-release-check
+          gh release view "${{ inputs.upstream_tag }}" \
+            --repo "${{ github.repository }}" \
+            --json assets \
+            > published-release-check/release.json
+          gh release download "${{ inputs.upstream_tag }}" \
+            --repo "${{ github.repository }}" \
+            --pattern manifest.json \
+            --dir published-release-check
+          python3 tools/validate_release_manifest.py \
+            published-release-check/manifest.json \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --release-metadata published-release-check/release.json
