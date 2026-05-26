@@ -36,7 +36,7 @@ jobs:
       - name: Check existing release
         id: existing
         run: |
-          if env -u GH_TOKEN gh release view "${{ steps.upstream.outputs.tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+          if env -u GH_TOKEN -u GITHUB_TOKEN gh release view "${{ steps.upstream.outputs.tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -48,11 +48,11 @@ jobs:
         run: |
           rm -rf release-check
           mkdir -p release-check
-          env -u GH_TOKEN gh release view "${{ steps.upstream.outputs.tag }}" \
+          env -u GH_TOKEN -u GITHUB_TOKEN gh release view "${{ steps.upstream.outputs.tag }}" \
             --repo "${{ github.repository }}" \
             --json assets \
             > release-check/release.json
-          if env -u GH_TOKEN gh release download "${{ steps.upstream.outputs.tag }}" \
+          if env -u GH_TOKEN -u GITHUB_TOKEN gh release download "${{ steps.upstream.outputs.tag }}" \
             --repo "${{ github.repository }}" \
             --pattern manifest.json \
             --dir release-check; then

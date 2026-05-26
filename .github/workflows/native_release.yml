@@ -191,7 +191,7 @@ jobs:
             args+=(--prerelease)
           fi
           notes="Packaged LiteRT-LM upstream runtime libraries, upstream prebuilts, and official release assets for ${{ inputs.upstream_tag }}."
-          if env -u GH_TOKEN gh release view "${{ inputs.upstream_tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+          if env -u GH_TOKEN -u GITHUB_TOKEN gh release view "${{ inputs.upstream_tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release edit "${{ inputs.upstream_tag }}" \
               --repo "${{ github.repository }}" \
               --title "LiteRT-LM ${{ inputs.upstream_tag }}" \
@@ -218,11 +218,11 @@ jobs:
         run: |
           rm -rf published-release-check
           mkdir -p published-release-check
-          env -u GH_TOKEN gh release view "${{ inputs.upstream_tag }}" \
+          env -u GH_TOKEN -u GITHUB_TOKEN gh release view "${{ inputs.upstream_tag }}" \
             --repo "${{ github.repository }}" \
             --json assets \
             > published-release-check/release.json
-          env -u GH_TOKEN gh release download "${{ inputs.upstream_tag }}" \
+          env -u GH_TOKEN -u GITHUB_TOKEN gh release download "${{ inputs.upstream_tag }}" \
             --repo "${{ github.repository }}" \
             --pattern manifest.json \
             --dir published-release-check
