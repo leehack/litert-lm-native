@@ -151,6 +151,21 @@ def patch_upstream_build(source_root: Path) -> None:
             encoding="utf-8",
         )
 
+    rules_rust_patch_path = source_root / "PATCH.rules_rust"
+    rules_rust_patch_text = rules_rust_patch_path.read_text(encoding="utf-8")
+    if '+    "x86_64-apple-darwin",' not in rules_rust_patch_text:
+        marker = '     "aarch64-apple-darwin",\n'
+        if marker not in rules_rust_patch_text:
+            raise RuntimeError("Could not find rules_rust triple insertion point")
+        rules_rust_patch_path.write_text(
+            rules_rust_patch_text.replace(
+                marker,
+                marker + '+    "x86_64-apple-darwin",\n',
+                1,
+            ),
+            encoding="utf-8",
+        )
+
 
 def bazel_command() -> list[str]:
     if shutil.which("bazelisk"):
