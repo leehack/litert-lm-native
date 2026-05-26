@@ -193,7 +193,7 @@ jobs:
 
       - name: Download build artifacts
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
         run: |
           gh run download "${{ github.run_id }}" \
             --repo "${{ github.repository }}" \
@@ -213,8 +213,6 @@ jobs:
           cp -R shim-bin/*/* bin/
 
       - name: Package official upstream release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           python3 tools/package_official_release_assets.py \
             --upstream-tag "${{ inputs.upstream_tag }}" \
@@ -244,14 +242,14 @@ jobs:
 
       - name: Publish GitHub release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
         run: |
           args=()
           if [ "${{ inputs.prerelease }}" = "true" ]; then
             args+=(--prerelease)
           fi
           notes="Packaged LiteRT-LM upstream runtime libraries, upstream prebuilts, and official release assets for ${{ inputs.upstream_tag }}."
-          if gh release view "${{ inputs.upstream_tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+          if env -u GH_TOKEN gh release view "${{ inputs.upstream_tag }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release edit "${{ inputs.upstream_tag }}" \
               --repo "${{ github.repository }}" \
               --title "LiteRT-LM ${{ inputs.upstream_tag }}" \
@@ -275,16 +273,14 @@ jobs:
           fi
 
       - name: Validate published GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           rm -rf published-release-check
           mkdir -p published-release-check
-          gh release view "${{ inputs.upstream_tag }}" \
+          env -u GH_TOKEN gh release view "${{ inputs.upstream_tag }}" \
             --repo "${{ github.repository }}" \
             --json assets \
             > published-release-check/release.json
-          gh release download "${{ inputs.upstream_tag }}" \
+          env -u GH_TOKEN gh release download "${{ inputs.upstream_tag }}" \
             --repo "${{ github.repository }}" \
             --pattern manifest.json \
             --dir published-release-check
