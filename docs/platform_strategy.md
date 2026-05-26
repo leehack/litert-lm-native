@@ -2,9 +2,9 @@
 
 ## Native
 
-Native platforms use a C ABI shim compiled against LiteRT-LM. The shim hides
-upstream C++/Swift/Kotlin implementation details and exposes stable lifecycle,
-conversation, streaming, cancellation, and benchmark calls.
+Native platforms use upstream LiteRT-LM's C runtime ABI directly. This keeps the
+release payload aligned with the runtime that downstream FFI bindings load and
+avoids publishing a second wrapper ABI that does not add behavior.
 
 The release automation publishes three kinds of artifacts:
 
@@ -12,12 +12,10 @@ The release automation publishes three kinds of artifacts:
 - upstream `prebuilt/` companion libraries copied from the tagged source archive
 - official upstream release assets, including the iOS `CLiteRTLM.xcframework`
   archive when Google publishes it
-- `litert_lm_native` shim libraries built by this repo for host macOS, Linux,
-  and Windows
 
-The upstream C runtime is the production FFI target for downstream packages. The
-shim is still useful as a compatibility/test target while the downstream
-`llamadart` backend stabilizes around upstream's `c/engine.h` ABI.
+The upstream C runtime is the production FFI target for downstream packages. If
+we later need a repo-owned compatibility layer, it should be introduced as a real
+wrapper over upstream LiteRT-LM rather than a scaffold library.
 
 Initial native targets:
 

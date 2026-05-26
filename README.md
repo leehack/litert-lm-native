@@ -12,7 +12,7 @@ Responsibilities:
 
 - Track upstream `google-ai-edge/LiteRT-LM` releases.
 - Fetch or build native LiteRT-LM libraries per platform.
-- Provide a stable C ABI shim for FFI consumers.
+- Preserve upstream LiteRT-LM's C runtime ABI as the FFI boundary.
 - Package web assets around official LiteRT-LM/LiteRT.js distribution paths.
 - Publish `manifest.json` and `SHA256SUMS` for deterministic consumers.
 
@@ -45,8 +45,6 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
 
 ## Repository Layout
 
-- `include/litert_lm_c_api.h`: stable C ABI owned by this repo.
-- `src/`: native shim implementation and stream callback proxy.
 - `bin/`: generated release payloads by platform and architecture.
 - `web/`: web package scaffold for JS/Wasm/WebGPU/WebNN integration.
 - `tools/fetch_upstream.py`: resolves and downloads upstream release assets.
@@ -80,23 +78,22 @@ python3 tools/validate_artifacts.py
 
 ## Release Automation
 
-- `Validate`: builds the scaffold shim, validates package metadata, and checks
-  Python/web tooling on pushes and pull requests.
+- `Validate`: validates package metadata and checks Python/web tooling on
+  pushes and pull requests.
 - `Native Build & Release`: manually packages a selected upstream LiteRT-LM tag.
   It builds upstream C runtime libraries for Android arm64/x64, macOS
-  arm64/x64, Linux x64/arm64, and Windows x64, builds the current compatibility
-  shim for host macOS/Linux/Windows, copies upstream `prebuilt/` companion
-  libraries for Android, Apple, Linux, and Windows, includes official upstream
-  release assets such as the iOS `CLiteRTLM.xcframework` when available, then
-  publishes a GitHub release with `manifest.json` and `SHA256SUMS`.
+  arm64/x64, Linux x64/arm64, and Windows x64, copies upstream `prebuilt/`
+  companion libraries for Android, Apple, Linux, and Windows, includes official
+  upstream release assets such as the iOS `CLiteRTLM.xcframework` when
+  available, then publishes a GitHub release with `manifest.json` and
+  `SHA256SUMS`.
 - `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
   when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
   not published yet.
 
-The current release workflow uses upstream's public C API (`c/engine.h`) as the
-production FFI boundary. The local compatibility shim remains in the package for
-experimentation, but downstream loaders should prefer the upstream runtime
-library when it is present.
+The release workflow uses upstream's public C API (`c/engine.h`) as the
+production FFI boundary. Downstream loaders should bind directly to the upstream
+runtime library for the selected platform.
 
 ## Consumer Contract
 
@@ -104,5 +101,5 @@ Downstream packages should read `manifest.json`, choose a target by platform,
 architecture, runtime kind (`native` or `web`), and accelerator metadata, then
 verify checksums before bundling or loading the files.
 
-The native C ABI is the compatibility boundary. Upstream LiteRT-LM can change
-internals without forcing downstream FFI bindings to change.
+Upstream LiteRT-LM's native C ABI is the compatibility boundary. This repository
+does not add a second wrapper ABI unless a future upstream change requires it.

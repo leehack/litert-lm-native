@@ -16,10 +16,6 @@ jobs:
           git remote add origin "https://github.com/${{ github.repository }}.git"
           git fetch --depth=1 origin "${{ github.sha }}"
           git checkout --detach FETCH_HEAD
-      - name: Configure scaffold
-        run: cmake -S . -B build/scaffold -DLITERT_LM_NATIVE_BUILD_SHIM=ON
-      - name: Build scaffold
-        run: cmake --build build/scaffold --parallel 4
       - name: Validate release metadata
         run: |
           python3 tools/package_release.py --upstream-tag v0.12.0

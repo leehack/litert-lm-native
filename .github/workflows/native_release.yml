@@ -121,60 +121,10 @@ jobs:
           name: upstream-runtime-${{ matrix.platform }}-${{ matrix.arch }}
           path: bin
 
-  build-shim:
-    name: Build shim (${{ matrix.platform }}-${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            platform: macos
-            arch: arm64
-            library: liblitert_lm_native.dylib
-            output: build/scaffold/liblitert_lm_native.dylib
-          - os: ubuntu-latest
-            platform: linux
-            arch: x64
-            library: liblitert_lm_native.so
-            output: build/scaffold/liblitert_lm_native.so
-          - os: windows-latest
-            platform: windows
-            arch: x64
-            library: litert_lm_native.dll
-            output: build/scaffold/Release/litert_lm_native.dll
-    steps:
-      - name: Checkout repository
-        shell: bash
-        run: |
-          git init .
-          git remote add origin "https://github.com/${{ github.repository }}.git"
-          git fetch --depth=1 origin "${{ github.sha }}"
-          git checkout --detach FETCH_HEAD
-
-      - name: Configure scaffold shim
-        run: cmake -S . -B build/scaffold -DLITERT_LM_NATIVE_BUILD_SHIM=ON
-
-      - name: Build scaffold shim
-        run: cmake --build build/scaffold --config Release --parallel 4
-
-      - name: Stage shim artifact
-        shell: bash
-        run: |
-          mkdir -p "shim-bin/${{ matrix.platform }}/${{ matrix.arch }}"
-          cp "${{ matrix.output }}" \
-            "shim-bin/${{ matrix.platform }}/${{ matrix.arch }}/${{ matrix.library }}"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: shim-${{ matrix.platform }}-${{ matrix.arch }}
-          path: shim-bin
-
   package:
     if: inputs.target_platform == 'all' && inputs.target_arch == 'all'
     needs:
       - build-upstream-runtime
-      - build-shim
     runs-on: macos-latest
     steps:
       - name: Checkout repository
@@ -197,20 +147,12 @@ jobs:
         run: |
           gh run download "${{ github.run_id }}" \
             --repo "${{ github.repository }}" \
-            --pattern "shim-*" \
-            --dir shim-bin
-          gh run download "${{ github.run_id }}" \
-            --repo "${{ github.repository }}" \
             --pattern "upstream-runtime-*" \
             --dir runtime-bin
 
       - name: Add upstream runtime libraries to package
         run: |
           cp -R runtime-bin/*/* bin/
-
-      - name: Add shim libraries to package
-        run: |
-          cp -R shim-bin/*/* bin/
 
       - name: Package official upstream release assets
         run: |
