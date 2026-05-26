@@ -212,6 +212,12 @@ jobs:
           mkdir -p release
           tar -czf "release/litert-lm-native-prebuilts-${{ inputs.upstream_tag }}.tar.gz" \
             bin manifest.json SHA256SUMS
+          while IFS= read -r runtime_dir; do
+            platform="$(basename "$(dirname "$runtime_dir")")"
+            arch="$(basename "$runtime_dir")"
+            tar -czf "release/litert-lm-native-runtime-${platform}-${arch}-${{ inputs.upstream_tag }}.tar.gz" \
+              -C bin "${platform}/${arch}"
+          done < <(find bin -mindepth 2 -maxdepth 2 -type d | sort)
           if [ -d dist ]; then
             tar -czf "release/litert-lm-native-official-assets-${{ inputs.upstream_tag }}.tar.gz" \
               dist
