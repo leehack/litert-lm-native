@@ -51,6 +51,10 @@ RUNTIME_TARGETS = {
     ("macos", "x64"): {
         "bazel_target": "//c:libLiteRtLm.dylib",
         "bazel_config": "macos",
+        "bazel_options": [
+            "--cpu=darwin_x86_64",
+            "--macos_minimum_os=11.0",
+        ],
         "output": "bazel-bin/c/libLiteRtLm.dylib",
         "library": "libLiteRtLm.dylib",
     },
@@ -178,6 +182,7 @@ def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None)
     command += [
         "build",
         *configs,
+        *target.get("bazel_options", []),
         target["bazel_target"],
         "--define=litert_link_capi_so=true",
         "--define=resolve_symbols_in_exec=false",
