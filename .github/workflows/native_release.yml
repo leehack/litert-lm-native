@@ -40,13 +40,13 @@ jobs:
           import os
 
           targets = [
-              {"os": "macos-latest", "platform": "macos", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
-              {"os": "macos-13", "platform": "macos", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
-              {"os": "ubuntu-latest", "platform": "linux", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
-              {"os": "ubuntu-24.04-arm", "platform": "linux", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
-              {"os": "windows-latest", "platform": "windows", "arch": "x64", "jobs": "1", "bazel_output_root": "C:/bzl"},
-              {"os": "ubuntu-latest", "platform": "android", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
-              {"os": "ubuntu-latest", "platform": "android", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
+              {"os": "macos-latest", "platform": "macos", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
+              {"os": "macos-13", "platform": "macos", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
+              {"os": "ubuntu-latest", "platform": "linux", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
+              {"os": "ubuntu-24.04-arm", "platform": "linux", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
+              {"os": "windows-latest", "platform": "windows", "arch": "x64", "jobs": "1", "bazel_output_root": "C:/bzl", "timeout_minutes": 120},
+              {"os": "ubuntu-latest", "platform": "android", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
+              {"os": "ubuntu-latest", "platform": "android", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
           ]
           platform = "${{ inputs.target_platform }}"
           arch = "${{ inputs.target_arch }}"
@@ -65,7 +65,7 @@ jobs:
     name: Build upstream runtime (${{ matrix.platform }}-${{ matrix.arch }})
     needs: runtime-matrix
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.runtime-matrix.outputs.matrix) }}
@@ -86,6 +86,7 @@ jobs:
           add-to-path: false
 
       - name: Cache Bazel
+        if: matrix.platform != 'windows'
         uses: actions/cache@v4
         with:
           path: |
@@ -93,7 +94,6 @@ jobs:
             ~/.cache/bazelisk
             ~/Library/Caches/bazelisk
             .bazel-output-root
-            C:/bzl
           key: bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.upstream_tag }}-${{ hashFiles('tools/build_upstream_runtime.py') }}
           restore-keys: |
             bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.upstream_tag }}-
