@@ -154,6 +154,13 @@ def patch_upstream_build(source_root: Path) -> None:
     rules_rust_patch_path = source_root / "PATCH.rules_rust"
     rules_rust_patch_text = rules_rust_patch_path.read_text(encoding="utf-8")
     if '+    "x86_64-apple-darwin",' not in rules_rust_patch_text:
+        hunk_header = "@@ -28,6 +28,9 @@\n"
+        if hunk_header in rules_rust_patch_text:
+            rules_rust_patch_text = rules_rust_patch_text.replace(
+                hunk_header,
+                "@@ -28,6 +28,10 @@\n",
+                1,
+            )
         marker = '     "aarch64-apple-darwin",\n'
         if marker not in rules_rust_patch_text:
             raise RuntimeError("Could not find rules_rust triple insertion point")
