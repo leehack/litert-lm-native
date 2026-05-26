@@ -4,22 +4,37 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
+import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DIST_DIR = REPO_ROOT / "dist" / "official"
+GITHUB_API = "https://api.github.com/repos/google-ai-edge/LiteRT-LM"
 
 
-def run_json(cmd: list[str]) -> dict:
-    result = subprocess.run(
-        cmd,
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        stdout=subprocess.PIPE,
+def fetch_json(url: str) -> dict:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "litert-lm-native-package-official-assets",
+        },
     )
-    return json.loads(result.stdout)
+    with urllib.request.urlopen(request) as response:
+        return json.load(response)
+
+
+def download(url: str, path: Path) -> None:
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "litert-lm-native-package-official-assets"},
+    )
+    with urllib.request.urlopen(request) as response, path.open("wb") as file:
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            file.write(chunk)
 
 
 def main() -> int:
@@ -35,39 +50,12 @@ def main() -> int:
         shutil.rmtree(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    release = run_json(
-        [
-            "gh",
-            "release",
-            "view",
-            args.upstream_tag,
-            "--repo",
-            "google-ai-edge/LiteRT-LM",
-            "--json",
-            "assets",
-        ]
-    )
+    release = fetch_json(f"{GITHUB_API}/releases/tags/{args.upstream_tag}")
     assets = release.get("assets", [])
     for asset in assets:
         name = asset["name"]
         print(f"Downloading upstream release asset: {name}", flush=True)
-        subprocess.run(
-            [
-                "gh",
-                "release",
-                "download",
-                args.upstream_tag,
-                "--repo",
-                "google-ai-edge/LiteRT-LM",
-                "--pattern",
-                name,
-                "--dir",
-                str(target_dir),
-                "--clobber",
-            ],
-            cwd=REPO_ROOT,
-            check=True,
-        )
+        download(asset["browser_download_url"], target_dir / name)
 
     print(f"Downloaded {len(assets)} official release assets", flush=True)
     return 0
