@@ -51,11 +51,6 @@ RUNTIME_TARGETS = {
     ("macos", "x64"): {
         "bazel_target": "//c:libLiteRtLm.dylib",
         "bazel_config": "macos",
-        "bazel_options": [
-            "--cpu=darwin_x86_64",
-            "--platforms=@build_bazel_apple_support//platforms:darwin_x86_64",
-            "--macos_minimum_os=11.0",
-        ],
         "output": "bazel-bin/c/libLiteRtLm.dylib",
         "library": "libLiteRtLm.dylib",
     },

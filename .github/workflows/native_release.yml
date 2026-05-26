@@ -41,7 +41,7 @@ jobs:
 
           targets = [
               {"os": "macos-latest", "platform": "macos", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
-              {"os": "macos-latest", "platform": "macos", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
+              {"os": "macos-13", "platform": "macos", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
               {"os": "ubuntu-latest", "platform": "linux", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
               {"os": "ubuntu-24.04-arm", "platform": "linux", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
               {"os": "windows-latest", "platform": "windows", "arch": "x64", "jobs": "1", "bazel_output_root": "C:/bzl", "timeout_minutes": 120},
