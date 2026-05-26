@@ -50,7 +50,7 @@ def main() -> int:
         if isinstance(artifact, dict)
     }
     required = [path.as_posix() for path in REQUIRED_RUNTIME_ARTIFACTS]
-    required.append(f"dist/{args.upstream_tag}/CLiteRTLM.xcframework.zip")
+    required.append(f"dist/official/{args.upstream_tag}/CLiteRTLM.xcframework.zip")
     missing = [path for path in required if path not in paths]
     if missing:
         formatted = "\n".join(f"- {path}" for path in missing)

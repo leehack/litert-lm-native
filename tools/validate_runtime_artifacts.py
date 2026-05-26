@@ -25,7 +25,9 @@ def main() -> int:
     args = parser.parse_args()
 
     required = list(REQUIRED_RUNTIME_ARTIFACTS)
-    required.append(Path("dist") / args.upstream_tag / "CLiteRTLM.xcframework.zip")
+    required.append(
+        Path("dist") / "official" / args.upstream_tag / "CLiteRTLM.xcframework.zip"
+    )
 
     missing = [path for path in required if not (REPO_ROOT / path).is_file()]
     if missing:
