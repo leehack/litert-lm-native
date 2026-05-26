@@ -23,6 +23,8 @@ jobs:
 
       - name: Resolve latest upstream release
         id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
         run: |
           python3 tools/fetch_upstream.py --latest --metadata-only > upstream.json
           tag="$(python3 - <<'PY'
@@ -35,10 +37,15 @@ jobs:
 
       - name: Check existing release
         id: existing
+        env:
+          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
         run: |
           rm -rf release-check
           mkdir -p release-check
           status="$(curl -L -sS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
             -o release-check/release.json \
             -w "%{http_code}" \
             "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.upstream.outputs.tag }}")"
@@ -51,6 +58,8 @@ jobs:
       - name: Check release completeness
         id: complete
         if: steps.existing.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
         run: |
           manifest_url="$(python3 - <<'PY'
           import json

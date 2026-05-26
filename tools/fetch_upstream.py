@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 import urllib.request
 from pathlib import Path
@@ -11,16 +12,22 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOWNLOADS_DIR = REPO_ROOT / "downloads"
 GITHUB_API = "https://api.github.com/repos/google-ai-edge/LiteRT-LM"
+USER_AGENT = "litert-lm-native-fetch"
+
+
+def request_headers(url: str) -> dict[str, str]:
+    headers = {"User-Agent": USER_AGENT}
+    if url.startswith("https://api.github.com/"):
+        headers["Accept"] = "application/vnd.github+json"
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+            headers["X-GitHub-Api-Version"] = "2022-11-28"
+    return headers
 
 
 def fetch_json(url: str) -> dict:
-    request = urllib.request.Request(
-        url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "litert-lm-native-fetch",
-        },
-    )
+    request = urllib.request.Request(url, headers=request_headers(url))
     with urllib.request.urlopen(request) as response:
         return json.load(response)
 
@@ -37,7 +44,7 @@ def download(url: str, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "litert-lm-native-fetch"},
+        headers=request_headers(url),
     )
     with urllib.request.urlopen(request) as response, path.open("wb") as file:
         while True:
