@@ -172,6 +172,8 @@ def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None)
     command = bazel_command()
     output_user_root = os.environ.get("BAZEL_OUTPUT_USER_ROOT")
     if output_user_root:
+        if not os.path.isabs(output_user_root):
+            output_user_root = str((REPO_ROOT / output_user_root).resolve())
         command.append(f"--output_user_root={output_user_root}")
     command += [
         "build",

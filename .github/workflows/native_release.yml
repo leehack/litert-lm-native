@@ -40,13 +40,13 @@ jobs:
           import os
 
           targets = [
-              {"os": "macos-latest", "platform": "macos", "arch": "arm64", "jobs": "3"},
-              {"os": "macos-13", "platform": "macos", "arch": "x64", "jobs": "3"},
-              {"os": "ubuntu-latest", "platform": "linux", "arch": "x64", "jobs": "3"},
-              {"os": "ubuntu-24.04-arm", "platform": "linux", "arch": "arm64", "jobs": "3"},
-              {"os": "windows-latest", "platform": "windows", "arch": "x64", "jobs": "1"},
-              {"os": "ubuntu-latest", "platform": "android", "arch": "arm64", "jobs": "3"},
-              {"os": "ubuntu-latest", "platform": "android", "arch": "x64", "jobs": "3"},
+              {"os": "macos-latest", "platform": "macos", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
+              {"os": "macos-13", "platform": "macos", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
+              {"os": "ubuntu-latest", "platform": "linux", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
+              {"os": "ubuntu-24.04-arm", "platform": "linux", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
+              {"os": "windows-latest", "platform": "windows", "arch": "x64", "jobs": "1", "bazel_output_root": "C:/bzl"},
+              {"os": "ubuntu-latest", "platform": "android", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
+              {"os": "ubuntu-latest", "platform": "android", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root"},
           ]
           platform = "${{ inputs.target_platform }}"
           arch = "${{ inputs.target_arch }}"
@@ -93,6 +93,7 @@ jobs:
             ~/.cache/bazelisk
             ~/Library/Caches/bazelisk
             .bazel-output-root
+            C:/bzl
           key: bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.upstream_tag }}-${{ hashFiles('tools/build_upstream_runtime.py') }}
           restore-keys: |
             bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.upstream_tag }}-
@@ -101,7 +102,7 @@ jobs:
         shell: bash
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          BAZEL_OUTPUT_USER_ROOT: ${{ github.workspace }}/.bazel-output-root
+          BAZEL_OUTPUT_USER_ROOT: ${{ matrix.bazel_output_root }}
         run: |
           python3 tools/build_upstream_runtime.py \
             --upstream-tag "${{ inputs.upstream_tag }}" \
