@@ -173,25 +173,26 @@ jobs:
             --upstream-tag "${{ inputs.upstream_tag }}" \
             --clean
 
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: shim-*
-          path: shim-bin
-          merge-multiple: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: upstream-runtime-*
-          path: runtime-bin
-          merge-multiple: true
+      - name: Download build artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ github.run_id }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "shim-*" \
+            --dir shim-bin
+          gh run download "${{ github.run_id }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "upstream-runtime-*" \
+            --dir runtime-bin
 
       - name: Add upstream runtime libraries to package
         run: |
-          cp -R runtime-bin/* bin/
+          cp -R runtime-bin/*/* bin/
 
       - name: Add shim libraries to package
         run: |
-          cp -R shim-bin/* bin/
+          cp -R shim-bin/*/* bin/
 
       - name: Package official upstream release assets
         env:
