@@ -156,6 +156,8 @@ jobs:
           cp -R runtime-bin/*/* bin/
 
       - name: Package official upstream release assets
+        env:
+          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
         run: |
           python3 tools/package_official_release_assets.py \
             --upstream-tag "${{ inputs.upstream_tag }}" \
