@@ -32,6 +32,7 @@ jobs:
             tools/validate_artifacts.py \
             tools/package_upstream_prebuilts.py \
             tools/package_official_release_assets.py \
+            tools/package_ios_runtime.py \
             tools/validate_runtime_artifacts.py \
             tools/validate_runtime_dependencies.py \
             tools/validate_release_manifest.py
@@ -40,6 +41,10 @@ jobs:
           python3 tools/build_stream_proxy.py \
             --platform macos \
             --arch arm64 \
+            --output-dir "$RUNNER_TEMP/stream-proxy"
+          python3 tools/build_stream_proxy.py \
+            --platform ios \
+            --arch arm64-sim \
             --output-dir "$RUNNER_TEMP/stream-proxy"
       - name: Web scaffold self-test
         run: node web/src/index.js --self-test
