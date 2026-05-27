@@ -10,6 +10,8 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+from runtime_dependency_utils import elf_needed_libraries, is_elf, is_system_needed
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 UPSTREAM_REPO = "google-ai-edge/LiteRT-LM"
@@ -21,12 +23,20 @@ RUNTIME_TARGETS = {
     ("android", "arm64"): {
         "bazel_target": "//c:libLiteRtLm.so",
         "bazel_config": "android_arm64",
+        "bazel_options": [
+            "--linkopt=-Wl,-z,max-page-size=16384",
+            "--linkopt=-Wl,-z,common-page-size=16384",
+        ],
         "output": "bazel-bin/c/libLiteRtLm.so",
         "library": "libLiteRtLm.so",
     },
     ("android", "x64"): {
         "bazel_target": "//c:libLiteRtLm.so",
         "bazel_config": "android_x86_64",
+        "bazel_options": [
+            "--linkopt=-Wl,-z,max-page-size=16384",
+            "--linkopt=-Wl,-z,common-page-size=16384",
+        ],
         "output": "bazel-bin/c/libLiteRtLm.so",
         "library": "libLiteRtLm.so",
     },
@@ -177,10 +187,10 @@ def patch_upstream_build(source_root: Path) -> None:
 def bazel_command() -> list[str]:
     if shutil.which("bazelisk"):
         return ["bazelisk"]
-    if shutil.which("bazel"):
-        return ["bazel"]
     if shutil.which("npx"):
         return ["npx", "--yes", "@bazel/bazelisk@latest"]
+    if shutil.which("bazel"):
+        return ["bazel"]
     raise RuntimeError("Could not find bazelisk, bazel, or npx")
 
 
@@ -231,6 +241,72 @@ def stage_runtime(output: Path, platform: str, arch: str) -> Path:
     return staged
 
 
+def stage_runtime_dependencies(
+    output: Path,
+    source_root: Path,
+    platform: str,
+    arch: str,
+) -> None:
+    stage_dir = BIN_DIR / platform / arch
+    staged = stage_dir / RUNTIME_TARGETS[(platform, arch)]["library"]
+    queued = [staged]
+    seen = set()
+    dependency_cache: dict[str, Path | None] = {}
+
+    while queued:
+        current = queued.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        if not is_elf(current):
+            continue
+        for library_name in elf_needed_libraries(current):
+            if is_system_needed(platform, library_name):
+                continue
+            destination = stage_dir / library_name
+            if not destination.exists():
+                dependency = find_runtime_dependency(
+                    source_root,
+                    output,
+                    library_name,
+                    dependency_cache,
+                )
+                if dependency is None:
+                    raise RuntimeError(
+                        f"{current} depends on {library_name}, but that library "
+                        "was not found in the Bazel output tree."
+                    )
+                shutil.copy2(dependency, destination)
+                print(f"Staged runtime dependency {destination}", flush=True)
+            queued.append(destination)
+
+
+def find_runtime_dependency(
+    source_root: Path,
+    output: Path,
+    library_name: str,
+    cache: dict[str, Path | None],
+) -> Path | None:
+    if library_name in cache:
+        return cache[library_name]
+
+    roots = [
+        output.parent,
+        output.parent / f"{output.name}.runfiles",
+        source_root / "bazel-bin",
+        source_root / "bazel-out",
+    ]
+    for root in roots:
+        if not root.exists():
+            continue
+        for candidate in root.rglob(library_name):
+            if candidate.is_file():
+                cache[library_name] = candidate
+                return candidate
+    cache[library_name] = None
+    return None
+
+
 def validate_exported_symbols(output: Path) -> None:
     data = output.read_bytes()
     missing = [
@@ -268,6 +344,7 @@ def main() -> int:
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)
         validate_exported_symbols(output)
         stage_runtime(output, args.platform, args.arch)
+        stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         return 0
 
     with tempfile.TemporaryDirectory(
@@ -279,6 +356,7 @@ def main() -> int:
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)
         validate_exported_symbols(output)
         stage_runtime(output, args.platform, args.arch)
+        stage_runtime_dependencies(output, source_root, args.platform, args.arch)
     return 0
 
 

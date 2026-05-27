@@ -20,9 +20,11 @@ jobs:
         run: |
           python3 tools/package_release.py --upstream-tag v0.12.0
           python3 tools/validate_artifacts.py
+          python3 tools/validate_runtime_dependencies.py
       - name: Validate Python tooling
         run: |
           python3 -m py_compile \
+            tools/runtime_dependency_utils.py \
             tools/fetch_upstream.py \
             tools/build_upstream_runtime.py \
             tools/package_release.py \
@@ -30,6 +32,7 @@ jobs:
             tools/package_upstream_prebuilts.py \
             tools/package_official_release_assets.py \
             tools/validate_runtime_artifacts.py \
+            tools/validate_runtime_dependencies.py \
             tools/validate_release_manifest.py
       - name: Web scaffold self-test
         run: node web/src/index.js --self-test
