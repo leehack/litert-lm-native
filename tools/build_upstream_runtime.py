@@ -10,6 +10,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+from build_stream_proxy import build_stream_proxy
 from runtime_dependency_utils import elf_needed_libraries, is_elf, is_system_needed
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -345,6 +346,7 @@ def main() -> int:
         validate_exported_symbols(output)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
+        build_stream_proxy(args.platform, args.arch)
         return 0
 
     with tempfile.TemporaryDirectory(
@@ -357,6 +359,7 @@ def main() -> int:
         validate_exported_symbols(output)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
+        build_stream_proxy(args.platform, args.arch)
     return 0
 
 
