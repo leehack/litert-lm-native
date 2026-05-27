@@ -52,6 +52,9 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
 - `tools/fetch_upstream.py`: resolves and downloads upstream release assets.
 - `tools/build_upstream_runtime.py`: builds upstream LiteRT-LM C runtime
   libraries from tagged source with Bazel/Bazelisk and stages StreamProxy.
+- `tools/package_ios_runtime.py`: extracts official upstream
+  `CLiteRTLM.xcframework` slices into the dylib-style iOS runtime payload used
+  by downstream FFI clients.
 - `tools/build_stream_proxy.py`: builds the companion callback-copy helper
   library used by downstream FFI stream bindings.
 - `tools/package_release.py`: builds local manifest and checksums.
@@ -88,9 +91,9 @@ python3 tools/validate_artifacts.py
   It builds upstream C runtime libraries and StreamProxy for Android
   arm64/x64, macOS arm64/x64, Linux x64/arm64, and Windows x64, copies upstream
   `prebuilt/` companion libraries for Android, Apple, Linux, and Windows,
-  includes official upstream release assets such as the iOS
-  `CLiteRTLM.xcframework` when available, then publishes a GitHub release with
-  `manifest.json` and `SHA256SUMS`.
+  converts official upstream `CLiteRTLM.xcframework` slices into iOS runtime
+  archives with StreamProxy, includes the official upstream release assets,
+  then publishes a GitHub release with `manifest.json` and `SHA256SUMS`.
 - `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
   when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
   not published yet.

@@ -11,6 +11,9 @@ from validate_runtime_artifacts import REQUIRED_RUNTIME_ARTIFACTS
 REQUIRED_RUNTIME_ARCHIVES = [
     "litert-lm-native-runtime-android-arm64-{tag}.tar.gz",
     "litert-lm-native-runtime-android-x64-{tag}.tar.gz",
+    "litert-lm-native-runtime-ios-arm64-{tag}.tar.gz",
+    "litert-lm-native-runtime-ios-arm64-sim-{tag}.tar.gz",
+    "litert-lm-native-runtime-ios-x64-sim-{tag}.tar.gz",
     "litert-lm-native-runtime-linux-arm64-{tag}.tar.gz",
     "litert-lm-native-runtime-linux-x64-{tag}.tar.gz",
     "litert-lm-native-runtime-macos-arm64-{tag}.tar.gz",

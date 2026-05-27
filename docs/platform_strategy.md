@@ -14,6 +14,8 @@ The release automation publishes three kinds of artifacts:
 - upstream `prebuilt/` companion libraries copied from the tagged source archive
 - official upstream release assets, including the iOS `CLiteRTLM.xcframework`
   archive when Google publishes it
+- iOS dylib-style runtime slices derived from `CLiteRTLM.xcframework` so FFI
+  consumers can use the same `libLiteRtLm.dylib` loading convention as macOS
 
 The upstream C runtime is the production FFI target for downstream packages. If
 we later need a repo-owned compatibility layer, it should be introduced as a real
@@ -25,12 +27,13 @@ Initial native targets:
 | --- | --- | --- | --- |
 | Android | arm64-v8a | 1 | `.so` bundle |
 | macOS | arm64 | 1 | `.dylib` or `.framework` bundle |
-| iOS | arm64 | 2 | `.xcframework` archive |
+| iOS | arm64 | 2 | `.dylib` runtime archive from upstream `.xcframework` |
 | Linux | x64 | 2 | `.so` bundle |
 | Windows | x64 | 2 | `.dll` bundle |
 | Linux | arm64 | 3 | `.so` bundle |
 | macOS | x64 | 3 | `.dylib` or `.framework` bundle |
 | Android | x86_64 | 3 | `.so` bundle |
+| iOS simulator | arm64, x64 | 3 | `.dylib` runtime archive from upstream `.xcframework` |
 
 ## Web
 

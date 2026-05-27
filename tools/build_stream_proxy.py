@@ -16,6 +16,9 @@ STREAM_PROXY_SOURCE = REPO_ROOT / "native" / "stream_proxy" / "stream_proxy.c"
 STREAM_PROXY_LIBRARIES = {
     ("android", "arm64"): "libStreamProxy.so",
     ("android", "x64"): "libStreamProxy.so",
+    ("ios", "arm64"): "libStreamProxy.dylib",
+    ("ios", "arm64-sim"): "libStreamProxy.dylib",
+    ("ios", "x64-sim"): "libStreamProxy.dylib",
     ("linux", "arm64"): "libStreamProxy.so",
     ("linux", "x64"): "libStreamProxy.so",
     ("macos", "arm64"): "libStreamProxy.dylib",
@@ -85,6 +88,37 @@ def compiler_command(platform_name: str, arch: str, output: Path) -> list[str]:
             str(output),
             source,
             "-ldl",
+        ]
+
+    if platform_name == "ios":
+        sdk = "iphoneos" if arch == "arm64" else "iphonesimulator"
+        target_arch = {
+            "arm64": "arm64",
+            "arm64-sim": "arm64",
+            "x64-sim": "x86_64",
+        }[arch]
+        min_version_flag = (
+            "-miphoneos-version-min=16.4"
+            if sdk == "iphoneos"
+            else "-mios-simulator-version-min=16.4"
+        )
+        return [
+            "xcrun",
+            "--sdk",
+            sdk,
+            "clang",
+            "-dynamiclib",
+            "-O2",
+            "-std=c11",
+            "-fvisibility=hidden",
+            "-arch",
+            target_arch,
+            min_version_flag,
+            "-install_name",
+            "@rpath/libStreamProxy.dylib",
+            "-o",
+            str(output),
+            source,
         ]
 
     if platform_name == "linux":
