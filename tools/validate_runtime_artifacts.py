@@ -8,12 +8,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED_RUNTIME_ARTIFACTS = [
     Path("bin/android/arm64/libLiteRtLm.so"),
+    Path("bin/android/arm64/libStreamProxy.so"),
     Path("bin/android/x64/libLiteRtLm.so"),
+    Path("bin/android/x64/libStreamProxy.so"),
     Path("bin/linux/arm64/libLiteRtLm.so"),
+    Path("bin/linux/arm64/libStreamProxy.so"),
     Path("bin/linux/x64/libLiteRtLm.so"),
+    Path("bin/linux/x64/libStreamProxy.so"),
     Path("bin/macos/arm64/libLiteRtLm.dylib"),
+    Path("bin/macos/arm64/libStreamProxy.dylib"),
     Path("bin/macos/x64/libLiteRtLm.dylib"),
+    Path("bin/macos/x64/libStreamProxy.dylib"),
     Path("bin/windows/x64/LiteRtLm.dll"),
+    Path("bin/windows/x64/StreamProxy.dll"),
 ]
 
 

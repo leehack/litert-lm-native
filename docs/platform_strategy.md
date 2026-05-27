@@ -4,11 +4,13 @@
 
 Native platforms use upstream LiteRT-LM's C runtime ABI directly. This keeps the
 release payload aligned with the runtime that downstream FFI bindings load and
-avoids publishing a second wrapper ABI that does not add behavior.
+avoids publishing a second model wrapper ABI that does not add behavior.
 
 The release automation publishes three kinds of artifacts:
 
 - upstream LiteRT-LM C runtime libraries built from the tagged source archive
+- StreamProxy, a small companion library that copies streaming callback strings
+  before they cross asynchronous FFI boundaries
 - upstream `prebuilt/` companion libraries copied from the tagged source archive
 - official upstream release assets, including the iOS `CLiteRTLM.xcframework`
   archive when Google publishes it
