@@ -54,8 +54,9 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
   libraries from tagged source with Bazel/Bazelisk, embeds StreamProxy symbols
   into source-built runtime libraries, and stages them for release.
 - `tools/package_ios_runtime.py`: extracts official upstream
-  `CLiteRTLM.xcframework` slices and builds a `libLiteRtLm.dylib` wrapper that
-  embeds StreamProxy symbols and re-exports `CLiteRTLM`.
+  `CLiteRTLM.xcframework` slices and stages `LiteRtLm.framework` plus
+  `CLiteRTLM.framework`, with the wrapper embedding StreamProxy symbols and
+  re-exporting `CLiteRTLM`.
 - `tools/package_release.py`: builds local manifest and checksums.
 - `tools/validate_artifacts.py`: validates manifest, checksums, and layout.
 - `docs/platform_strategy.md`: platform and distribution strategy.
@@ -91,9 +92,9 @@ python3 tools/validate_artifacts.py
   Android arm64/x64, macOS arm64/x64, Linux x64/arm64, and Windows x64, copies
   upstream `prebuilt/` companion libraries for Android, Apple, Linux, and
   Windows, converts official upstream `CLiteRTLM.xcframework` slices into iOS
-  runtime archives with an embedded-StreamProxy wrapper, includes the official
-  upstream release assets, then publishes a GitHub release with `manifest.json`
-  and `SHA256SUMS`.
+  framework runtime archives with an embedded-StreamProxy wrapper, includes the
+  official upstream release assets, then publishes a GitHub release with
+  `manifest.json` and `SHA256SUMS`.
 - `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
   when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
   not published yet.

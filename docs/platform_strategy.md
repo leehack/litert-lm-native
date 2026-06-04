@@ -14,9 +14,9 @@ The release automation publishes these runtime artifact groups:
 - upstream `prebuilt/` companion libraries copied from the tagged source archive
 - official upstream release assets, including the iOS `CLiteRTLM.xcframework`
   archive when Google publishes it
-- iOS dylib-style runtime wrappers derived from `CLiteRTLM.xcframework`, with
-  StreamProxy symbols embedded in `libLiteRtLm.dylib` and upstream symbols
-  re-exported from `libCLiteRTLM.dylib`
+- iOS framework-style runtime wrappers derived from `CLiteRTLM.xcframework`,
+  with StreamProxy symbols embedded in `LiteRtLm.framework/LiteRtLm` and
+  upstream symbols re-exported from `CLiteRTLM.framework/CLiteRTLM`
 
 The upstream C runtime is the production FFI target for downstream packages. If
 we later need a repo-owned compatibility layer, it should be introduced as a real
@@ -28,13 +28,13 @@ Initial native targets:
 | --- | --- | --- | --- |
 | Android | arm64-v8a | 1 | `.so` bundle |
 | macOS | arm64 | 1 | `.dylib` or `.framework` bundle |
-| iOS | arm64 | 2 | `.dylib` wrapper plus upstream runtime from `.xcframework` |
+| iOS | arm64 | 2 | `.framework` wrapper plus upstream runtime from `.xcframework` |
 | Linux | x64 | 2 | `.so` bundle |
 | Windows | x64 | 2 | `.dll` bundle |
 | Linux | arm64 | 3 | `.so` bundle |
 | macOS | x64 | 3 | `.dylib` or `.framework` bundle |
 | Android | x86_64 | 3 | `.so` bundle |
-| iOS simulator | arm64, x64 | 3 | `.dylib` wrapper plus upstream runtime from `.xcframework` |
+| iOS simulator | arm64, x64 | 3 | `.framework` wrapper plus upstream runtime from `.xcframework` |
 
 ## Web
 

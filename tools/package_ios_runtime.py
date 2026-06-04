@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import plistlib
 import shutil
 import subprocess
 import tempfile
@@ -28,7 +29,9 @@ REQUIRED_STREAM_PROXY_SYMBOLS = [
     b"stream_proxy_free_string",
 ]
 
-CLITERTLM_REEXPORT_NAME = b"@rpath/CLiteRTLM.framework/CLiteRTLM"
+LITERTLM_INSTALL_NAME = "@rpath/LiteRtLm.framework/LiteRtLm"
+CLITERTLM_INSTALL_NAME = "@rpath/CLiteRTLM.framework/CLiteRTLM"
+CLITERTLM_REEXPORT_NAME = CLITERTLM_INSTALL_NAME.encode("ascii")
 
 
 IOS_FRAMEWORK_SLICES = {
@@ -101,8 +104,41 @@ def validate_upstream_symbols(output: Path) -> None:
     print(f"Validated upstream LiteRT-LM C API symbols in {output}", flush=True)
 
 
-def build_wrapper(spec: dict, target_dir: Path, upstream: Path) -> Path:
-    output = target_dir / "libLiteRtLm.dylib"
+def write_framework_info_plist(
+    framework_dir: Path,
+    *,
+    executable: str,
+    bundle_identifier: str,
+    supported_platform: str,
+) -> None:
+    plist = {
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleExecutable": executable,
+        "CFBundleIdentifier": bundle_identifier,
+        "CFBundleInfoDictionaryVersion": "6.0",
+        "CFBundleName": executable,
+        "CFBundlePackageType": "FMWK",
+        "CFBundleShortVersionString": "1.0",
+        "CFBundleSupportedPlatforms": [supported_platform],
+        "CFBundleVersion": "1",
+        "MinimumOSVersion": DEFAULT_IOS_MINIMUM_OS,
+    }
+    with (framework_dir / "Info.plist").open("wb") as file:
+        plistlib.dump(plist, file)
+
+
+def copy_framework_info_plist(
+    source_framework_dir: Path,
+    target_framework_dir: Path,
+) -> None:
+    source_plist = source_framework_dir / "Info.plist"
+    if not source_plist.is_file():
+        raise RuntimeError(f"Missing framework Info.plist: {source_plist}")
+    shutil.copy2(source_plist, target_framework_dir / "Info.plist")
+
+
+def build_wrapper(spec: dict, framework_dir: Path, upstream: Path) -> Path:
+    output = framework_dir / "LiteRtLm"
     min_version_flag = (
         f"-miphoneos-version-min={DEFAULT_IOS_MINIMUM_OS}"
         if spec["sdk"] == "iphoneos"
@@ -121,7 +157,7 @@ def build_wrapper(spec: dict, target_dir: Path, upstream: Path) -> Path:
         spec["target_arch"],
         min_version_flag,
         "-install_name",
-        "@rpath/LiteRtLm.framework/LiteRtLm",
+        LITERTLM_INSTALL_NAME,
         "-Wl,-reexport_library," + str(upstream),
         "-o",
         str(output),
@@ -141,8 +177,13 @@ def stage_slice(extracted_root: Path, arch: str, clean: bool) -> Path:
     if clean and target_dir.exists():
         shutil.rmtree(target_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
+    supported_platform = (
+        "iPhoneOS" if spec["sdk"] == "iphoneos" else "iPhoneSimulator"
+    )
 
-    upstream = target_dir / "libCLiteRTLM.dylib"
+    upstream_framework_dir = target_dir / "CLiteRTLM.framework"
+    upstream_framework_dir.mkdir(parents=True, exist_ok=True)
+    upstream = upstream_framework_dir / "CLiteRTLM"
     thin_arch = spec["thin_arch"]
     if thin_arch:
         run(["lipo", str(source), "-thin", thin_arch, "-output", str(upstream)])
@@ -152,11 +193,22 @@ def stage_slice(extracted_root: Path, arch: str, clean: bool) -> Path:
     run([
         "install_name_tool",
         "-id",
-        "@rpath/CLiteRTLM.framework/CLiteRTLM",
+        CLITERTLM_INSTALL_NAME,
         str(upstream),
     ])
     validate_upstream_symbols(upstream)
-    output = build_wrapper(spec, target_dir, upstream)
+    copy_framework_info_plist(source.parent, upstream_framework_dir)
+
+    wrapper_framework_dir = target_dir / "LiteRtLm.framework"
+    wrapper_framework_dir.mkdir(parents=True, exist_ok=True)
+    output = build_wrapper(spec, wrapper_framework_dir, upstream)
+
+    write_framework_info_plist(
+        wrapper_framework_dir,
+        executable="LiteRtLm",
+        bundle_identifier="dev.leehack.litertlm.native.LiteRtLm",
+        supported_platform=supported_platform,
+    )
     print(f"Staged {output}", flush=True)
     print(f"Staged {upstream}", flush=True)
     return output
@@ -180,7 +232,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Package official upstream CLiteRTLM.xcframework slices as "
-            "dylib-style iOS runtime payloads."
+            "framework-style iOS runtime payloads."
         )
     )
     parser.add_argument("--upstream-tag", required=True)
