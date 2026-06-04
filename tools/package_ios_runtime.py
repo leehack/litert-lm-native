@@ -33,34 +33,11 @@ LITERTLM_INSTALL_NAME = "@rpath/LiteRtLm.framework/LiteRtLm"
 CLITERTLM_INSTALL_NAME = "@rpath/CLiteRTLM.framework/CLiteRTLM"
 CLITERTLM_REEXPORT_NAME = CLITERTLM_INSTALL_NAME.encode("ascii")
 
-
-IOS_FRAMEWORK_SLICES = {
-    "arm64": {
-        "framework_binary": Path(
-            "CLiteRTLM.xcframework/ios-arm64/CLiteRTLM.framework/CLiteRTLM"
-        ),
-        "thin_arch": None,
-        "sdk": "iphoneos",
-        "target_arch": "arm64",
-    },
-    "arm64-sim": {
-        "framework_binary": Path(
-            "CLiteRTLM.xcframework/ios-arm64_x86_64-simulator/"
-            "CLiteRTLM.framework/CLiteRTLM"
-        ),
-        "thin_arch": "arm64",
-        "sdk": "iphonesimulator",
-        "target_arch": "arm64",
-    },
-    "x64-sim": {
-        "framework_binary": Path(
-            "CLiteRTLM.xcframework/ios-arm64_x86_64-simulator/"
-            "CLiteRTLM.framework/CLiteRTLM"
-        ),
-        "thin_arch": "x86_64",
-        "sdk": "iphonesimulator",
-        "target_arch": "x86_64",
-    },
+IOS_ARCH_ORDER = {"arm64": 0, "arm64-sim": 1, "x64-sim": 2}
+REQUIRED_IOS_ARCHES = {"arm64", "arm64-sim"}
+XCFRAMEWORK_ARCH_TO_RUNTIME_ARCH = {
+    "arm64": "arm64",
+    "x86_64": "x64",
 }
 
 
@@ -102,6 +79,58 @@ def validate_upstream_symbols(output: Path) -> None:
             + ", ".join(missing)
         )
     print(f"Validated upstream LiteRT-LM C API symbols in {output}", flush=True)
+
+
+def discover_ios_slices(extracted_root: Path) -> list[dict]:
+    xcframework_root = extracted_root / "CLiteRTLM.xcframework"
+    info_plist = xcframework_root / "Info.plist"
+    if not info_plist.is_file():
+        raise RuntimeError(f"Missing CLiteRTLM.xcframework Info.plist: {info_plist}")
+
+    metadata = plistlib.loads(info_plist.read_bytes())
+    specs: list[dict] = []
+    for library in metadata.get("AvailableLibraries", []):
+        if library.get("SupportedPlatform") != "ios":
+            continue
+        library_identifier = library.get("LibraryIdentifier")
+        library_path = library.get("LibraryPath")
+        if not library_identifier or not library_path:
+            continue
+
+        source_framework_dir = xcframework_root / library_identifier / library_path
+        source = source_framework_dir / "CLiteRTLM"
+        source_arches = library.get("SupportedArchitectures", [])
+        variant = library.get("SupportedPlatformVariant")
+        if variant not in (None, "simulator"):
+            continue
+        for source_arch in source_arches:
+            runtime_arch = XCFRAMEWORK_ARCH_TO_RUNTIME_ARCH.get(source_arch)
+            if runtime_arch is None:
+                continue
+            if variant is None and runtime_arch != "arm64":
+                continue
+            arch = f"{runtime_arch}-sim" if variant == "simulator" else runtime_arch
+            specs.append(
+                {
+                    "arch": arch,
+                    "framework_binary": source,
+                    "thin_arch": source_arch if len(source_arches) > 1 else None,
+                    "sdk": (
+                        "iphonesimulator"
+                        if variant == "simulator"
+                        else "iphoneos"
+                    ),
+                    "target_arch": source_arch,
+                }
+            )
+
+    found = {spec["arch"] for spec in specs}
+    missing = sorted(REQUIRED_IOS_ARCHES - found)
+    if missing:
+        raise RuntimeError(
+            "Missing required CLiteRTLM iOS slices: " + ", ".join(missing)
+        )
+    return sorted(specs, key=lambda spec: IOS_ARCH_ORDER.get(spec["arch"], 99))
 
 
 def write_framework_info_plist(
@@ -167,9 +196,9 @@ def build_wrapper(spec: dict, framework_dir: Path, upstream: Path) -> Path:
     return output
 
 
-def stage_slice(extracted_root: Path, arch: str, clean: bool) -> Path:
-    spec = IOS_FRAMEWORK_SLICES[arch]
-    source = extracted_root / spec["framework_binary"]
+def stage_slice(spec: dict, clean: bool) -> Path:
+    arch = spec["arch"]
+    source = spec["framework_binary"]
     if not source.is_file():
         raise RuntimeError(f"Missing CLiteRTLM framework binary: {source}")
 
@@ -222,10 +251,13 @@ def package_ios_runtime(archive: Path, clean: bool) -> list[Path]:
         temp_dir = Path(temp)
         with zipfile.ZipFile(archive) as zip_file:
             zip_file.extractall(temp_dir)
-        return [
-            stage_slice(temp_dir, arch, clean=clean)
-            for arch in IOS_FRAMEWORK_SLICES
-        ]
+        specs = discover_ios_slices(temp_dir)
+        if clean:
+            for arch in IOS_ARCH_ORDER:
+                target_dir = BIN_DIR / "ios" / arch
+                if target_dir.exists():
+                    shutil.rmtree(target_dir)
+        return [stage_slice(spec, clean=clean) for spec in specs]
 
 
 def main() -> int:
