@@ -13,8 +13,8 @@ Responsibilities:
 - Track upstream `google-ai-edge/LiteRT-LM` releases.
 - Fetch or build native LiteRT-LM libraries per platform.
 - Preserve upstream LiteRT-LM's C runtime ABI as the FFI boundary.
-- Ship the small StreamProxy companion library needed by asynchronous FFI
-  clients to copy LiteRT-LM streaming callback strings safely.
+- Embed the small StreamProxy callback-copy helper into runtime libraries used
+  by asynchronous FFI clients.
 - Package web assets around official LiteRT-LM/LiteRT.js distribution paths.
 - Publish `manifest.json` and `SHA256SUMS` for deterministic consumers.
 
@@ -51,12 +51,12 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
 - `web/`: web package scaffold for JS/Wasm/WebGPU/WebNN integration.
 - `tools/fetch_upstream.py`: resolves and downloads upstream release assets.
 - `tools/build_upstream_runtime.py`: builds upstream LiteRT-LM C runtime
-  libraries from tagged source with Bazel/Bazelisk and stages StreamProxy.
+  libraries from tagged source with Bazel/Bazelisk, embeds StreamProxy symbols
+  into source-built runtime libraries, and stages them for release.
 - `tools/package_ios_runtime.py`: extracts official upstream
-  `CLiteRTLM.xcframework` slices into the dylib-style iOS runtime payload used
-  by downstream FFI clients.
-- `tools/build_stream_proxy.py`: builds the companion callback-copy helper
-  library used by downstream FFI stream bindings.
+  `CLiteRTLM.xcframework` slices and stages `LiteRtLm.framework` plus
+  `CLiteRTLM.framework`, with the wrapper embedding StreamProxy symbols and
+  re-exporting `CLiteRTLM`.
 - `tools/package_release.py`: builds local manifest and checksums.
 - `tools/validate_artifacts.py`: validates manifest, checksums, and layout.
 - `docs/platform_strategy.md`: platform and distribution strategy.
@@ -88,20 +88,22 @@ python3 tools/validate_artifacts.py
 - `Validate`: validates package metadata and checks Python/web tooling on
   pushes and pull requests.
 - `Native Build & Release`: manually packages a selected upstream LiteRT-LM tag.
-  It builds upstream C runtime libraries and StreamProxy for Android
-  arm64/x64, macOS arm64/x64, Linux x64/arm64, and Windows x64, copies upstream
-  `prebuilt/` companion libraries for Android, Apple, Linux, and Windows,
-  converts official upstream `CLiteRTLM.xcframework` slices into iOS runtime
-  archives with StreamProxy, includes the official upstream release assets,
-  then publishes a GitHub release with `manifest.json` and `SHA256SUMS`.
+  It builds upstream C runtime libraries with embedded StreamProxy symbols for
+  Android arm64/x64, macOS arm64/x64, Linux x64/arm64, and Windows x64, copies
+  upstream `prebuilt/` companion libraries for Android, Apple, Linux, and
+  Windows, converts official upstream `CLiteRTLM.xcframework` slices into iOS
+  framework runtime archives with an embedded-StreamProxy wrapper, includes the
+  official upstream release assets, then publishes a GitHub release with
+  `manifest.json` and `SHA256SUMS`.
 - `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
   when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
   not published yet.
 
 The release workflow uses upstream's public C API (`c/engine.h`) as the
-production FFI boundary. Downstream loaders should bind directly to the upstream
-runtime library for the selected platform and use StreamProxy only as a
-callback-memory companion for streaming.
+production FFI boundary. Downstream loaders should bind directly to the runtime
+library for the selected platform. StreamProxy symbols are embedded into the
+same runtime library surface; no standalone StreamProxy runtime artifact is part
+of the release contract.
 
 ## Consumer Contract
 

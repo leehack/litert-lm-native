@@ -13,13 +13,15 @@ DIST_DIR = REPO_ROOT / "dist"
 MANIFEST_PATH = REPO_ROOT / "manifest.json"
 SHA256SUMS_PATH = REPO_ROOT / "SHA256SUMS"
 
-NATIVE_EXTENSIONS = {
+NATIVE_FILE_EXTENSIONS = {
     ".so",
     ".dylib",
     ".dll",
     ".lib",
     ".a",
     ".zip",
+}
+NATIVE_BUNDLE_EXTENSIONS = {
     ".framework",
     ".xcframework",
 }
@@ -43,11 +45,17 @@ def infer_bin_metadata(path: Path) -> tuple[str, str | None, str | None]:
     return "native", platform, arch
 
 
+def is_native_artifact(path: Path) -> bool:
+    if path.suffix in NATIVE_FILE_EXTENSIONS:
+        return True
+    return any(Path(part).suffix in NATIVE_BUNDLE_EXTENSIONS for part in path.parts)
+
+
 def iter_artifacts() -> list[Path]:
     artifacts: list[Path] = []
     if BIN_DIR.exists():
         for path in BIN_DIR.rglob("*"):
-            if path.is_file() and path.suffix in NATIVE_EXTENSIONS:
+            if path.is_file() and is_native_artifact(path):
                 artifacts.append(path)
     if WEB_DIST_DIR.exists():
         for path in WEB_DIST_DIR.rglob("*"):

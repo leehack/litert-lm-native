@@ -10,11 +10,11 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from build_stream_proxy import build_stream_proxy
 from runtime_dependency_utils import elf_needed_libraries, is_elf, is_system_needed
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
+STREAM_PROXY_SOURCE = REPO_ROOT / "native" / "stream_proxy" / "stream_proxy.c"
 UPSTREAM_REPO = "google-ai-edge/LiteRT-LM"
 UPSTREAM_ARCHIVE_URL = (
     "https://github.com/google-ai-edge/LiteRT-LM/archive/refs/tags/{tag}.tar.gz"
@@ -80,15 +80,34 @@ REQUIRED_C_API_SYMBOLS = [
     b"litert_lm_conversation_send_message_stream",
 ]
 
+REQUIRED_STREAM_PROXY_SYMBOLS = [
+    b"stream_proxy_load_global",
+    b"stream_proxy_create",
+    b"stream_proxy_delete",
+    b"stream_proxy_free_string",
+]
+
 SHARED_TARGETS = """
 
 # Added by litert-lm-native packaging. Upstream publishes the C API as a static
 # cc_library for most platforms; Dart/Flutter FFI needs a loadable library.
+cc_library(
+    name = "stream_proxy",
+    srcs = ["stream_proxy.c"],
+    alwayslink = True,
+    linkopts = select({
+        "@platforms//os:android": ["-ldl"],
+        "@platforms//os:linux": ["-ldl"],
+        "//conditions:default": [],
+    }),
+)
+
 cc_binary(
     name = "libLiteRtLm.so",
     linkshared = True,
     deps = [
         ":engine",
+        ":stream_proxy",
         "//schema/capabilities:capabilities_c",
     ],
 )
@@ -98,6 +117,7 @@ cc_binary(
     linkshared = True,
     deps = [
         ":engine",
+        ":stream_proxy",
         "//schema/capabilities:capabilities_c",
     ],
 )
@@ -107,6 +127,7 @@ cc_binary(
     linkshared = True,
     deps = [
         ":engine",
+        ":stream_proxy",
         "//schema/capabilities:capabilities_c",
     ],
 )
@@ -136,15 +157,22 @@ def download_upstream(tag: str, work_dir: Path) -> Path:
 
 
 def patch_upstream_build(source_root: Path) -> None:
+    stream_proxy_target = source_root / "c" / "stream_proxy.c"
+    shutil.copy2(STREAM_PROXY_SOURCE, stream_proxy_target)
+
     build_path = source_root / "c" / "BUILD"
     text = build_path.read_text(encoding="utf-8")
-    if "name = \"libLiteRtLm.so\"" in text:
-        patched_build = text
-    else:
-        insert_before = "\ncc_test(\n    name = \"engine_test\","
-        if insert_before not in text:
-            raise RuntimeError("Could not find insertion point in upstream c/BUILD")
-        patched_build = text.replace(insert_before, SHARED_TARGETS + insert_before)
+    insert_before = "\ncc_test(\n    name = \"engine_test\","
+    packaging_marker = "# Added by litert-lm-native packaging."
+    packaging_start = text.find(packaging_marker)
+    if packaging_start != -1:
+        packaging_end = text.find(insert_before, packaging_start)
+        if packaging_end == -1:
+            raise RuntimeError("Could not find packaging block end in upstream c/BUILD")
+        text = text[:packaging_start].rstrip() + text[packaging_end:]
+    if insert_before not in text:
+        raise RuntimeError("Could not find insertion point in upstream c/BUILD")
+    patched_build = text.replace(insert_before, SHARED_TARGETS + insert_before, 1)
     build_path.write_text(patched_build, encoding="utf-8")
 
     workspace_path = source_root / "WORKSPACE"
@@ -310,17 +338,18 @@ def find_runtime_dependency(
 
 def validate_exported_symbols(output: Path) -> None:
     data = output.read_bytes()
+    required_symbols = REQUIRED_C_API_SYMBOLS + REQUIRED_STREAM_PROXY_SYMBOLS
     missing = [
         symbol.decode("ascii")
-        for symbol in REQUIRED_C_API_SYMBOLS
+        for symbol in required_symbols
         if symbol not in data
     ]
     if missing:
         raise RuntimeError(
-            f"{output} does not contain required LiteRT-LM C API symbols: "
+            f"{output} does not contain required LiteRT-LM/StreamProxy symbols: "
             + ", ".join(missing)
         )
-    print(f"Validated LiteRT-LM C API symbols in {output}", flush=True)
+    print(f"Validated LiteRT-LM and StreamProxy symbols in {output}", flush=True)
 
 
 def main() -> int:
@@ -346,7 +375,6 @@ def main() -> int:
         validate_exported_symbols(output)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
-        build_stream_proxy(args.platform, args.arch)
         return 0
 
     with tempfile.TemporaryDirectory(
@@ -359,7 +387,6 @@ def main() -> int:
         validate_exported_symbols(output)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
-        build_stream_proxy(args.platform, args.arch)
     return 0
 
 
