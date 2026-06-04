@@ -168,11 +168,6 @@ jobs:
           python3 tools/package_ios_runtime.py \
             --upstream-tag "${{ inputs.upstream_tag }}" \
             --clean
-          for arch in arm64 arm64-sim x64-sim; do
-            python3 tools/build_stream_proxy.py \
-              --platform ios \
-              --arch "$arch"
-          done
 
       - name: Generate manifest and checksums
         run: |

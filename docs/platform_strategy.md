@@ -6,16 +6,17 @@ Native platforms use upstream LiteRT-LM's C runtime ABI directly. This keeps the
 release payload aligned with the runtime that downstream FFI bindings load and
 avoids publishing a second model wrapper ABI that does not add behavior.
 
-The release automation publishes three kinds of artifacts:
+The release automation publishes these runtime artifact groups:
 
-- upstream LiteRT-LM C runtime libraries built from the tagged source archive
-- StreamProxy, a small companion library that copies streaming callback strings
-  before they cross asynchronous FFI boundaries
+- upstream LiteRT-LM C runtime libraries built from the tagged source archive,
+  with StreamProxy symbols embedded for downstream FFI streaming on source-built
+  platforms
 - upstream `prebuilt/` companion libraries copied from the tagged source archive
 - official upstream release assets, including the iOS `CLiteRTLM.xcframework`
   archive when Google publishes it
-- iOS dylib-style runtime slices derived from `CLiteRTLM.xcframework` so FFI
-  consumers can use the same `libLiteRtLm.dylib` loading convention as macOS
+- iOS dylib-style runtime wrappers derived from `CLiteRTLM.xcframework`, with
+  StreamProxy symbols embedded in `libLiteRtLm.dylib` and upstream symbols
+  re-exported from `libCLiteRTLM.dylib`
 
 The upstream C runtime is the production FFI target for downstream packages. If
 we later need a repo-owned compatibility layer, it should be introduced as a real
@@ -27,13 +28,13 @@ Initial native targets:
 | --- | --- | --- | --- |
 | Android | arm64-v8a | 1 | `.so` bundle |
 | macOS | arm64 | 1 | `.dylib` or `.framework` bundle |
-| iOS | arm64 | 2 | `.dylib` runtime archive from upstream `.xcframework` |
+| iOS | arm64 | 2 | `.dylib` wrapper plus upstream runtime from `.xcframework` |
 | Linux | x64 | 2 | `.so` bundle |
 | Windows | x64 | 2 | `.dll` bundle |
 | Linux | arm64 | 3 | `.so` bundle |
 | macOS | x64 | 3 | `.dylib` or `.framework` bundle |
 | Android | x86_64 | 3 | `.so` bundle |
-| iOS simulator | arm64, x64 | 3 | `.dylib` runtime archive from upstream `.xcframework` |
+| iOS simulator | arm64, x64 | 3 | `.dylib` wrapper plus upstream runtime from `.xcframework` |
 
 ## Web
 
