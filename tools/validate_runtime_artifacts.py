@@ -13,8 +13,6 @@ REQUIRED_RUNTIME_ARTIFACTS = [
     Path("bin/ios/arm64/CLiteRTLM.framework/CLiteRTLM"),
     Path("bin/ios/arm64-sim/LiteRtLm.framework/LiteRtLm"),
     Path("bin/ios/arm64-sim/CLiteRTLM.framework/CLiteRTLM"),
-    Path("bin/ios/x64-sim/LiteRtLm.framework/LiteRtLm"),
-    Path("bin/ios/x64-sim/CLiteRTLM.framework/CLiteRTLM"),
     Path("bin/linux/arm64/libLiteRtLm.so"),
     Path("bin/linux/x64/libLiteRtLm.so"),
     Path("bin/macos/arm64/libLiteRtLm.dylib"),

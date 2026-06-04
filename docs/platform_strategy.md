@@ -34,7 +34,7 @@ Initial native targets:
 | Linux | arm64 | 3 | `.so` bundle |
 | macOS | x64 | 3 | `.dylib` or `.framework` bundle |
 | Android | x86_64 | 3 | `.so` bundle |
-| iOS simulator | arm64, x64 | 3 | `.framework` wrapper plus upstream runtime from `.xcframework` |
+| iOS simulator | arm64; x64 when upstream ships it | 3 | `.framework` wrapper plus upstream runtime from `.xcframework` |
 
 ## Web
 
