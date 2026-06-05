@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import plistlib
 import re
 import shutil
@@ -128,9 +129,16 @@ def zip_xcframework(xcframework: Path, output_zip: Path) -> None:
     output_zip.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output_zip, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(xcframework.rglob("*")):
+            relative_path = path.relative_to(xcframework.parent)
+            if path.is_symlink():
+                info = zipfile.ZipInfo(relative_path.as_posix())
+                info.create_system = 3
+                info.external_attr = 0o120777 << 16
+                archive.writestr(info, os.readlink(path))
+                continue
             if path.is_dir():
                 continue
-            archive.write(path, path.relative_to(xcframework.parent))
+            archive.write(path, relative_path)
 
 
 def create_xcframework(
@@ -191,13 +199,13 @@ def make_macos_library_argument(
     module_name: str,
     libraries: dict[str, Path],
     work_root: Path,
+    *,
+    include_headers: bool = True,
 ) -> list[str]:
     if not libraries:
         return []
     output_dir = work_root / f"{module_name}-macos"
     output_dir.mkdir(parents=True, exist_ok=True)
-    headers_dir = output_dir / "Headers"
-    ensure_module_headers(headers_dir, module_name)
 
     if len(libraries) == 1:
         library = next(iter(libraries.values()))
@@ -213,6 +221,11 @@ def make_macos_library_argument(
                 str(library),
             ]
         )
+    if not include_headers:
+        return ["-library", str(library)]
+
+    headers_dir = output_dir / "Headers"
+    ensure_module_headers(headers_dir, module_name)
     return ["-library", str(library), "-headers", str(headers_dir)]
 
 
@@ -229,21 +242,24 @@ def make_macos_framework_argument(
     if framework.exists():
         shutil.rmtree(framework)
 
-    headers_dir = framework / "Headers"
-    modules_dir = framework / "Modules"
+    version_dir = framework / "Versions" / "A"
+    headers_dir = version_dir / "Headers"
+    modules_dir = version_dir / "Modules"
+    resources_dir = version_dir / "Resources"
     headers_dir.mkdir(parents=True, exist_ok=True)
     modules_dir.mkdir(parents=True, exist_ok=True)
+    resources_dir.mkdir(parents=True, exist_ok=True)
     ensure_module_headers(headers_dir, module_name, framework=True)
     shutil.copy2(headers_dir / "module.modulemap", modules_dir / "module.modulemap")
 
-    binary = framework / module_name
+    binary = version_dir / module_name
     shutil.copy2(library, binary)
     binary.chmod(0o755)
     run(
         [
             "install_name_tool",
             "-id",
-            f"@rpath/{module_name}.framework/{module_name}",
+            f"@rpath/{module_name}.framework/Versions/A/{module_name}",
             str(binary),
         ]
     )
@@ -258,8 +274,12 @@ def make_macos_framework_argument(
         "CFBundleShortVersionString": "1.0",
         "CFBundleVersion": "1",
     }
-    with (framework / "Info.plist").open("wb") as file:
+    with (resources_dir / "Info.plist").open("wb") as file:
         plistlib.dump(info_plist, file)
+
+    (framework / "Versions" / "Current").symlink_to("A")
+    for name in ["Headers", "Modules", "Resources", module_name]:
+        (framework / name).symlink_to(Path("Versions") / "Current" / name)
     return ["-framework", str(framework)]
 
 
@@ -273,7 +293,12 @@ def package_macos_companions(
         if library_name == PRIMARY_LIBRARY:
             continue
         module_name = module_name_for_dylib(Path(library_name))
-        args = make_macos_library_argument(module_name, libraries, work_root)
+        args = make_macos_library_argument(
+            module_name,
+            libraries,
+            work_root,
+            include_headers=False,
+        )
         if args:
             packaged.append(
                 create_xcframework(module_name, args, work_root, output_dir, tag)

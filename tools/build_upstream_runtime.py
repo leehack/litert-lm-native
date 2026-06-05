@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 STREAM_PROXY_SOURCE = REPO_ROOT / "native" / "stream_proxy" / "stream_proxy.c"
 UPSTREAM_REPO = "google-ai-edge/LiteRT-LM"
+MACOS_MINIMUM_OS = "14.0"
 UPSTREAM_ARCHIVE_URL = (
     "https://github.com/google-ai-edge/LiteRT-LM/archive/refs/tags/{tag}.tar.gz"
 )
@@ -244,6 +245,8 @@ def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None)
         "--define=litert_link_capi_so=true",
         "--define=resolve_symbols_in_exec=false",
     ]
+    if platform == "macos":
+        command.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
     if jobs:
         command.append(f"--jobs={jobs}")
     run(command, source_root)
