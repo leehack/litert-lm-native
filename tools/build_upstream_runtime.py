@@ -276,6 +276,10 @@ def stage_runtime_dependencies(
     platform: str,
     arch: str,
 ) -> None:
+    if platform == "macos":
+        stage_macho_runtime_dependencies(output, source_root, platform, arch)
+        return
+
     stage_dir = BIN_DIR / platform / arch
     staged = stage_dir / RUNTIME_TARGETS[(platform, arch)]["library"]
     queued = [staged]
@@ -308,6 +312,71 @@ def stage_runtime_dependencies(
                 shutil.copy2(dependency, destination)
                 print(f"Staged runtime dependency {destination}", flush=True)
             queued.append(destination)
+
+
+def stage_macho_runtime_dependencies(
+    output: Path,
+    source_root: Path,
+    platform: str,
+    arch: str,
+) -> None:
+    stage_dir = BIN_DIR / platform / arch
+    staged = stage_dir / RUNTIME_TARGETS[(platform, arch)]["library"]
+    queued = [staged]
+    seen = set()
+    dependency_cache: dict[str, Path | None] = {}
+
+    while queued:
+        current = queued.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        for install_name in macho_needed_libraries(current):
+            if is_system_macho_needed(install_name):
+                continue
+            library_name = Path(install_name).name
+            if library_name == current.name:
+                continue
+            destination = stage_dir / library_name
+            if not destination.exists():
+                dependency = find_runtime_dependency(
+                    source_root,
+                    output,
+                    library_name,
+                    dependency_cache,
+                )
+                if dependency is None:
+                    raise RuntimeError(
+                        f"{current} depends on {install_name}, but {library_name} "
+                        "was not found in the Bazel output tree."
+                    )
+                shutil.copy2(dependency, destination)
+                print(f"Staged runtime dependency {destination}", flush=True)
+            queued.append(destination)
+
+
+def macho_needed_libraries(path: Path) -> list[str]:
+    result = subprocess.run(
+        ["otool", "-L", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    libraries: list[str] = []
+    for line in result.stdout.splitlines()[1:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        libraries.append(stripped.split(" ", 1)[0])
+    return libraries
+
+
+def is_system_macho_needed(install_name: str) -> bool:
+    return (
+        install_name.startswith("/System/Library/")
+        or install_name.startswith("/usr/lib/")
+        or install_name == Path(install_name).name
+    )
 
 
 def find_runtime_dependency(

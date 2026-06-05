@@ -169,6 +169,12 @@ jobs:
             --upstream-tag "${{ inputs.upstream_tag }}" \
             --clean
 
+      - name: Package Apple SPM XCFrameworks
+        run: |
+          python3 tools/package_apple_xcframeworks.py \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --clean
+
       - name: Generate manifest and checksums
         run: |
           python3 tools/validate_runtime_artifacts.py --upstream-tag "${{ inputs.upstream_tag }}"
@@ -191,6 +197,9 @@ jobs:
             tar -czf "release/litert-lm-native-official-assets-${{ inputs.upstream_tag }}.tar.gz" \
               dist
           fi
+          if [ -d "dist/spm/${{ inputs.upstream_tag }}" ]; then
+            cp dist/spm/${{ inputs.upstream_tag }}/*.zip release/
+          fi
 
       - name: Publish GitHub release
         env:
@@ -200,7 +209,7 @@ jobs:
           if [ "${{ inputs.prerelease }}" = "true" ]; then
             args+=(--prerelease)
           fi
-          notes="Packaged LiteRT-LM upstream runtime libraries, upstream prebuilts, and official release assets for ${{ inputs.upstream_tag }}."
+          notes="Packaged LiteRT-LM upstream runtime libraries, upstream prebuilts, Apple SPM XCFrameworks, and official release assets for ${{ inputs.upstream_tag }}."
           if gh release view "${{ inputs.upstream_tag }}" \
             --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release edit "${{ inputs.upstream_tag }}" \

@@ -17,10 +17,26 @@ The release automation publishes these runtime artifact groups:
 - iOS framework-style runtime wrappers derived from `CLiteRTLM.xcframework`,
   with StreamProxy symbols embedded in `LiteRtLm.framework/LiteRtLm` and
   upstream symbols re-exported from `CLiteRTLM.framework/CLiteRTLM`
+- Apple Swift Package Manager XCFramework zips produced from the same iOS
+  wrappers, macOS source-built runtime, and macOS companion dylibs used by the
+  native-assets payloads
 
 The upstream C runtime is the production FFI target for downstream packages. If
 we later need a repo-owned compatibility layer, it should be introduced as a real
 wrapper over upstream LiteRT-LM rather than a scaffold library.
+
+SPM artifacts are intentionally split by binary target. `LiteRtLm` carries the
+primary iOS runtime/wrapper and a macOS framework wrapper around the
+source-built runtime. `CLiteRTLM` is published for iOS re-export support. macOS
+companion dylibs are published as separate XCFramework targets when the native
+release payload contains them.
+
+The macOS LiteRT-LM SPM path must account for the architecture coverage of the
+native payload. Upstream `v0.13.1` publishes arm64 macOS companion dylibs, while
+the x64 source-built runtime links only to `libLiteRt.dylib`; those macOS dylibs
+are built for macOS 14. Keep native-assets runtime archives as the source of
+truth, and only wire macOS SPM dependencies in downstream packages when the
+required binary targets cover the selected architecture and deployment target.
 
 Initial native targets:
 
