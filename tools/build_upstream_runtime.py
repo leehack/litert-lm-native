@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 STREAM_PROXY_SOURCE = REPO_ROOT / "native" / "stream_proxy" / "stream_proxy.c"
 UPSTREAM_REPO = "google-ai-edge/LiteRT-LM"
+MACOS_MINIMUM_OS = "14.0"
 UPSTREAM_ARCHIVE_URL = (
     "https://github.com/google-ai-edge/LiteRT-LM/archive/refs/tags/{tag}.tar.gz"
 )
@@ -62,6 +63,10 @@ RUNTIME_TARGETS = {
     ("macos", "x64"): {
         "bazel_target": "//c:libLiteRtLm.dylib",
         "bazel_config": "macos",
+        "bazel_options": [
+            "--cpu=darwin_x86_64",
+            "--platforms=@build_bazel_apple_support//platforms:darwin_x86_64",
+        ],
         "output": "bazel-bin/c/libLiteRtLm.dylib",
         "library": "libLiteRtLm.dylib",
     },
@@ -244,6 +249,8 @@ def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None)
         "--define=litert_link_capi_so=true",
         "--define=resolve_symbols_in_exec=false",
     ]
+    if platform == "macos":
+        command.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
     if jobs:
         command.append(f"--jobs={jobs}")
     run(command, source_root)
@@ -276,6 +283,10 @@ def stage_runtime_dependencies(
     platform: str,
     arch: str,
 ) -> None:
+    if platform == "macos":
+        stage_macho_runtime_dependencies(output, source_root, platform, arch)
+        return
+
     stage_dir = BIN_DIR / platform / arch
     staged = stage_dir / RUNTIME_TARGETS[(platform, arch)]["library"]
     queued = [staged]
@@ -308,6 +319,71 @@ def stage_runtime_dependencies(
                 shutil.copy2(dependency, destination)
                 print(f"Staged runtime dependency {destination}", flush=True)
             queued.append(destination)
+
+
+def stage_macho_runtime_dependencies(
+    output: Path,
+    source_root: Path,
+    platform: str,
+    arch: str,
+) -> None:
+    stage_dir = BIN_DIR / platform / arch
+    staged = stage_dir / RUNTIME_TARGETS[(platform, arch)]["library"]
+    queued = [staged]
+    seen = set()
+    dependency_cache: dict[str, Path | None] = {}
+
+    while queued:
+        current = queued.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        for install_name in macho_needed_libraries(current):
+            if is_system_macho_needed(install_name):
+                continue
+            library_name = Path(install_name).name
+            if library_name == current.name:
+                continue
+            destination = stage_dir / library_name
+            if not destination.exists():
+                dependency = find_runtime_dependency(
+                    source_root,
+                    output,
+                    library_name,
+                    dependency_cache,
+                )
+                if dependency is None:
+                    raise RuntimeError(
+                        f"{current} depends on {install_name}, but {library_name} "
+                        "was not found in the Bazel output tree."
+                    )
+                shutil.copy2(dependency, destination)
+                print(f"Staged runtime dependency {destination}", flush=True)
+            queued.append(destination)
+
+
+def macho_needed_libraries(path: Path) -> list[str]:
+    result = subprocess.run(
+        ["otool", "-L", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    libraries: list[str] = []
+    for line in result.stdout.splitlines()[1:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        libraries.append(stripped.split(" ", 1)[0])
+    return libraries
+
+
+def is_system_macho_needed(install_name: str) -> bool:
+    return (
+        install_name.startswith("/System/Library/")
+        or install_name.startswith("/usr/lib/")
+        or install_name == Path(install_name).name
+    )
 
 
 def find_runtime_dependency(

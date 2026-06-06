@@ -20,12 +20,24 @@ REQUIRED_RUNTIME_ARCHIVES = [
     "litert-lm-native-runtime-windows-x64-{tag}.tar.gz",
 ]
 
+REQUIRED_SPM_XCFRAMEWORKS = [
+    "litert-lm-native-apple-CLiteRTLM-xcframework-{tag}.zip",
+    "litert-lm-native-apple-GemmaModelConstraintProvider-xcframework-{tag}.zip",
+    "litert-lm-native-apple-LiteRt-xcframework-{tag}.zip",
+    "litert-lm-native-apple-LiteRtLm-xcframework-{tag}.zip",
+    "litert-lm-native-apple-LiteRtMetalAccelerator-xcframework-{tag}.zip",
+    "litert-lm-native-apple-LiteRtTopKMetalSampler-xcframework-{tag}.zip",
+    "litert-lm-native-apple-LiteRtTopKWebGpuSampler-xcframework-{tag}.zip",
+    "litert-lm-native-apple-LiteRtWebGpuAccelerator-xcframework-{tag}.zip",
+]
+
 REQUIRED_RELEASE_ASSETS = [
     "manifest.json",
     "SHA256SUMS",
     "litert-lm-native-prebuilts-{tag}.tar.gz",
     "litert-lm-native-official-assets-{tag}.tar.gz",
     *REQUIRED_RUNTIME_ARCHIVES,
+    *REQUIRED_SPM_XCFRAMEWORKS,
 ]
 
 
@@ -53,6 +65,10 @@ def main() -> int:
     }
     required = [path.as_posix() for path in REQUIRED_RUNTIME_ARTIFACTS]
     required.append(f"dist/official/{args.upstream_tag}/CLiteRTLM.xcframework.zip")
+    required.extend(
+        f"dist/spm/{args.upstream_tag}/{asset.format(tag=args.upstream_tag)}"
+        for asset in REQUIRED_SPM_XCFRAMEWORKS
+    )
     missing = [path for path in required if path not in paths]
     if missing:
         formatted = "\n".join(f"- {path}" for path in missing)
