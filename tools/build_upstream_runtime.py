@@ -82,6 +82,7 @@ REQUIRED_C_API_SYMBOLS = [
     b"litert_lm_engine_settings_create",
     b"litert_lm_engine_create",
     b"litert_lm_session_config_set_lora_file",
+    b"litert_lm_session_config_set_audio_lora_file",
     b"litert_lm_conversation_create",
     b"litert_lm_conversation_send_message_stream",
 ]
