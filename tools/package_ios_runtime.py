@@ -12,7 +12,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 DIST_OFFICIAL_DIR = REPO_ROOT / "dist" / "official"
-STREAM_PROXY_SOURCE = REPO_ROOT / "native" / "stream_proxy" / "stream_proxy.c"
+BRIDGE_SOURCE = REPO_ROOT / "native" / "bridge" / "litert_lm_bridge.c"
 DEFAULT_IOS_MINIMUM_OS = "15.0"
 
 REQUIRED_C_API_SYMBOLS = [
@@ -22,7 +22,7 @@ REQUIRED_C_API_SYMBOLS = [
     b"litert_lm_conversation_send_message_stream",
 ]
 
-REQUIRED_STREAM_PROXY_SYMBOLS = [
+REQUIRED_BRIDGE_SYMBOLS = [
     b"stream_proxy_load_global",
     b"stream_proxy_create",
     b"stream_proxy_delete",
@@ -50,12 +50,12 @@ def validate_exported_symbols(output: Path) -> None:
     data = output.read_bytes()
     missing = [
         symbol.decode("ascii")
-        for symbol in REQUIRED_STREAM_PROXY_SYMBOLS
+        for symbol in REQUIRED_BRIDGE_SYMBOLS
         if symbol not in data
     ]
     if missing:
         raise RuntimeError(
-            f"{output} does not contain required StreamProxy symbols: "
+            f"{output} does not contain required LiteRtLmBridge symbols: "
             + ", ".join(missing)
         )
     if CLITERTLM_REEXPORT_NAME not in data:
@@ -63,7 +63,7 @@ def validate_exported_symbols(output: Path) -> None:
             f"{output} does not re-export "
             f"{CLITERTLM_REEXPORT_NAME.decode('ascii')}"
         )
-    print(f"Validated StreamProxy wrapper symbols in {output}", flush=True)
+    print(f"Validated LiteRtLmBridge wrapper symbols in {output}", flush=True)
 
 
 def validate_upstream_symbols(output: Path) -> None:
@@ -190,7 +190,7 @@ def build_wrapper(spec: dict, framework_dir: Path, upstream: Path) -> Path:
         "-Wl,-reexport_library," + str(upstream),
         "-o",
         str(output),
-        str(STREAM_PROXY_SOURCE),
+        str(BRIDGE_SOURCE),
     ])
     validate_exported_symbols(output)
     return output
