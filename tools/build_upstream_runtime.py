@@ -14,7 +14,7 @@ from runtime_dependency_utils import elf_needed_libraries, is_elf, is_system_nee
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
-STREAM_PROXY_SOURCE = REPO_ROOT / "native" / "stream_proxy" / "stream_proxy.c"
+BRIDGE_PACKAGE_ROOT = REPO_ROOT / "native"
 UPSTREAM_REPO = "google-ai-edge/LiteRT-LM"
 MACOS_MINIMUM_OS = "14.0"
 UPSTREAM_ARCHIVE_URL = (
@@ -23,57 +23,57 @@ UPSTREAM_ARCHIVE_URL = (
 
 RUNTIME_TARGETS = {
     ("android", "arm64"): {
-        "bazel_target": "//c:libLiteRtLm.so",
+        "bazel_target": "//bridge:libLiteRtLm.so",
         "bazel_config": "android_arm64",
         "bazel_options": [
             "--linkopt=-Wl,-z,max-page-size=16384",
             "--linkopt=-Wl,-z,common-page-size=16384",
         ],
-        "output": "bazel-bin/c/libLiteRtLm.so",
+        "output": "bazel-bin/bridge/libLiteRtLm.so",
         "library": "libLiteRtLm.so",
     },
     ("android", "x64"): {
-        "bazel_target": "//c:libLiteRtLm.so",
+        "bazel_target": "//bridge:libLiteRtLm.so",
         "bazel_config": "android_x86_64",
         "bazel_options": [
             "--linkopt=-Wl,-z,max-page-size=16384",
             "--linkopt=-Wl,-z,common-page-size=16384",
         ],
-        "output": "bazel-bin/c/libLiteRtLm.so",
+        "output": "bazel-bin/bridge/libLiteRtLm.so",
         "library": "libLiteRtLm.so",
     },
     ("linux", "arm64"): {
-        "bazel_target": "//c:libLiteRtLm.so",
+        "bazel_target": "//bridge:libLiteRtLm.so",
         "bazel_configs": ["linux", "linux_arm64"],
-        "output": "bazel-bin/c/libLiteRtLm.so",
+        "output": "bazel-bin/bridge/libLiteRtLm.so",
         "library": "libLiteRtLm.so",
     },
     ("linux", "x64"): {
-        "bazel_target": "//c:libLiteRtLm.so",
+        "bazel_target": "//bridge:libLiteRtLm.so",
         "bazel_config": "linux",
-        "output": "bazel-bin/c/libLiteRtLm.so",
+        "output": "bazel-bin/bridge/libLiteRtLm.so",
         "library": "libLiteRtLm.so",
     },
     ("macos", "arm64"): {
-        "bazel_target": "//c:libLiteRtLm.dylib",
+        "bazel_target": "//bridge:libLiteRtLm.dylib",
         "bazel_configs": ["macos", "macos_arm64"],
-        "output": "bazel-bin/c/libLiteRtLm.dylib",
+        "output": "bazel-bin/bridge/libLiteRtLm.dylib",
         "library": "libLiteRtLm.dylib",
     },
     ("macos", "x64"): {
-        "bazel_target": "//c:libLiteRtLm.dylib",
+        "bazel_target": "//bridge:libLiteRtLm.dylib",
         "bazel_config": "macos",
         "bazel_options": [
             "--cpu=darwin_x86_64",
             "--platforms=@build_bazel_apple_support//platforms:darwin_x86_64",
         ],
-        "output": "bazel-bin/c/libLiteRtLm.dylib",
+        "output": "bazel-bin/bridge/libLiteRtLm.dylib",
         "library": "libLiteRtLm.dylib",
     },
     ("windows", "x64"): {
-        "bazel_target": "//c:LiteRtLm.dll",
+        "bazel_target": "//bridge:LiteRtLm.dll",
         "bazel_config": "windows",
-        "output": "bazel-bin/c/LiteRtLm.dll",
+        "output": "bazel-bin/bridge/LiteRtLm.dll",
         "library": "LiteRtLm.dll",
     },
 }
@@ -85,58 +85,12 @@ REQUIRED_C_API_SYMBOLS = [
     b"litert_lm_conversation_send_message_stream",
 ]
 
-REQUIRED_STREAM_PROXY_SYMBOLS = [
+REQUIRED_BRIDGE_SYMBOLS = [
     b"stream_proxy_load_global",
     b"stream_proxy_create",
     b"stream_proxy_delete",
     b"stream_proxy_free_string",
 ]
-
-SHARED_TARGETS = """
-
-# Added by litert-lm-native packaging. Upstream publishes the C API as a static
-# cc_library for most platforms; Dart/Flutter FFI needs a loadable library.
-cc_library(
-    name = "stream_proxy",
-    srcs = ["stream_proxy.c"],
-    alwayslink = True,
-    linkopts = select({
-        "@platforms//os:android": ["-ldl"],
-        "@platforms//os:linux": ["-ldl"],
-        "//conditions:default": [],
-    }),
-)
-
-cc_binary(
-    name = "libLiteRtLm.so",
-    linkshared = True,
-    deps = [
-        ":engine",
-        ":stream_proxy",
-        "//schema/capabilities:capabilities_c",
-    ],
-)
-
-cc_binary(
-    name = "libLiteRtLm.dylib",
-    linkshared = True,
-    deps = [
-        ":engine",
-        ":stream_proxy",
-        "//schema/capabilities:capabilities_c",
-    ],
-)
-
-cc_binary(
-    name = "LiteRtLm.dll",
-    linkshared = True,
-    deps = [
-        ":engine",
-        ":stream_proxy",
-        "//schema/capabilities:capabilities_c",
-    ],
-)
-"""
 
 
 def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
@@ -159,63 +113,6 @@ def download_upstream(tag: str, work_dir: Path) -> Path:
     if len(candidates) != 1:
         raise RuntimeError(f"Expected one extracted source directory, got {candidates}")
     return candidates[0]
-
-
-def patch_upstream_build(source_root: Path) -> None:
-    stream_proxy_target = source_root / "c" / "stream_proxy.c"
-    shutil.copy2(STREAM_PROXY_SOURCE, stream_proxy_target)
-
-    build_path = source_root / "c" / "BUILD"
-    text = build_path.read_text(encoding="utf-8")
-    insert_before = "\ncc_test(\n    name = \"engine_test\","
-    packaging_marker = "# Added by litert-lm-native packaging."
-    packaging_start = text.find(packaging_marker)
-    if packaging_start != -1:
-        packaging_end = text.find(insert_before, packaging_start)
-        if packaging_end == -1:
-            raise RuntimeError("Could not find packaging block end in upstream c/BUILD")
-        text = text[:packaging_start].rstrip() + text[packaging_end:]
-    if insert_before not in text:
-        raise RuntimeError("Could not find insertion point in upstream c/BUILD")
-    patched_build = text.replace(insert_before, SHARED_TARGETS + insert_before, 1)
-    build_path.write_text(patched_build, encoding="utf-8")
-
-    workspace_path = source_root / "WORKSPACE"
-    workspace_text = workspace_path.read_text(encoding="utf-8")
-    zlib_url = 'url = "https://zlib.net/fossils/zlib-1.3.1.tar.gz",'
-    if zlib_url in workspace_text:
-        workspace_path.write_text(
-            workspace_text.replace(
-                zlib_url,
-                """urls = [
-        "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz",
-        "https://zlib.net/fossils/zlib-1.3.1.tar.gz",
-    ],""",
-            ),
-            encoding="utf-8",
-        )
-
-    rules_rust_patch_path = source_root / "PATCH.rules_rust"
-    rules_rust_patch_text = rules_rust_patch_path.read_text(encoding="utf-8")
-    if '+    "x86_64-apple-darwin",' not in rules_rust_patch_text:
-        hunk_header = "@@ -28,6 +28,9 @@\n"
-        if hunk_header in rules_rust_patch_text:
-            rules_rust_patch_text = rules_rust_patch_text.replace(
-                hunk_header,
-                "@@ -28,6 +28,10 @@\n",
-                1,
-            )
-        marker = '     "aarch64-apple-darwin",\n'
-        if marker not in rules_rust_patch_text:
-            raise RuntimeError("Could not find rules_rust triple insertion point")
-        rules_rust_patch_path.write_text(
-            rules_rust_patch_text.replace(
-                marker,
-                marker + '+    "x86_64-apple-darwin",\n',
-                1,
-            ),
-            encoding="utf-8",
-        )
 
 
 def bazel_command() -> list[str]:
@@ -241,8 +138,10 @@ def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None)
         if not os.path.isabs(output_user_root):
             output_user_root = str((REPO_ROOT / output_user_root).resolve())
         command.append(f"--output_user_root={output_user_root}")
+    package_path = f"{BRIDGE_PACKAGE_ROOT}{os.pathsep}{source_root}"
     command += [
         "build",
+        f"--package_path={package_path}",
         *configs,
         *target.get("bazel_options", []),
         target["bazel_target"],
@@ -272,9 +171,14 @@ def stage_runtime(output: Path, platform: str, arch: str) -> Path:
     stage_dir = BIN_DIR / platform / arch
     stage_dir.mkdir(parents=True, exist_ok=True)
     staged = stage_dir / target["library"]
-    shutil.copy2(output, staged)
+    copy_artifact(output, staged)
     print(f"Staged {staged}", flush=True)
     return staged
+
+
+def copy_artifact(source: Path, destination: Path) -> None:
+    destination.unlink(missing_ok=True)
+    shutil.copy2(source, destination)
 
 
 def stage_runtime_dependencies(
@@ -316,7 +220,7 @@ def stage_runtime_dependencies(
                         f"{current} depends on {library_name}, but that library "
                         "was not found in the Bazel output tree."
                     )
-                shutil.copy2(dependency, destination)
+                copy_artifact(dependency, destination)
                 print(f"Staged runtime dependency {destination}", flush=True)
             queued.append(destination)
 
@@ -357,7 +261,7 @@ def stage_macho_runtime_dependencies(
                         f"{current} depends on {install_name}, but {library_name} "
                         "was not found in the Bazel output tree."
                     )
-                shutil.copy2(dependency, destination)
+                copy_artifact(dependency, destination)
                 print(f"Staged runtime dependency {destination}", flush=True)
             queued.append(destination)
 
@@ -414,7 +318,7 @@ def find_runtime_dependency(
 
 def validate_exported_symbols(output: Path) -> None:
     data = output.read_bytes()
-    required_symbols = REQUIRED_C_API_SYMBOLS + REQUIRED_STREAM_PROXY_SYMBOLS
+    required_symbols = REQUIRED_C_API_SYMBOLS + REQUIRED_BRIDGE_SYMBOLS
     missing = [
         symbol.decode("ascii")
         for symbol in required_symbols
@@ -422,10 +326,10 @@ def validate_exported_symbols(output: Path) -> None:
     ]
     if missing:
         raise RuntimeError(
-            f"{output} does not contain required LiteRT-LM/StreamProxy symbols: "
+            f"{output} does not contain required LiteRT-LM/bridge symbols: "
             + ", ".join(missing)
         )
-    print(f"Validated LiteRT-LM and StreamProxy symbols in {output}", flush=True)
+    print(f"Validated LiteRT-LM and bridge symbols in {output}", flush=True)
 
 
 def main() -> int:
@@ -446,7 +350,6 @@ def main() -> int:
 
     if args.source_root:
         source_root = args.source_root.resolve()
-        patch_upstream_build(source_root)
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)
         validate_exported_symbols(output)
         stage_runtime(output, args.platform, args.arch)
@@ -458,7 +361,6 @@ def main() -> int:
         ignore_cleanup_errors=os.name == "nt",
     ) as tmp:
         source_root = download_upstream(args.upstream_tag, Path(tmp))
-        patch_upstream_build(source_root)
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)
         validate_exported_symbols(output)
         stage_runtime(output, args.platform, args.arch)

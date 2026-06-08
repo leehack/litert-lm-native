@@ -1,0 +1,42 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "litert_lm_bridge",
+    srcs = ["litert_lm_bridge.c"],
+    alwayslink = True,
+    linkopts = select({
+        "@platforms//os:android": ["-ldl"],
+        "@platforms//os:linux": ["-ldl"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_binary(
+    name = "libLiteRtLm.so",
+    linkshared = True,
+    deps = [
+        ":litert_lm_bridge",
+        "//c:engine",
+        "//schema/capabilities:capabilities_c",
+    ],
+)
+
+cc_binary(
+    name = "libLiteRtLm.dylib",
+    linkshared = True,
+    deps = [
+        ":litert_lm_bridge",
+        "//c:engine",
+        "//schema/capabilities:capabilities_c",
+    ],
+)
+
+cc_binary(
+    name = "LiteRtLm.dll",
+    linkshared = True,
+    deps = [
+        ":litert_lm_bridge",
+        "//c:engine",
+        "//schema/capabilities:capabilities_c",
+    ],
+)

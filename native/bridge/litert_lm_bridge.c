@@ -3,13 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+// LiteRtLmBridge hosts downstream FFI bridge helpers. The stream_proxy_* exports
+// are the current streaming callback ABI and stay stable for compatibility.
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#define STREAM_PROXY_EXPORT __declspec(dllexport)
+#define LITERT_LM_BRIDGE_EXPORT __declspec(dllexport)
 #else
 #include <dlfcn.h>
-#define STREAM_PROXY_EXPORT __attribute__((visibility("default")))
+#define LITERT_LM_BRIDGE_EXPORT __attribute__((visibility("default")))
 #endif
 
 typedef void (*stream_proxy_callback_t)(
@@ -57,7 +59,7 @@ static void stream_proxy_forward(
       error_copy);
 }
 
-STREAM_PROXY_EXPORT void *stream_proxy_load_global(const char *path) {
+LITERT_LM_BRIDGE_EXPORT void *stream_proxy_load_global(const char *path) {
   if (path == NULL) {
     return NULL;
   }
@@ -69,7 +71,7 @@ STREAM_PROXY_EXPORT void *stream_proxy_load_global(const char *path) {
 #endif
 }
 
-STREAM_PROXY_EXPORT void *stream_proxy_create(
+LITERT_LM_BRIDGE_EXPORT void *stream_proxy_create(
     stream_proxy_callback_t dart_callback,
     void *dart_data,
     stream_proxy_callback_t *out_proxy_callback) {
@@ -89,10 +91,10 @@ STREAM_PROXY_EXPORT void *stream_proxy_create(
   return context;
 }
 
-STREAM_PROXY_EXPORT void stream_proxy_delete(void *callback_data) {
+LITERT_LM_BRIDGE_EXPORT void stream_proxy_delete(void *callback_data) {
   free(callback_data);
 }
 
-STREAM_PROXY_EXPORT void stream_proxy_free_string(char *value) {
+LITERT_LM_BRIDGE_EXPORT void stream_proxy_free_string(char *value) {
   free(value);
 }

@@ -9,21 +9,24 @@ avoids publishing a second model wrapper ABI that does not add behavior.
 The release automation publishes these runtime artifact groups:
 
 - upstream LiteRT-LM C runtime libraries built from the tagged source archive,
-  with StreamProxy symbols embedded for downstream FFI streaming on source-built
-  platforms
+  with LiteRtLmBridge symbols embedded by the repo-owned `native/bridge` Bazel
+  package for downstream FFI streaming on source-built platforms
 - upstream `prebuilt/` companion libraries copied from the tagged source archive
 - official upstream release assets, including the iOS `CLiteRTLM.xcframework`
   archive when Google publishes it
 - iOS framework-style runtime wrappers derived from `CLiteRTLM.xcframework`,
-  with StreamProxy symbols embedded in `LiteRtLm.framework/LiteRtLm` and
+  with LiteRtLmBridge symbols embedded in `LiteRtLm.framework/LiteRtLm` and
   upstream symbols re-exported from `CLiteRTLM.framework/CLiteRTLM`
 - Apple Swift Package Manager XCFramework zips produced from the same iOS
   wrappers, macOS source-built runtime, and macOS companion dylibs used by the
   native-assets payloads
 
-The upstream C runtime is the production FFI target for downstream packages. If
-we later need a repo-owned compatibility layer, it should be introduced as a real
-wrapper over upstream LiteRT-LM rather than a scaffold library.
+The upstream C runtime is the production FFI target for downstream packages.
+LiteRtLmBridge is limited to narrow FFI helpers around that runtime surface. It
+currently exports the `stream_proxy_*` compatibility symbols used by downstream
+streaming callbacks. Source-built native runtimes use Bazel `--package_path` to
+build the repo-owned bridge package alongside upstream LiteRT-LM, without
+patching upstream source files.
 
 SPM artifacts are intentionally split by binary target. `LiteRtLm` carries the
 primary iOS runtime/wrapper and a macOS framework wrapper around the

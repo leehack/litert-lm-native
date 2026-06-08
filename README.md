@@ -13,8 +13,8 @@ Responsibilities:
 - Track upstream `google-ai-edge/LiteRT-LM` releases.
 - Fetch or build native LiteRT-LM libraries per platform.
 - Preserve upstream LiteRT-LM's C runtime ABI as the FFI boundary.
-- Embed the small StreamProxy callback-copy helper into runtime libraries used
-  by asynchronous FFI clients.
+- Embed the small LiteRtLmBridge callback helper into runtime libraries used by
+  asynchronous FFI clients.
 - Package web assets around official LiteRT-LM/LiteRT.js distribution paths.
 - Publish Apple Swift Package Manager XCFramework zip assets built from the
   same bridge runtimes as the native release payload.
@@ -53,11 +53,13 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
 - `web/`: web package scaffold for JS/Wasm/WebGPU/WebNN integration.
 - `tools/fetch_upstream.py`: resolves and downloads upstream release assets.
 - `tools/build_upstream_runtime.py`: builds upstream LiteRT-LM C runtime
-  libraries from tagged source with Bazel/Bazelisk, embeds StreamProxy symbols
-  into source-built runtime libraries, and stages them for release.
+  libraries from tagged source with Bazel/Bazelisk through the repo-owned
+  `native/bridge` Bazel package, embeds LiteRtLmBridge symbols into
+  source-built runtime libraries without patching upstream source files, and
+  stages them for release.
 - `tools/package_ios_runtime.py`: extracts official upstream
   `CLiteRTLM.xcframework` slices and stages `LiteRtLm.framework` plus
-  `CLiteRTLM.framework`, with the wrapper embedding StreamProxy symbols and
+  `CLiteRTLM.framework`, with the wrapper embedding LiteRtLmBridge symbols and
   re-exporting `CLiteRTLM`.
 - `tools/package_apple_xcframeworks.py`: packages iOS framework wrappers, a
   macOS `LiteRtLm.framework` wrapper around the source-built runtime, and macOS
@@ -93,11 +95,11 @@ python3 tools/validate_artifacts.py
 - `Validate`: validates package metadata and checks Python/web tooling on
   pushes and pull requests.
 - `Native Build & Release`: manually packages a selected upstream LiteRT-LM tag.
-  It builds upstream C runtime libraries with embedded StreamProxy symbols for
+  It builds upstream C runtime libraries with embedded LiteRtLmBridge symbols for
   Android arm64/x64, macOS arm64/x64, Linux x64/arm64, and Windows x64, copies
   upstream `prebuilt/` companion libraries for Android, Apple, Linux, and
   Windows, converts official upstream `CLiteRTLM.xcframework` slices into iOS
-  framework runtime archives with an embedded-StreamProxy wrapper, packages
+  framework runtime archives with an embedded LiteRtLmBridge wrapper, packages
   Apple SPM XCFramework zips from the same runtime payloads, includes the
   official upstream release assets, then publishes a GitHub release with
   `manifest.json` and `SHA256SUMS`.
@@ -115,14 +117,18 @@ package hooks and Swift Package manifests. When moving to a new LiteRT-LM tag:
 2. Verify the release contains runtime archives, official upstream assets,
    Apple SPM XCFramework zips, `manifest.json`, and `SHA256SUMS`.
 3. Update downstream `llamadart` hook pins, SPM URLs, and SPM checksums
-   together so native-assets and SPM consumers use the same StreamProxy-enabled
+   together so native-assets and SPM consumers use the same bridge-enabled
    runtime build.
 
 The release workflow uses upstream's public C API (`c/engine.h`) as the
 production FFI boundary. Downstream loaders should bind directly to the runtime
-library for the selected platform. StreamProxy symbols are embedded into the
-same runtime library surface; no standalone StreamProxy runtime artifact is part
-of the release contract.
+library for the selected platform. Source-built native runtimes are assembled
+from a repo-owned Bazel package selected ahead of the upstream source tree with
+`--package_path`, so the workflow does not edit upstream LiteRT-LM files.
+LiteRtLmBridge symbols are embedded into the same runtime library surface; no
+standalone bridge runtime artifact is part of the release contract. The bridge
+currently exports the `stream_proxy_*` compatibility symbols used by
+asynchronous callback loaders.
 
 Apple SPM consumers should depend on the release's direct
 `litert-lm-native-apple-*-xcframework-<tag>.zip` assets. The `LiteRtLm`
@@ -142,4 +148,5 @@ architecture, runtime kind (`native` or `web`), and accelerator metadata, then
 verify checksums before bundling or loading the files.
 
 Upstream LiteRT-LM's native C ABI is the compatibility boundary. This repository
-does not add a second wrapper ABI unless a future upstream change requires it.
+does not add a second model wrapper ABI unless a future upstream change requires
+it; bridge helpers remain narrow FFI utilities around that runtime surface.
