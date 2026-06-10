@@ -31,9 +31,10 @@ packages with pinned checksums keep resolving the original artifacts.
 The upstream C runtime is the production FFI target for downstream packages.
 LiteRtLmBridge is limited to narrow FFI helpers around that runtime surface. It
 currently exports the `stream_proxy_*` compatibility symbols used by downstream
-streaming callbacks. Source-built native runtimes use Bazel `--package_path` to
-build the repo-owned bridge package alongside upstream LiteRT-LM, without
-patching upstream source files.
+streaming callbacks. Source-built native runtimes use Bazel `--package_path` on
+Unix-like runners and copy the bridge package into the extracted source tree on
+Windows to avoid Bazel's Windows package-path parser, without patching upstream
+source files in the repository.
 
 SPM artifacts are intentionally split by binary target. `LiteRtLm` carries the
 primary iOS runtime/wrapper and a macOS framework wrapper around the official

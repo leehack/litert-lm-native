@@ -132,6 +132,26 @@ def bazel_path(path: Path) -> str:
     return str(resolved)
 
 
+def prepare_bridge_package(source_root: Path) -> list[str]:
+    if os.name != "nt":
+        package_path = os.pathsep.join(
+            [bazel_path(BRIDGE_PACKAGE_ROOT), bazel_path(source_root)]
+        )
+        return [f"--package_path={package_path}"]
+
+    # Bazel 7.6.1 on the Windows 2025 hosted image rewrites absolute
+    # --package_path entries like D:/a/... into /a/... during package loading.
+    # Copying the small downstream bridge package into the extracted upstream
+    # tree avoids that parser path while keeping the upstream archive untouched.
+    bridge_source = BRIDGE_PACKAGE_ROOT / "bridge"
+    bridge_destination = source_root / "bridge"
+    if bridge_destination.exists():
+        shutil.rmtree(bridge_destination)
+    shutil.copytree(bridge_source, bridge_destination)
+    print(f"Staged bridge package at {bridge_destination}", flush=True)
+    return []
+
+
 def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None) -> Path:
     target = RUNTIME_TARGETS[(platform, arch)]
     configs = [
@@ -147,12 +167,10 @@ def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None)
         elif os.name == "nt":
             output_user_root = Path(output_user_root).resolve().as_posix()
         command.append(f"--output_user_root={output_user_root}")
-    package_path = os.pathsep.join(
-        [bazel_path(BRIDGE_PACKAGE_ROOT), bazel_path(source_root)]
-    )
+    bridge_options = prepare_bridge_package(source_root)
     command += [
         "build",
-        f"--package_path={package_path}",
+        *bridge_options,
         *configs,
         *target.get("bazel_options", []),
         target["bazel_target"],

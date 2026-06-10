@@ -150,7 +150,9 @@ The release workflow uses upstream's public C API (`c/engine.h`) as the
 production FFI boundary. Downstream loaders should bind directly to the runtime
 library for the selected platform. Source-built native runtimes are assembled
 from a repo-owned Bazel package selected ahead of the upstream source tree with
-`--package_path`, so the workflow does not edit upstream LiteRT-LM files.
+`--package_path` on Unix-like runners and copied into the extracted source tree
+on Windows to avoid Bazel's Windows package-path parser. The workflow does not
+edit upstream LiteRT-LM source files in the repository.
 LiteRtLmBridge symbols are embedded into the same runtime library surface; no
 standalone bridge runtime artifact is part of the release contract. The bridge
 currently exports the `stream_proxy_*` compatibility symbols used by
