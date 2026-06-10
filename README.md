@@ -98,7 +98,7 @@ python3 tools/validate_artifacts.py
   pushes and pull requests.
 - `Native Build & Release`: manually packages a selected upstream LiteRT-LM tag.
   It builds upstream C runtime libraries with embedded LiteRtLmBridge symbols for
-  Android arm64/x64, macOS arm64/x64, Linux x64/arm64, and Windows x64, copies
+  Android arm64/x64, Linux x64/arm64, and Windows x64, copies
   upstream `prebuilt/` companion libraries for Android, Apple, Linux, and
   Windows, converts official upstream `CLiteRTLM.xcframework` slices into iOS
   framework runtime archives with an embedded LiteRtLmBridge wrapper, converts
