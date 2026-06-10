@@ -20,6 +20,11 @@ MACOS_MINIMUM_OS = "14.0"
 UPSTREAM_ARCHIVE_URL = (
     "https://github.com/google-ai-edge/LiteRT-LM/archive/refs/tags/{tag}.tar.gz"
 )
+ZLIB_URL = "https://zlib.net/fossils/zlib-1.3.1.tar.gz"
+ZLIB_GITHUB_MIRROR_URL = (
+    "https://github.com/madler/zlib/releases/download/v1.3.1/"
+    "zlib-1.3.1.tar.gz"
+)
 
 RUNTIME_TARGETS = {
     ("android", "arm64"): {
@@ -112,7 +117,30 @@ def download_upstream(tag: str, work_dir: Path) -> Path:
     candidates = [path for path in work_dir.iterdir() if path.is_dir()]
     if len(candidates) != 1:
         raise RuntimeError(f"Expected one extracted source directory, got {candidates}")
-    return candidates[0]
+    source_root = candidates[0]
+    patch_upstream_workspace(source_root)
+    return source_root
+
+
+def patch_upstream_workspace(source_root: Path) -> None:
+    workspace = source_root / "WORKSPACE"
+    text = workspace.read_text(encoding="utf-8")
+    needle = f'    url = "{ZLIB_URL}",'
+    replacement = (
+        "    urls = [\n"
+        f'        "{ZLIB_GITHUB_MIRROR_URL}",\n'
+        f'        "{ZLIB_URL}",\n'
+        "    ],"
+    )
+    if needle not in text:
+        if ZLIB_GITHUB_MIRROR_URL in text:
+            return
+        raise RuntimeError(f"Expected zlib URL not found in {workspace}")
+    workspace.write_text(text.replace(needle, replacement), encoding="utf-8")
+    print(
+        "Patched upstream WORKSPACE minizip archive URLs with GitHub zlib mirror",
+        flush=True,
+    )
 
 
 def bazel_command() -> list[str]:
