@@ -6,6 +6,7 @@ build/
 dist/
 downloads/
 node_modules/
+.tmp/
 __pycache__/
 *.log
 *.profraw

@@ -125,6 +125,13 @@ def bazel_command() -> list[str]:
     raise RuntimeError("Could not find bazelisk, bazel, or npx")
 
 
+def bazel_path(path: Path) -> str:
+    resolved = path.resolve()
+    if os.name == "nt":
+        return resolved.as_posix()
+    return str(resolved)
+
+
 def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None) -> Path:
     target = RUNTIME_TARGETS[(platform, arch)]
     configs = [
@@ -136,9 +143,13 @@ def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None)
     output_user_root = os.environ.get("BAZEL_OUTPUT_USER_ROOT")
     if output_user_root:
         if not os.path.isabs(output_user_root):
-            output_user_root = str((REPO_ROOT / output_user_root).resolve())
+            output_user_root = bazel_path(REPO_ROOT / output_user_root)
+        elif os.name == "nt":
+            output_user_root = Path(output_user_root).resolve().as_posix()
         command.append(f"--output_user_root={output_user_root}")
-    package_path = f"{BRIDGE_PACKAGE_ROOT}{os.pathsep}{source_root}"
+    package_path = os.pathsep.join(
+        [bazel_path(BRIDGE_PACKAGE_ROOT), bazel_path(source_root)]
+    )
     command += [
         "build",
         f"--package_path={package_path}",
@@ -356,8 +367,14 @@ def main() -> int:
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         return 0
 
+    tmp_parent = None
+    if os.name == "nt":
+        tmp_parent = REPO_ROOT / ".tmp"
+        tmp_parent.mkdir(exist_ok=True)
+
     with tempfile.TemporaryDirectory(
         prefix="litert-lm-native-build-",
+        dir=tmp_parent,
         ignore_cleanup_errors=os.name == "nt",
     ) as tmp:
         source_root = download_upstream(args.upstream_tag, Path(tmp))
