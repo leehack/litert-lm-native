@@ -22,13 +22,8 @@ REQUIRED_RUNTIME_ARCHIVES = [
 
 REQUIRED_SPM_XCFRAMEWORKS = [
     "litert-lm-native-apple-CLiteRTLM-xcframework-{tag}.zip",
-    "litert-lm-native-apple-GemmaModelConstraintProvider-xcframework-{tag}.zip",
-    "litert-lm-native-apple-LiteRt-xcframework-{tag}.zip",
+    "litert-lm-native-apple-CLiteRTLMMac-xcframework-{tag}.zip",
     "litert-lm-native-apple-LiteRtLm-xcframework-{tag}.zip",
-    "litert-lm-native-apple-LiteRtMetalAccelerator-xcframework-{tag}.zip",
-    "litert-lm-native-apple-LiteRtTopKMetalSampler-xcframework-{tag}.zip",
-    "litert-lm-native-apple-LiteRtTopKWebGpuSampler-xcframework-{tag}.zip",
-    "litert-lm-native-apple-LiteRtWebGpuAccelerator-xcframework-{tag}.zip",
 ]
 
 REQUIRED_RELEASE_ASSETS = [
@@ -51,22 +46,46 @@ def main() -> int:
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--upstream-tag", required=True)
     parser.add_argument(
+        "--release-tag",
+        help="Native release tag used in release asset names. Defaults to upstream-tag.",
+    )
+    parser.add_argument(
         "--release-metadata",
         type=Path,
         help="JSON from `gh release view --json assets`.",
     )
     args = parser.parse_args()
+    release_tag = args.release_tag or args.upstream_tag
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    upstream = manifest.get("upstream", {})
+    if not isinstance(upstream, dict) or upstream.get("tag") != args.upstream_tag:
+        actual = upstream.get("tag") if isinstance(upstream, dict) else None
+        raise SystemExit(
+            "Release manifest upstream tag mismatch: "
+            f"expected {args.upstream_tag}, got {actual}"
+        )
+    release = manifest.get("release", {})
+    if not isinstance(release, dict) or release.get("tag") != release_tag:
+        actual = release.get("tag") if isinstance(release, dict) else None
+        raise SystemExit(
+            "Release manifest native release tag mismatch: "
+            f"expected {release_tag}, got {actual}"
+        )
     paths = {
         artifact.get("path")
         for artifact in manifest.get("artifacts", [])
         if isinstance(artifact, dict)
     }
     required = [path.as_posix() for path in REQUIRED_RUNTIME_ARTIFACTS]
-    required.append(f"dist/official/{args.upstream_tag}/CLiteRTLM.xcframework.zip")
     required.extend(
-        f"dist/spm/{args.upstream_tag}/{asset.format(tag=args.upstream_tag)}"
+        [
+            f"dist/official/{args.upstream_tag}/CLiteRTLM.xcframework.zip",
+            f"dist/official/{args.upstream_tag}/CLiteRTLM_mac.xcframework.zip",
+        ]
+    )
+    required.extend(
+        f"dist/spm/{release_tag}/{asset.format(tag=release_tag)}"
         for asset in REQUIRED_SPM_XCFRAMEWORKS
     )
     missing = [path for path in required if path not in paths]
@@ -84,7 +103,7 @@ def main() -> int:
             if isinstance(asset, dict)
         }
         required_assets = [
-            pattern.format(tag=args.upstream_tag) for pattern in REQUIRED_RELEASE_ASSETS
+            pattern.format(tag=release_tag) for pattern in REQUIRED_RELEASE_ASSETS
         ]
         missing_assets = [
             asset for asset in required_assets if asset not in asset_names
@@ -92,6 +111,10 @@ def main() -> int:
         if missing_assets:
             formatted = "\n".join(f"- {asset}" for asset in missing_assets)
             raise SystemExit(f"Release is missing required assets:\n{formatted}")
+        unexpected_assets = sorted(asset_names - set(required_assets))
+        if unexpected_assets:
+            formatted = "\n".join(f"- {asset}" for asset in unexpected_assets)
+            raise SystemExit(f"Release has unexpected assets:\n{formatted}")
         print(f"Release metadata lists {len(required_assets)} required assets")
     return 0
 

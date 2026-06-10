@@ -61,9 +61,11 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
   `CLiteRTLM.xcframework` slices and stages `LiteRtLm.framework` plus
   `CLiteRTLM.framework`, with the wrapper embedding LiteRtLmBridge symbols and
   re-exporting `CLiteRTLM`.
-- `tools/package_apple_xcframeworks.py`: packages iOS framework wrappers, a
-  macOS `LiteRtLm.framework` wrapper around the source-built runtime, and macOS
-  companion dylibs as SPM-compatible XCFramework zip assets.
+- `tools/package_macos_runtime.py`: extracts official upstream
+  `CLiteRTLM_mac.xcframework` slices and stages bridge-enabled
+  `libLiteRtLm.dylib` wrappers that re-export `libCLiteRTLM_mac.dylib`.
+- `tools/package_apple_xcframeworks.py`: packages iOS framework wrappers and
+  macOS bridge wrappers as SPM-compatible XCFramework zip assets.
 - `tools/package_release.py`: builds local manifest and checksums.
 - `tools/validate_artifacts.py`: validates manifest, checksums, and layout.
 - `docs/platform_strategy.md`: platform and distribution strategy.
@@ -99,26 +101,50 @@ python3 tools/validate_artifacts.py
   Android arm64/x64, macOS arm64/x64, Linux x64/arm64, and Windows x64, copies
   upstream `prebuilt/` companion libraries for Android, Apple, Linux, and
   Windows, converts official upstream `CLiteRTLM.xcframework` slices into iOS
-  framework runtime archives with an embedded LiteRtLmBridge wrapper, packages
-  Apple SPM XCFramework zips from the same runtime payloads, includes the
-  official upstream release assets, then publishes a GitHub release with
-  `manifest.json` and `SHA256SUMS`.
+  framework runtime archives with an embedded LiteRtLmBridge wrapper, converts
+  official upstream `CLiteRTLM_mac.xcframework` slices into macOS runtime
+  archives with an embedded LiteRtLmBridge wrapper, packages Apple SPM
+  XCFramework zips from the same runtime payloads, includes the official
+  upstream release assets, then publishes a GitHub release with `manifest.json`
+  and `SHA256SUMS`. The workflow accepts a separate `release_tag`; use it when
+  repackaging the same upstream tag without mutating an existing native release.
 - `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
   when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
-  not published yet.
+  not published yet. Existing releases are treated as immutable; if validation
+  rules change and an existing release no longer matches, the scheduled workflow
+  reports it but does not overwrite the tag automatically.
 
 ## Native Version Management
 
-The published upstream tag is the native version contract consumed by downstream
-package hooks and Swift Package manifests. When moving to a new LiteRT-LM tag:
+The published native release tag is the version contract consumed by downstream
+package hooks and Swift Package manifests. For the first package of an upstream
+LiteRT-LM tag, the native release tag normally matches the upstream tag. If a
+packaging fix is needed for the same upstream sources, publish a new native
+release tag such as `v0.13.1-native.1` instead of overwriting `v0.13.1`.
 
-1. Run `Native Build & Release` for `upstream_tag`, or let
-   `Auto Upstream Release` dispatch it for the latest upstream release.
+When moving to a new LiteRT-LM tag:
+
+1. Run `Native Build & Release` for `upstream_tag`, or let `Auto Upstream
+   Release` dispatch it for the latest upstream release.
 2. Verify the release contains runtime archives, official upstream assets,
    Apple SPM XCFramework zips, `manifest.json`, and `SHA256SUMS`.
 3. Update downstream `llamadart` hook pins, SPM URLs, and SPM checksums
    together so native-assets and SPM consumers use the same bridge-enabled
    runtime build.
+
+To publish a corrected package for existing upstream sources without breaking
+downstream checksum pins, dispatch the workflow with both tags:
+
+```bash
+gh workflow run native_release.yml \
+  --repo leehack/litert-lm-native \
+  --ref main \
+  -f upstream_tag=v0.13.1 \
+  -f release_tag=v0.13.1-native.1 \
+  -f prerelease=false \
+  -f target_platform=all \
+  -f target_arch=all
+```
 
 The release workflow uses upstream's public C API (`c/engine.h`) as the
 production FFI boundary. Downstream loaders should bind directly to the runtime
@@ -133,13 +159,11 @@ asynchronous callback loaders.
 Apple SPM consumers should depend on the release's direct
 `litert-lm-native-apple-*-xcframework-<tag>.zip` assets. The `LiteRtLm`
 XCFramework contains the primary iOS wrapper and a macOS framework wrapper
-around the source-built runtime. `CLiteRTLM` is iOS-only and is re-exported by
-the iOS wrapper. macOS companion dylibs are published as separate XCFramework
-targets when the native release payload contains them. Downstream macOS SPM
-integration must account for architecture coverage and deployment targets; for
-example, upstream `v0.13.1` provides extra macOS companion dylibs for arm64,
-while x64 only requires `libLiteRtLm.dylib` plus `libLiteRt.dylib`, and the
-macOS dylibs are built for macOS 14.
+around the official `CLiteRTLM_mac` runtime. `CLiteRTLM` is re-exported by the
+iOS wrapper, and `CLiteRTLMMac` is re-exported by the macOS wrapper. Downstream
+macOS SPM integration must account for architecture coverage and deployment
+targets; upstream `v0.13.1` provides a universal `CLiteRTLM_mac.xcframework`,
+and the packaged macOS wrapper targets macOS 14.
 
 ## Consumer Contract
 

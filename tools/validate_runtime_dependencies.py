@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import argparse
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 from runtime_dependency_utils import (
@@ -13,6 +16,11 @@ from runtime_dependency_utils import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANDROID_MIN_LOAD_ALIGNMENT = 0x4000
+MACOS_UNRESOLVED_PROVIDER_SYMBOLS = {
+    "_LiteRtLmGemmaModelConstraintProvider_Create",
+    "_LiteRtLmGemmaModelConstraintProvider_CreateConstraintFromTools",
+    "_LiteRtLmGemmaModelConstraintProvider_Destroy",
+}
 
 
 def fail(message: str) -> None:
@@ -74,6 +82,95 @@ def validate_elf_dependencies(root: Path) -> int:
     return checked
 
 
+def iter_macho_libraries(root: Path) -> list[Path]:
+    bin_dir = root / "bin" / "macos"
+    if not bin_dir.exists() or shutil.which("otool") is None:
+        return []
+    return sorted(path for path in bin_dir.rglob("*.dylib") if path.is_file())
+
+
+def macho_needed_libraries(path: Path) -> list[str]:
+    result = subprocess.run(
+        ["otool", "-L", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    libraries: list[str] = []
+    for line in result.stdout.splitlines():
+        if not line[:1].isspace():
+            continue
+        stripped = line.strip()
+        if not stripped:
+            continue
+        library = stripped.split(" ", 1)[0]
+        if library not in libraries:
+            libraries.append(library)
+    return libraries
+
+
+def is_system_macho_needed(install_name: str) -> bool:
+    return (
+        install_name.startswith("/System/Library/")
+        or install_name.startswith("/usr/lib/")
+        or install_name == Path(install_name).name
+    )
+
+
+def unresolved_dynamic_lookup_symbols(path: Path) -> list[str]:
+    if shutil.which("nm") is None:
+        return []
+    result = subprocess.run(
+        ["nm", "-m", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    symbols: list[str] = []
+    for line in result.stdout.splitlines():
+        if "(undefined)" not in line or "(dynamically looked up)" not in line:
+            continue
+        match = re.search(r"\b(_[A-Za-z0-9_]+)\s+\(dynamically looked up\)", line)
+        if match:
+            symbols.append(match.group(1))
+    return symbols
+
+
+def validate_macho_dependencies(root: Path) -> int:
+    checked = 0
+    errors: list[str] = []
+    for library in iter_macho_libraries(root):
+        checked += 1
+        for needed in macho_needed_libraries(library):
+            if is_system_macho_needed(needed):
+                continue
+            dependency_path = library.parent / Path(needed).name
+            if not dependency_path.is_file():
+                errors.append(
+                    f"{library.relative_to(root).as_posix()} needs {needed}, "
+                    "but it is missing from the same runtime directory."
+                )
+
+        unresolved = [
+            symbol
+            for symbol in unresolved_dynamic_lookup_symbols(library)
+            if symbol in MACOS_UNRESOLVED_PROVIDER_SYMBOLS
+        ]
+        if unresolved:
+            formatted = ", ".join(sorted(unresolved))
+            errors.append(
+                f"{library.relative_to(root).as_posix()} leaves required Gemma "
+                f"constraint provider symbols unresolved: {formatted}"
+            )
+
+    if errors:
+        fail(
+            "Runtime dependency validation failed:\n"
+            + "\n".join(f"- {e}" for e in errors)
+        )
+    return checked
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -85,8 +182,12 @@ def main() -> int:
     args = parser.parse_args()
 
     root = args.root.resolve()
-    checked = validate_elf_dependencies(root)
-    print(f"Validated runtime dependencies for {checked} ELF libraries")
+    checked_elf = validate_elf_dependencies(root)
+    checked_macho = validate_macho_dependencies(root)
+    print(
+        "Validated runtime dependencies for "
+        f"{checked_elf} ELF libraries and {checked_macho} Mach-O libraries"
+    )
     return 0
 
 
