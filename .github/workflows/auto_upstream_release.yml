@@ -84,13 +84,19 @@ jobs:
           fi
 
       - name: Dispatch native release
-        if: steps.existing.outputs.exists == 'false' || steps.complete.outputs.complete == 'false'
+        if: steps.existing.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
         run: |
           gh workflow run native_release.yml \
             --repo "${{ github.repository }}" \
             -f upstream_tag="${{ steps.upstream.outputs.tag }}"
+
+      - name: Existing release is incomplete
+        if: steps.existing.outputs.exists == 'true' && steps.complete.outputs.complete == 'false'
+        run: |
+          echo "Release ${{ steps.upstream.outputs.tag }} exists but does not match current validation."
+          echo "Skipping automatic rebuild to avoid mutating an existing release tag."
 
       - name: No-op when release is complete
         if: steps.existing.outputs.exists == 'true' && steps.complete.outputs.complete == 'true'

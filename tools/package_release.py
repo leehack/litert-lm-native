@@ -68,7 +68,7 @@ def iter_artifacts() -> list[Path]:
     return sorted(artifacts)
 
 
-def build_manifest(upstream_tag: str | None) -> dict:
+def build_manifest(upstream_tag: str | None, release_tag: str | None) -> dict:
     entries = []
     sums = []
     for path in iter_artifacts():
@@ -89,6 +89,7 @@ def build_manifest(upstream_tag: str | None) -> dict:
                 "fileName": path.name,
                 "sha256": checksum,
                 "upstreamTag": upstream_tag,
+                "releaseTag": release_tag,
                 "accelerators": [],
             }
         )
@@ -103,6 +104,9 @@ def build_manifest(upstream_tag: str | None) -> dict:
             "tag": upstream_tag,
             "commit": None,
         },
+        "release": {
+            "tag": release_tag,
+        },
         "artifacts": entries,
     }
 
@@ -110,9 +114,11 @@ def build_manifest(upstream_tag: str | None) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate manifest and checksums.")
     parser.add_argument("--upstream-tag", default=None)
+    parser.add_argument("--release-tag", default=None)
     args = parser.parse_args()
 
-    manifest = build_manifest(args.upstream_tag)
+    release_tag = args.release_tag or args.upstream_tag
+    manifest = build_manifest(args.upstream_tag, release_tag)
     MANIFEST_PATH.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

@@ -306,8 +306,8 @@ def package_macos_companions(
     return packaged
 
 
-def package_all(upstream_tag: str, clean: bool) -> list[Path]:
-    output_dir = DIST_DIR / upstream_tag
+def package_all(release_tag: str, clean: bool) -> list[Path]:
+    output_dir = DIST_DIR / release_tag
     if clean and WORK_DIR.exists():
         shutil.rmtree(WORK_DIR)
     if clean and output_dir.exists():
@@ -325,7 +325,7 @@ def package_all(upstream_tag: str, clean: bool) -> list[Path]:
         PRIMARY_MODULE,
         WORK_DIR,
         output_dir,
-        upstream_tag,
+        release_tag,
         extra_args=primary_macos_args,
     )
     if primary is None and primary_macos_args:
@@ -334,7 +334,7 @@ def package_all(upstream_tag: str, clean: bool) -> list[Path]:
             primary_macos_args,
             WORK_DIR,
             output_dir,
-            upstream_tag,
+            release_tag,
         )
     if primary is None:
         raise RuntimeError("Could not package LiteRtLm: no iOS or macOS runtime found")
@@ -344,12 +344,12 @@ def package_all(upstream_tag: str, clean: bool) -> list[Path]:
         IOS_REEXPORT_MODULE,
         WORK_DIR,
         output_dir,
-        upstream_tag,
+        release_tag,
     )
     if clitertlm is not None:
         packaged.append(clitertlm)
 
-    packaged.extend(package_macos_companions(WORK_DIR, output_dir, upstream_tag))
+    packaged.extend(package_macos_companions(WORK_DIR, output_dir, release_tag))
     return packaged
 
 
@@ -357,11 +357,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Package Apple LiteRT-LM runtimes as SPM-compatible XCFramework zips."
     )
-    parser.add_argument("--upstream-tag", required=True)
+    parser.add_argument(
+        "--release-tag",
+        help="Native release tag to use for output directory and asset names.",
+    )
+    parser.add_argument(
+        "--upstream-tag",
+        help="Deprecated alias for --release-tag.",
+    )
     parser.add_argument("--clean", action="store_true")
     args = parser.parse_args()
 
-    packaged = package_all(args.upstream_tag, clean=args.clean)
+    release_tag = args.release_tag or args.upstream_tag
+    if not release_tag:
+        parser.error("--release-tag is required")
+    packaged = package_all(release_tag, clean=args.clean)
     if not packaged:
         raise RuntimeError("No Apple XCFramework zips were produced")
     for path in packaged:

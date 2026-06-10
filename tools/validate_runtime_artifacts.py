@@ -15,14 +15,9 @@ REQUIRED_RUNTIME_ARTIFACTS = [
     Path("bin/ios/arm64-sim/CLiteRTLM.framework/CLiteRTLM"),
     Path("bin/linux/arm64/libLiteRtLm.so"),
     Path("bin/linux/x64/libLiteRtLm.so"),
-    Path("bin/macos/arm64/libGemmaModelConstraintProvider.dylib"),
-    Path("bin/macos/arm64/libLiteRt.dylib"),
+    Path("bin/macos/arm64/libCLiteRTLM_mac.dylib"),
     Path("bin/macos/arm64/libLiteRtLm.dylib"),
-    Path("bin/macos/arm64/libLiteRtMetalAccelerator.dylib"),
-    Path("bin/macos/arm64/libLiteRtTopKMetalSampler.dylib"),
-    Path("bin/macos/arm64/libLiteRtTopKWebGpuSampler.dylib"),
-    Path("bin/macos/arm64/libLiteRtWebGpuAccelerator.dylib"),
-    Path("bin/macos/x64/libLiteRt.dylib"),
+    Path("bin/macos/x64/libCLiteRTLM_mac.dylib"),
     Path("bin/macos/x64/libLiteRtLm.dylib"),
     Path("bin/windows/x64/LiteRtLm.dll"),
 ]
@@ -36,8 +31,17 @@ def main() -> int:
     args = parser.parse_args()
 
     required = list(REQUIRED_RUNTIME_ARTIFACTS)
-    required.append(
-        Path("dist") / "official" / args.upstream_tag / "CLiteRTLM.xcframework.zip"
+    required.extend(
+        [
+            Path("dist")
+            / "official"
+            / args.upstream_tag
+            / "CLiteRTLM.xcframework.zip",
+            Path("dist")
+            / "official"
+            / args.upstream_tag
+            / "CLiteRTLM_mac.xcframework.zip",
+        ]
     )
 
     missing = [path for path in required if not (REPO_ROOT / path).is_file()]

@@ -7,6 +7,11 @@ on:
         description: "google-ai-edge/LiteRT-LM tag to package"
         required: true
         type: string
+      release_tag:
+        description: "Native release tag to publish; defaults to upstream_tag"
+        required: false
+        default: ""
+        type: string
       prerelease:
         description: "Publish as a prerelease"
         required: false
@@ -136,6 +141,16 @@ jobs:
           git fetch --depth=1 origin "${{ github.sha }}"
           git checkout --detach FETCH_HEAD
 
+      - name: Resolve native release tag
+        id: release
+        shell: bash
+        run: |
+          release_tag="${{ inputs.release_tag }}"
+          if [ -z "$release_tag" ]; then
+            release_tag="${{ inputs.upstream_tag }}"
+          fi
+          echo "tag=${release_tag}" >> "$GITHUB_OUTPUT"
+
       - name: Package upstream prebuilt libraries
         run: |
           python3 tools/package_upstream_prebuilts.py \
@@ -169,36 +184,44 @@ jobs:
             --upstream-tag "${{ inputs.upstream_tag }}" \
             --clean
 
+      - name: Package official macOS runtime
+        run: |
+          python3 tools/package_macos_runtime.py \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --clean
+
       - name: Package Apple SPM XCFrameworks
         run: |
           python3 tools/package_apple_xcframeworks.py \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --release-tag "${{ steps.release.outputs.tag }}" \
             --clean
 
       - name: Generate manifest and checksums
         run: |
           python3 tools/validate_runtime_artifacts.py --upstream-tag "${{ inputs.upstream_tag }}"
           python3 tools/validate_runtime_dependencies.py
-          python3 tools/package_release.py --upstream-tag "${{ inputs.upstream_tag }}"
+          python3 tools/package_release.py \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --release-tag "${{ steps.release.outputs.tag }}"
           python3 tools/validate_artifacts.py
 
       - name: Create release archives
         run: |
           mkdir -p release
-          tar -czf "release/litert-lm-native-prebuilts-${{ inputs.upstream_tag }}.tar.gz" \
+          tar -czf "release/litert-lm-native-prebuilts-${{ steps.release.outputs.tag }}.tar.gz" \
             bin manifest.json SHA256SUMS
           while IFS= read -r runtime_dir; do
             platform="$(basename "$(dirname "$runtime_dir")")"
             arch="$(basename "$runtime_dir")"
-            tar -czf "release/litert-lm-native-runtime-${platform}-${arch}-${{ inputs.upstream_tag }}.tar.gz" \
+            tar -czf "release/litert-lm-native-runtime-${platform}-${arch}-${{ steps.release.outputs.tag }}.tar.gz" \
               -C bin "${platform}/${arch}"
           done < <(find bin -mindepth 2 -maxdepth 2 -type d | sort)
           if [ -d dist ]; then
-            tar -czf "release/litert-lm-native-official-assets-${{ inputs.upstream_tag }}.tar.gz" \
+            tar -czf "release/litert-lm-native-official-assets-${{ steps.release.outputs.tag }}.tar.gz" \
               dist
           fi
-          if [ -d "dist/spm/${{ inputs.upstream_tag }}" ]; then
-            cp dist/spm/${{ inputs.upstream_tag }}/*.zip release/
+          if [ -d "dist/spm/${{ steps.release.outputs.tag }}" ]; then
+            cp dist/spm/${{ steps.release.outputs.tag }}/*.zip release/
           fi
 
       - name: Publish GitHub release
@@ -209,24 +232,41 @@ jobs:
           if [ "${{ inputs.prerelease }}" = "true" ]; then
             args+=(--prerelease)
           fi
-          notes="Packaged LiteRT-LM upstream runtime libraries, upstream prebuilts, Apple SPM XCFrameworks, and official release assets for ${{ inputs.upstream_tag }}."
-          if gh release view "${{ inputs.upstream_tag }}" \
+          notes="Packaged LiteRT-LM upstream ${{ inputs.upstream_tag }} runtime libraries, upstream prebuilts, Apple SPM XCFrameworks, and official release assets as ${{ steps.release.outputs.tag }}."
+          if gh release view "${{ steps.release.outputs.tag }}" \
             --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release edit "${{ inputs.upstream_tag }}" \
+            gh release edit "${{ steps.release.outputs.tag }}" \
               --repo "${{ github.repository }}" \
-              --title "LiteRT-LM ${{ inputs.upstream_tag }}" \
+              --title "LiteRT-LM ${{ steps.release.outputs.tag }}" \
               --notes "$notes" \
               "${args[@]}"
-            gh release upload "${{ inputs.upstream_tag }}" \
+            intended_assets="$(mktemp)"
+            {
+              find release -maxdepth 1 -type f -exec basename {} \;
+              printf '%s\n' manifest.json SHA256SUMS
+            } | sort > "$intended_assets"
+            while IFS= read -r asset; do
+              if ! grep -Fxq "$asset" "$intended_assets"; then
+                gh release delete-asset "${{ steps.release.outputs.tag }}" "$asset" \
+                  --repo "${{ github.repository }}" \
+                  --yes
+              fi
+            done < <(
+              gh release view "${{ steps.release.outputs.tag }}" \
+                --repo "${{ github.repository }}" \
+                --json assets \
+                --jq '.assets[].name'
+            )
+            gh release upload "${{ steps.release.outputs.tag }}" \
               --repo "${{ github.repository }}" \
               --clobber \
               release/* \
               manifest.json \
               SHA256SUMS
           else
-            gh release create "${{ inputs.upstream_tag }}" \
+            gh release create "${{ steps.release.outputs.tag }}" \
               --repo "${{ github.repository }}" \
-              --title "LiteRT-LM ${{ inputs.upstream_tag }}" \
+              --title "LiteRT-LM ${{ steps.release.outputs.tag }}" \
               --notes "$notes" \
               "${args[@]}" \
               release/* \
@@ -244,7 +284,7 @@ jobs:
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ inputs.upstream_tag }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.release.outputs.tag }}" \
             -o published-release-check/release.json
           manifest_url="$(python3 - <<'PY'
           import json
@@ -260,4 +300,5 @@ jobs:
           python3 tools/validate_release_manifest.py \
             published-release-check/manifest.json \
             --upstream-tag "${{ inputs.upstream_tag }}" \
+            --release-tag "${{ steps.release.outputs.tag }}" \
             --release-metadata published-release-check/release.json
