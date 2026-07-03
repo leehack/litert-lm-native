@@ -16,6 +16,7 @@ ANDROID_SYSTEM_LIBRARIES = {
     "libandroid.so",
     "libdl.so",
     "libEGL.so",
+    "libGLESv2.so",
     "libGLESv3.so",
     "libjnigraphics.so",
     "liblog.so",
