@@ -181,6 +181,17 @@ def unresolved_dynamic_lookup_symbols(path: Path) -> list[str]:
     return symbols
 
 
+def allows_unresolved_macos_provider_symbols(path: Path, root: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return False
+    # Upstream v0.14.0 only provides a macOS arm64 Gemma provider dylib.
+    # The source-built x64 LiteRtLm dylib leaves those optional symbols as
+    # dynamic lookups and does not link a provider install name.
+    return relative.parts == ("bin", "macos", "x64", "libLiteRtLm.dylib")
+
+
 def validate_macho_dependencies(root: Path) -> int:
     checked = 0
     errors: list[str] = []
@@ -201,7 +212,7 @@ def validate_macho_dependencies(root: Path) -> int:
             for symbol in unresolved_dynamic_lookup_symbols(library)
             if symbol in MACOS_UNRESOLVED_PROVIDER_SYMBOLS
         ]
-        if unresolved:
+        if unresolved and not allows_unresolved_macos_provider_symbols(library, root):
             formatted = ", ".join(sorted(unresolved))
             errors.append(
                 f"{library.relative_to(root).as_posix()} leaves required Gemma "
