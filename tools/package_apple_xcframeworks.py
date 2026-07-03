@@ -21,6 +21,7 @@ MACOS_ARCHES = ["arm64", "x64"]
 PRIMARY_MODULE = "LiteRtLm"
 IOS_REEXPORT_MODULE = "CLiteRTLM"
 PRIMARY_LIBRARY = "libLiteRtLm.dylib"
+IOS_PRIMARY_MODULES = {PRIMARY_MODULE, IOS_REEXPORT_MODULE}
 
 
 def run(command: list[str]) -> None:
@@ -86,6 +87,19 @@ def existing_ios_frameworks(module_name: str) -> dict[str, Path]:
         if binary.is_file():
             frameworks[arch] = framework
     return frameworks
+
+
+def ios_framework_module_names() -> list[str]:
+    modules: set[str] = set()
+    for arch in IOS_ARCHES:
+        arch_dir = BIN_DIR / "ios" / arch
+        if not arch_dir.is_dir():
+            continue
+        for framework in arch_dir.glob("*.framework"):
+            module_name = framework.stem
+            if (framework / module_name).is_file():
+                modules.add(module_name)
+    return sorted(modules)
 
 
 def merge_simulator_frameworks(
@@ -306,6 +320,26 @@ def package_macos_companions(
     return packaged
 
 
+def package_ios_companions(
+    work_root: Path,
+    output_dir: Path,
+    tag: str,
+) -> list[Path]:
+    packaged: list[Path] = []
+    for module_name in ios_framework_module_names():
+        if module_name in IOS_PRIMARY_MODULES:
+            continue
+        companion = package_ios_framework_module(
+            module_name,
+            work_root,
+            output_dir,
+            tag,
+        )
+        if companion is not None:
+            packaged.append(companion)
+    return packaged
+
+
 def package_all(release_tag: str, clean: bool) -> list[Path]:
     output_dir = DIST_DIR / release_tag
     if clean and WORK_DIR.exists():
@@ -349,6 +383,7 @@ def package_all(release_tag: str, clean: bool) -> list[Path]:
     if clitertlm is not None:
         packaged.append(clitertlm)
 
+    packaged.extend(package_ios_companions(WORK_DIR, output_dir, release_tag))
     packaged.extend(package_macos_companions(WORK_DIR, output_dir, release_tag))
     return packaged
 

@@ -1,21 +1,22 @@
 # Current Upstream Snapshot
 
-As of `2026-06-08`, the latest upstream release resolved by
+As of `2026-07-03`, the latest upstream release resolved by
 `tools/fetch_upstream.py --latest --metadata-only` is:
 
 - Repository: `google-ai-edge/LiteRT-LM`
-- Tag: `v0.13.1`
-- Published: `2026-06-03T20:52:11Z`
-- Release URL: `https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.13.1`
+- Tag: `v0.14.0`
+- Published: `2026-07-02T18:12:47Z`
+- Release URL: `https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.14.0`
 - Assets:
-  - `CLiteRTLM.xcframework.zip`
-  - `CLiteRTLM_mac.xcframework.zip`
+  - `litert_lm_main.macos_arm64`
 
 Older releases have exposed different asset matrices. For example, `v0.11.0`
 included standalone CLI assets for Android, iOS simulator, Linux x64, macOS
-arm64, and Windows x64, while `v0.13.1` publishes Apple XCFramework archives.
-The native repo should not assume that upstream releases always publish the same
-asset matrix.
+arm64, and Windows x64, while `v0.13.1` published Apple XCFramework archives.
+Upstream `v0.14.0` no longer publishes `CLiteRTLM.xcframework.zip` or
+`CLiteRTLM_mac.xcframework.zip`, so the native release workflow source-builds
+Apple runtimes for that tag. The native repo should not assume that upstream
+releases always publish the same asset matrix.
 
 Production packaging should support both modes:
 

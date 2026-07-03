@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from litert_lm_symbols import is_at_least
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED_RUNTIME_ARTIFACTS = [
@@ -22,6 +24,23 @@ REQUIRED_RUNTIME_ARTIFACTS = [
     Path("bin/windows/x64/LiteRtLm.dll"),
 ]
 
+V0_14_RUNTIME_ARTIFACTS = [
+    Path("bin/ios/arm64/GemmaModelConstraintProvider.framework/GemmaModelConstraintProvider"),
+    Path(
+        "bin/ios/arm64-sim/"
+        "GemmaModelConstraintProvider.framework/GemmaModelConstraintProvider"
+    ),
+    Path("bin/macos/arm64/libGemmaModelConstraintProvider.dylib"),
+    Path("bin/macos/x64/libGemmaModelConstraintProvider.dylib"),
+]
+
+
+def required_runtime_artifacts(upstream_tag: str) -> list[Path]:
+    required = list(REQUIRED_RUNTIME_ARTIFACTS)
+    if is_at_least(upstream_tag, (0, 14, 0)):
+        required.extend(V0_14_RUNTIME_ARTIFACTS)
+    return required
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -30,19 +49,20 @@ def main() -> int:
     parser.add_argument("--upstream-tag", required=True)
     args = parser.parse_args()
 
-    required = list(REQUIRED_RUNTIME_ARTIFACTS)
-    required.extend(
-        [
-            Path("dist")
-            / "official"
-            / args.upstream_tag
-            / "CLiteRTLM.xcframework.zip",
-            Path("dist")
-            / "official"
-            / args.upstream_tag
-            / "CLiteRTLM_mac.xcframework.zip",
-        ]
-    )
+    required = required_runtime_artifacts(args.upstream_tag)
+    if not is_at_least(args.upstream_tag, (0, 14, 0)):
+        required.extend(
+            [
+                Path("dist")
+                / "official"
+                / args.upstream_tag
+                / "CLiteRTLM.xcframework.zip",
+                Path("dist")
+                / "official"
+                / args.upstream_tag
+                / "CLiteRTLM_mac.xcframework.zip",
+            ]
+        )
 
     missing = [path for path in required if not (REPO_ROOT / path).is_file()]
     if missing:

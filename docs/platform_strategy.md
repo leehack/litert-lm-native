@@ -12,16 +12,17 @@ The release automation publishes these runtime artifact groups:
   with LiteRtLmBridge symbols embedded by the repo-owned `native/bridge` Bazel
   package for downstream FFI streaming on source-built platforms
 - upstream `prebuilt/` companion libraries copied from the tagged source archive
-- official upstream release assets, including the iOS `CLiteRTLM.xcframework`
-  archive when Google publishes it
-- iOS framework-style runtime wrappers derived from `CLiteRTLM.xcframework`,
-  with LiteRtLmBridge symbols embedded in `LiteRtLm.framework/LiteRtLm` and
-  upstream symbols re-exported from `CLiteRTLM.framework/CLiteRTLM`
-- macOS dylib runtime wrappers derived from `CLiteRTLM_mac.xcframework`, with
-  LiteRtLmBridge symbols embedded in `libLiteRtLm.dylib` and upstream symbols
-  re-exported from `libCLiteRTLM_mac.dylib`
+- official upstream release assets, including Apple `CLiteRTLM*.xcframework`
+  archives when Google publishes them
+- iOS framework-style runtime wrappers derived from official
+  `CLiteRTLM.xcframework` slices when available, or from source-built
+  `libLiteRtLm.dylib` outputs when upstream no longer publishes the archive
+- macOS dylib runtime wrappers derived from official
+  `CLiteRTLM_mac.xcframework` slices when available, or from source-built
+  `libLiteRtLm.dylib` outputs when upstream no longer publishes the archive
 - Apple Swift Package Manager XCFramework zips produced from the same iOS
-  wrappers and official macOS wrappers used by the native-assets payloads
+  wrappers, macOS wrappers, and required companion frameworks used by the
+  native-assets payloads
 
 Native release tags are immutable consumer contracts. Use a separate native
 release tag when repackaging the same upstream source tag, for example
@@ -37,17 +38,19 @@ Windows to avoid Bazel's Windows package-path parser, without patching upstream
 source files in the repository.
 
 SPM artifacts are intentionally split by binary target. `LiteRtLm` carries the
-primary iOS runtime/wrapper and a macOS framework wrapper around the official
-macOS runtime. `CLiteRTLM` is published for iOS re-export support, and
-`CLiteRTLMMac` is published for macOS re-export support.
+primary iOS runtime and macOS framework wrapper. `CLiteRTLM` is published for
+iOS re-export support, and `CLiteRTLMMac` is published for macOS re-export
+support. Source-built Apple releases can publish additional companion binary
+targets, such as `GemmaModelConstraintProvider`, when the primary runtime links
+against them.
 
-The macOS LiteRT-LM SPM path must account for the architecture coverage of the
-native payload. Upstream `v0.13.1` publishes a universal
-`CLiteRTLM_mac.xcframework`; the packaged macOS wrapper is universal across
-arm64 and x64 and targets macOS 14. Keep native-assets runtime archives as the
-source of truth, and only wire macOS SPM dependencies in downstream packages
-when the required binary targets cover the selected architecture and deployment
-target.
+The Apple LiteRT-LM SPM path must account for the architecture coverage of the
+native payload. Upstream `v0.13.1` publishes universal Apple XCFrameworks;
+upstream `v0.14.0` publishes no Apple XCFramework archives, so this repository
+source-builds Apple runtimes and companion targets. Keep native-assets runtime
+archives as the source of truth, and only wire SPM dependencies in downstream
+packages when the required binary targets cover the selected architecture and
+deployment target.
 
 Initial native targets:
 
@@ -55,13 +58,13 @@ Initial native targets:
 | --- | --- | --- | --- |
 | Android | arm64-v8a | 1 | `.so` bundle |
 | macOS | arm64 | 1 | `.dylib` or `.framework` bundle |
-| iOS | arm64 | 2 | `.framework` wrapper plus upstream runtime from `.xcframework` |
+| iOS | arm64 | 2 | `.framework` runtime plus companion frameworks |
 | Linux | x64 | 2 | `.so` bundle |
 | Windows | x64 | 2 | `.dll` bundle |
 | Linux | arm64 | 3 | `.so` bundle |
 | macOS | x64 | 3 | `.dylib` or `.framework` bundle |
 | Android | x86_64 | 3 | `.so` bundle |
-| iOS simulator | arm64; x64 when upstream ships it | 3 | `.framework` wrapper plus upstream runtime from `.xcframework` |
+| iOS simulator | arm64; x64 when available | 3 | `.framework` runtime plus companion frameworks |
 
 ## Web
 

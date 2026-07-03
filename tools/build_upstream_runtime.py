@@ -10,6 +10,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+from litert_lm_symbols import BRIDGE_SYMBOLS, required_c_api_symbols
 from runtime_dependency_utils import elf_needed_libraries, is_elf, is_system_needed
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +48,18 @@ RUNTIME_TARGETS = {
         "output": "bazel-bin/bridge/libLiteRtLm.so",
         "library": "libLiteRtLm.so",
     },
+    ("ios", "arm64"): {
+        "bazel_target": "//bridge:libLiteRtLm.dylib",
+        "bazel_config": "ios_arm64",
+        "output": "bazel-bin/bridge/libLiteRtLm.dylib",
+        "library": "libLiteRtLm.dylib",
+    },
+    ("ios", "arm64-sim"): {
+        "bazel_target": "//bridge:libLiteRtLm.dylib",
+        "bazel_config": "ios_sim_arm64",
+        "output": "bazel-bin/bridge/libLiteRtLm.dylib",
+        "library": "libLiteRtLm.dylib",
+    },
     ("linux", "arm64"): {
         "bazel_target": "//bridge:libLiteRtLm.so",
         "bazel_configs": ["linux", "linux_arm64"],
@@ -82,21 +95,6 @@ RUNTIME_TARGETS = {
         "library": "LiteRtLm.dll",
     },
 }
-
-REQUIRED_C_API_SYMBOLS = [
-    b"litert_lm_engine_settings_create",
-    b"litert_lm_engine_create",
-    b"litert_lm_conversation_create",
-    b"litert_lm_conversation_send_message_stream",
-]
-
-REQUIRED_BRIDGE_SYMBOLS = [
-    b"stream_proxy_load_global",
-    b"stream_proxy_create",
-    b"stream_proxy_delete",
-    b"stream_proxy_free_string",
-]
-
 
 def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
     printable = " ".join(command)
@@ -207,6 +205,8 @@ def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None)
     ]
     if platform == "macos":
         command.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
+    if platform == "ios":
+        command.append("--ios_minimum_os=13.0")
     if jobs:
         command.append(f"--jobs={jobs}")
     run(command, source_root)
@@ -244,7 +244,7 @@ def stage_runtime_dependencies(
     platform: str,
     arch: str,
 ) -> None:
-    if platform == "macos":
+    if platform in {"ios", "macos"}:
         stage_macho_runtime_dependencies(output, source_root, platform, arch)
         return
 
@@ -373,9 +373,9 @@ def find_runtime_dependency(
     return None
 
 
-def validate_exported_symbols(output: Path) -> None:
+def validate_exported_symbols(output: Path, upstream_tag: str) -> None:
     data = output.read_bytes()
-    required_symbols = REQUIRED_C_API_SYMBOLS + REQUIRED_BRIDGE_SYMBOLS
+    required_symbols = required_c_api_symbols(upstream_tag) + BRIDGE_SYMBOLS
     missing = [
         symbol.decode("ascii")
         for symbol in required_symbols
@@ -408,7 +408,7 @@ def main() -> int:
     if args.source_root:
         source_root = args.source_root.resolve()
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)
-        validate_exported_symbols(output)
+        validate_exported_symbols(output, args.upstream_tag)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         return 0
@@ -425,7 +425,7 @@ def main() -> int:
     ) as tmp:
         source_root = download_upstream(args.upstream_tag, Path(tmp))
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)
-        validate_exported_symbols(output)
+        validate_exported_symbols(output, args.upstream_tag)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
     return 0

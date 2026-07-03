@@ -5,7 +5,8 @@ import argparse
 import json
 from pathlib import Path
 
-from validate_runtime_artifacts import REQUIRED_RUNTIME_ARTIFACTS
+from litert_lm_symbols import is_at_least
+from validate_runtime_artifacts import required_runtime_artifacts
 
 
 REQUIRED_RUNTIME_ARCHIVES = [
@@ -26,13 +27,16 @@ REQUIRED_SPM_XCFRAMEWORKS = [
     "litert-lm-native-apple-LiteRtLm-xcframework-{tag}.zip",
 ]
 
-REQUIRED_RELEASE_ASSETS = [
+V0_14_REQUIRED_SPM_XCFRAMEWORKS = [
+    "litert-lm-native-apple-GemmaModelConstraintProvider-xcframework-{tag}.zip",
+]
+
+BASE_REQUIRED_RELEASE_ASSETS = [
     "manifest.json",
     "SHA256SUMS",
     "litert-lm-native-prebuilts-{tag}.tar.gz",
     "litert-lm-native-official-assets-{tag}.tar.gz",
     *REQUIRED_RUNTIME_ARCHIVES,
-    *REQUIRED_SPM_XCFRAMEWORKS,
 ]
 
 
@@ -77,16 +81,20 @@ def main() -> int:
         for artifact in manifest.get("artifacts", [])
         if isinstance(artifact, dict)
     }
-    required = [path.as_posix() for path in REQUIRED_RUNTIME_ARTIFACTS]
-    required.extend(
-        [
-            f"dist/official/{args.upstream_tag}/CLiteRTLM.xcframework.zip",
-            f"dist/official/{args.upstream_tag}/CLiteRTLM_mac.xcframework.zip",
-        ]
-    )
+    required = [path.as_posix() for path in required_runtime_artifacts(args.upstream_tag)]
+    if not is_at_least(args.upstream_tag, (0, 14, 0)):
+        required.extend(
+            [
+                f"dist/official/{args.upstream_tag}/CLiteRTLM.xcframework.zip",
+                f"dist/official/{args.upstream_tag}/CLiteRTLM_mac.xcframework.zip",
+            ]
+        )
+    required_spm_xcframeworks = list(REQUIRED_SPM_XCFRAMEWORKS)
+    if is_at_least(args.upstream_tag, (0, 14, 0)):
+        required_spm_xcframeworks.extend(V0_14_REQUIRED_SPM_XCFRAMEWORKS)
     required.extend(
         f"dist/spm/{release_tag}/{asset.format(tag=release_tag)}"
-        for asset in REQUIRED_SPM_XCFRAMEWORKS
+        for asset in required_spm_xcframeworks
     )
     missing = [path for path in required if path not in paths]
     if missing:
@@ -102,9 +110,23 @@ def main() -> int:
             for asset in release.get("assets", [])
             if isinstance(asset, dict)
         }
+        spm_assets = sorted(
+            Path(path).name
+            for path in paths
+            if isinstance(path, str)
+            and path.startswith(f"dist/spm/{release_tag}/")
+            and path.endswith(".zip")
+        )
         required_assets = [
-            pattern.format(tag=release_tag) for pattern in REQUIRED_RELEASE_ASSETS
+            pattern.format(tag=release_tag)
+            for pattern in BASE_REQUIRED_RELEASE_ASSETS
         ]
+        required_assets.extend(
+            pattern.format(tag=release_tag)
+            for pattern in required_spm_xcframeworks
+        )
+        required_assets.extend(spm_assets)
+        required_assets = sorted(set(required_assets))
         missing_assets = [
             asset for asset in required_assets if asset not in asset_names
         ]
