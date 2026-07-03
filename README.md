@@ -58,12 +58,14 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
   source-built runtime libraries without patching upstream source files, and
   stages them for release.
 - `tools/package_ios_runtime.py`: extracts official upstream
-  `CLiteRTLM.xcframework` slices and stages `LiteRtLm.framework` plus
-  `CLiteRTLM.framework`, with the wrapper embedding LiteRtLmBridge symbols and
-  re-exporting `CLiteRTLM`.
+  `CLiteRTLM.xcframework` slices when present, or wraps source-built iOS
+  `libLiteRtLm.dylib` outputs when upstream no longer publishes the archive.
+  It stages `LiteRtLm.framework`, `CLiteRTLM.framework`, and required companion
+  frameworks such as `GemmaModelConstraintProvider.framework`.
 - `tools/package_macos_runtime.py`: extracts official upstream
-  `CLiteRTLM_mac.xcframework` slices and stages bridge-enabled
-  `libLiteRtLm.dylib` wrappers that re-export `libCLiteRTLM_mac.dylib`.
+  `CLiteRTLM_mac.xcframework` slices when present, or wraps source-built macOS
+  `libLiteRtLm.dylib` outputs when upstream no longer publishes the archive.
+  The compatibility `libCLiteRTLM_mac.dylib` re-exports the primary runtime.
 - `tools/package_apple_xcframeworks.py`: packages iOS framework wrappers and
   macOS bridge wrappers as SPM-compatible XCFramework zip assets.
 - `tools/package_release.py`: builds local manifest and checksums.
@@ -98,16 +100,15 @@ python3 tools/validate_artifacts.py
   pushes and pull requests.
 - `Native Build & Release`: manually packages a selected upstream LiteRT-LM tag.
   It builds upstream C runtime libraries with embedded LiteRtLmBridge symbols for
-  Android arm64/x64, Linux x64/arm64, and Windows x64, copies
-  upstream `prebuilt/` companion libraries for Android, Apple, Linux, and
-  Windows, converts official upstream `CLiteRTLM.xcframework` slices into iOS
-  framework runtime archives with an embedded LiteRtLmBridge wrapper, converts
-  official upstream `CLiteRTLM_mac.xcframework` slices into macOS runtime
-  archives with an embedded LiteRtLmBridge wrapper, packages Apple SPM
-  XCFramework zips from the same runtime payloads, includes the official
-  upstream release assets, then publishes a GitHub release with `manifest.json`
-  and `SHA256SUMS`. The workflow accepts a separate `release_tag`; use it when
-  repackaging the same upstream tag without mutating an existing native release.
+  Android arm64/x64, iOS arm64/arm64-sim, Linux x64/arm64, macOS arm64/x64, and
+  Windows x64, copies upstream `prebuilt/` companion libraries for Android,
+  Apple, Linux, and Windows, uses official Apple XCFramework archives when
+  upstream publishes them, falls back to the source-built Apple runtimes when
+  those archives are missing, packages Apple SPM XCFramework zips from the same
+  runtime payloads, includes the official upstream release assets, then
+  publishes a GitHub release with `manifest.json` and `SHA256SUMS`. The workflow
+  accepts a separate `release_tag`; use it when repackaging the same upstream
+  tag without mutating an existing native release.
 - `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
   when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
   not published yet. Existing releases are treated as immutable; if validation
@@ -160,12 +161,12 @@ asynchronous callback loaders.
 
 Apple SPM consumers should depend on the release's direct
 `litert-lm-native-apple-*-xcframework-<tag>.zip` assets. The `LiteRtLm`
-XCFramework contains the primary iOS wrapper and a macOS framework wrapper
-around the official `CLiteRTLM_mac` runtime. `CLiteRTLM` is re-exported by the
-iOS wrapper, and `CLiteRTLMMac` is re-exported by the macOS wrapper. Downstream
-macOS SPM integration must account for architecture coverage and deployment
-targets; upstream `v0.13.1` provides a universal `CLiteRTLM_mac.xcframework`,
-and the packaged macOS wrapper targets macOS 14.
+XCFramework contains the primary iOS runtime and macOS framework wrapper.
+`CLiteRTLM` is retained as an iOS compatibility re-export target, and
+`CLiteRTLMMac` is retained as a macOS compatibility re-export target. For
+source-built Apple releases such as upstream `v0.14.0`, downstream SPM
+integration must also include required companion XCFrameworks published by this
+repo, for example `GemmaModelConstraintProvider`.
 
 ## Consumer Contract
 

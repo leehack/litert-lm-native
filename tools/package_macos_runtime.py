@@ -9,18 +9,13 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+from litert_lm_symbols import BRIDGE_SYMBOLS, required_c_api_symbols
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 DIST_OFFICIAL_DIR = REPO_ROOT / "dist" / "official"
 BRIDGE_SOURCE = REPO_ROOT / "native" / "bridge" / "litert_lm_bridge.c"
 DEFAULT_MACOS_MINIMUM_OS = "14.0"
-
-REQUIRED_C_API_SYMBOLS = [
-    b"litert_lm_engine_settings_create",
-    b"litert_lm_engine_create",
-    b"litert_lm_conversation_create",
-    b"litert_lm_conversation_send_message_stream",
-]
 
 REQUIRED_PROVIDER_SYMBOLS = [
     b"LiteRtLmGemmaModelConstraintProvider_Create",
@@ -28,17 +23,11 @@ REQUIRED_PROVIDER_SYMBOLS = [
     b"LiteRtLmGemmaModelConstraintProvider_Destroy",
 ]
 
-REQUIRED_BRIDGE_SYMBOLS = [
-    b"stream_proxy_load_global",
-    b"stream_proxy_create",
-    b"stream_proxy_delete",
-    b"stream_proxy_free_string",
-]
-
 LITERTLM_LIBRARY = "libLiteRtLm.dylib"
 CLITERTLM_MAC_LIBRARY = "libCLiteRTLM_mac.dylib"
 LITERTLM_INSTALL_NAME = f"@rpath/{LITERTLM_LIBRARY}"
 CLITERTLM_MAC_INSTALL_NAME = f"@rpath/{CLITERTLM_MAC_LIBRARY}"
+LITERTLM_REEXPORT_NAME = LITERTLM_INSTALL_NAME.encode("ascii")
 CLITERTLM_MAC_REEXPORT_NAME = CLITERTLM_MAC_INSTALL_NAME.encode("ascii")
 
 MACOS_ARCH_ORDER = {"arm64": 0, "x64": 1}
@@ -62,7 +51,7 @@ def validate_exported_symbols(output: Path) -> None:
     data = output.read_bytes()
     missing = [
         symbol.decode("ascii")
-        for symbol in REQUIRED_BRIDGE_SYMBOLS
+        for symbol in BRIDGE_SYMBOLS
         if symbol not in data
     ]
     if missing:
@@ -78,9 +67,18 @@ def validate_exported_symbols(output: Path) -> None:
     print(f"Validated LiteRtLmBridge wrapper symbols in {output}", flush=True)
 
 
-def validate_upstream_symbols(output: Path) -> None:
+def validate_reexport_symbols(output: Path, reexport_name: bytes) -> None:
     data = output.read_bytes()
-    required_symbols = REQUIRED_C_API_SYMBOLS + REQUIRED_PROVIDER_SYMBOLS
+    if reexport_name not in data:
+        raise RuntimeError(
+            f"{output} does not re-export {reexport_name.decode('ascii')}"
+        )
+    print(f"Validated re-export wrapper in {output}", flush=True)
+
+
+def validate_upstream_symbols(output: Path, upstream_tag: str) -> None:
+    data = output.read_bytes()
+    required_symbols = required_c_api_symbols(upstream_tag) + REQUIRED_PROVIDER_SYMBOLS
     missing = [
         symbol.decode("ascii")
         for symbol in required_symbols
@@ -92,6 +90,22 @@ def validate_upstream_symbols(output: Path) -> None:
             + ", ".join(missing)
         )
     print(f"Validated upstream LiteRT-LM macOS symbols in {output}", flush=True)
+
+
+def validate_source_built_symbols(output: Path, upstream_tag: str) -> None:
+    data = output.read_bytes()
+    required_symbols = required_c_api_symbols(upstream_tag) + BRIDGE_SYMBOLS
+    missing = [
+        symbol.decode("ascii")
+        for symbol in required_symbols
+        if symbol not in data
+    ]
+    if missing:
+        raise RuntimeError(
+            f"{output} does not contain required LiteRT-LM/bridge symbols: "
+            + ", ".join(missing)
+        )
+    print(f"Validated source-built LiteRtLm macOS symbols in {output}", flush=True)
 
 
 def discover_macos_slices(extracted_root: Path) -> list[dict]:
@@ -135,7 +149,11 @@ def discover_macos_slices(extracted_root: Path) -> list[dict]:
     return sorted(specs, key=lambda spec: MACOS_ARCH_ORDER.get(spec["arch"], 99))
 
 
-def create_universal_upstream(specs: list[dict], work_dir: Path) -> Path:
+def create_universal_upstream(
+    specs: list[dict],
+    work_dir: Path,
+    upstream_tag: str,
+) -> Path:
     slices: list[Path] = []
     for spec in specs:
         source = spec["source"]
@@ -169,7 +187,7 @@ def create_universal_upstream(specs: list[dict], work_dir: Path) -> Path:
             ]
         )
     run(["install_name_tool", "-id", CLITERTLM_MAC_INSTALL_NAME, str(upstream)])
-    validate_upstream_symbols(upstream)
+    validate_upstream_symbols(upstream, upstream_tag)
     return upstream
 
 
@@ -240,16 +258,102 @@ def stage_runtime(
     return staged
 
 
-def package_macos_runtime(archive: Path, clean: bool) -> list[Path]:
+def discover_source_built_macos_slices() -> list[dict]:
+    specs: list[dict] = []
+    for arch in MACOS_ARCH_ORDER:
+        source = BIN_DIR / "macos" / arch / LITERTLM_LIBRARY
+        if not source.is_file():
+            continue
+        specs.append(
+            {
+                "arch": arch,
+                "source": source,
+                "source_arch": RUNTIME_ARCH_TO_MACHO_ARCH[arch],
+            }
+        )
+
+    found = {spec["arch"] for spec in specs}
+    missing = sorted(REQUIRED_MACOS_ARCHES - found)
+    if missing:
+        raise RuntimeError(
+            "Missing source-built LiteRtLm macOS slices: " + ", ".join(missing)
+        )
+    return sorted(specs, key=lambda spec: MACOS_ARCH_ORDER.get(spec["arch"], 99))
+
+
+def build_source_reexport_wrapper(spec: dict, source: Path, output: Path) -> None:
+    output.unlink(missing_ok=True)
+    run(
+        [
+            "xcrun",
+            "clang",
+            "-dynamiclib",
+            "-O2",
+            "-std=c11",
+            "-fvisibility=hidden",
+            "-arch",
+            spec["source_arch"],
+            f"-mmacosx-version-min={DEFAULT_MACOS_MINIMUM_OS}",
+            "-install_name",
+            CLITERTLM_MAC_INSTALL_NAME,
+            "-Wl,-rpath,@loader_path",
+            "-Wl,-reexport_library," + str(source),
+            "-o",
+            str(output),
+            "-x",
+            "c",
+            "/dev/null",
+        ]
+    )
+    validate_reexport_symbols(output, LITERTLM_REEXPORT_NAME)
+
+
+def stage_source_built_runtime(
+    specs: list[dict],
+    clean: bool,
+    upstream_tag: str,
+) -> list[Path]:
+    staged: list[Path] = []
+    for spec in specs:
+        arch = spec["arch"]
+        source = spec["source"]
+        target_dir = BIN_DIR / "macos" / arch
+        if clean:
+            (target_dir / CLITERTLM_MAC_LIBRARY).unlink(missing_ok=True)
+        run(["install_name_tool", "-id", LITERTLM_INSTALL_NAME, str(source)])
+        validate_source_built_symbols(source, upstream_tag)
+        companion = target_dir / CLITERTLM_MAC_LIBRARY
+        build_source_reexport_wrapper(spec, source, companion)
+        staged.extend([source, companion])
+        print(f"Staged {source}", flush=True)
+        print(f"Staged {companion}", flush=True)
+    return staged
+
+
+def package_macos_runtime(
+    archive: Path,
+    clean: bool,
+    upstream_tag: str,
+) -> list[Path]:
     if not archive.is_file():
-        raise RuntimeError(f"Missing upstream macOS xcframework archive: {archive}")
+        print(
+            f"Missing upstream macOS xcframework archive: {archive}; "
+            "using source-built LiteRtLm dylibs",
+            flush=True,
+        )
+        specs = discover_source_built_macos_slices()
+        return stage_source_built_runtime(
+            specs,
+            clean=clean,
+            upstream_tag=upstream_tag,
+        )
 
     with tempfile.TemporaryDirectory(prefix="litert-lm-native-macos-") as temp:
         temp_dir = Path(temp)
         with zipfile.ZipFile(archive) as zip_file:
             zip_file.extractall(temp_dir)
         specs = discover_macos_slices(temp_dir)
-        upstream = create_universal_upstream(specs, temp_dir)
+        upstream = create_universal_upstream(specs, temp_dir, upstream_tag)
         target_arches = [RUNTIME_ARCH_TO_MACHO_ARCH[spec["arch"]] for spec in specs]
         wrapper = build_wrapper(upstream, temp_dir, target_arches)
         if clean:
@@ -282,7 +386,11 @@ def main() -> int:
     archive = args.archive or (
         DIST_OFFICIAL_DIR / args.upstream_tag / "CLiteRTLM_mac.xcframework.zip"
     )
-    staged = package_macos_runtime(archive.resolve(), clean=args.clean)
+    staged = package_macos_runtime(
+        archive.resolve(),
+        clean=args.clean,
+        upstream_tag=args.upstream_tag,
+    )
     print(f"Packaged {len(staged)} macOS LiteRT-LM runtime files")
     return 0
 

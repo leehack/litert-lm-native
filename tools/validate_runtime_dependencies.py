@@ -83,10 +83,24 @@ def validate_elf_dependencies(root: Path) -> int:
 
 
 def iter_macho_libraries(root: Path) -> list[Path]:
-    bin_dir = root / "bin" / "macos"
+    bin_dir = root / "bin"
     if not bin_dir.exists() or shutil.which("otool") is None:
         return []
-    return sorted(path for path in bin_dir.rglob("*.dylib") if path.is_file())
+    libraries = {
+        path
+        for platform in ("ios", "macos")
+        for path in (bin_dir / platform).rglob("*.dylib")
+        if path.is_file()
+    }
+    for platform in ("ios", "macos"):
+        platform_dir = bin_dir / platform
+        if not platform_dir.is_dir():
+            continue
+        for framework in platform_dir.rglob("*.framework"):
+            binary = framework / framework.stem
+            if binary.is_file():
+                libraries.add(binary)
+    return sorted(libraries)
 
 
 def macho_needed_libraries(path: Path) -> list[str]:
@@ -117,6 +131,37 @@ def is_system_macho_needed(install_name: str) -> bool:
     )
 
 
+def runtime_dir_for_macho(path: Path, root: Path) -> Path | None:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return None
+    parts = relative.parts
+    if len(parts) < 3 or parts[0] != "bin":
+        return None
+    return root / parts[0] / parts[1] / parts[2]
+
+
+def resolve_macho_dependency(
+    library: Path,
+    install_name: str,
+    root: Path,
+) -> Path | None:
+    if install_name.startswith("@loader_path/"):
+        return library.parent / install_name.removeprefix("@loader_path/")
+
+    if not install_name.startswith("@rpath/"):
+        return library.parent / Path(install_name).name
+
+    runtime_dir = runtime_dir_for_macho(library, root)
+    if runtime_dir is None:
+        return None
+    relative = install_name.removeprefix("@rpath/")
+    if ".framework/" in relative:
+        return runtime_dir / relative
+    return runtime_dir / Path(relative).name
+
+
 def unresolved_dynamic_lookup_symbols(path: Path) -> list[str]:
     if shutil.which("nm") is None:
         return []
@@ -144,11 +189,11 @@ def validate_macho_dependencies(root: Path) -> int:
         for needed in macho_needed_libraries(library):
             if is_system_macho_needed(needed):
                 continue
-            dependency_path = library.parent / Path(needed).name
-            if not dependency_path.is_file():
+            dependency_path = resolve_macho_dependency(library, needed, root)
+            if dependency_path is None or not dependency_path.is_file():
                 errors.append(
                     f"{library.relative_to(root).as_posix()} needs {needed}, "
-                    "but it is missing from the same runtime directory."
+                    "but it is missing from the runtime directory."
                 )
 
         unresolved = [
