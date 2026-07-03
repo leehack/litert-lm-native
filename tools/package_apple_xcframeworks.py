@@ -301,18 +301,13 @@ def package_macos_companions(
     work_root: Path,
     output_dir: Path,
     tag: str,
+    macos_args_by_module: dict[str, list[str]],
+    skip_modules: set[str],
 ) -> list[Path]:
     packaged: list[Path] = []
-    for library_name, libraries in sorted(macos_libraries_by_name().items()):
-        if library_name == PRIMARY_LIBRARY:
+    for module_name, args in sorted(macos_args_by_module.items()):
+        if module_name in skip_modules:
             continue
-        module_name = module_name_for_dylib(Path(library_name))
-        args = make_macos_library_argument(
-            module_name,
-            libraries,
-            work_root,
-            include_headers=False,
-        )
         if args:
             packaged.append(
                 create_xcframework(module_name, args, work_root, output_dir, tag)
@@ -320,12 +315,37 @@ def package_macos_companions(
     return packaged
 
 
+def macos_companion_args_by_module(
+    work_root: Path,
+    framework_modules: set[str],
+) -> dict[str, list[str]]:
+    args_by_module: dict[str, list[str]] = {}
+    for library_name, libraries in sorted(macos_libraries_by_name().items()):
+        if library_name == PRIMARY_LIBRARY:
+            continue
+        module_name = module_name_for_dylib(Path(library_name))
+        if module_name in framework_modules:
+            args = make_macos_framework_argument(module_name, libraries, work_root)
+        else:
+            args = make_macos_library_argument(
+                module_name,
+                libraries,
+                work_root,
+                include_headers=False,
+            )
+        if args:
+            args_by_module[module_name] = args
+    return args_by_module
+
+
 def package_ios_companions(
     work_root: Path,
     output_dir: Path,
     tag: str,
-) -> list[Path]:
+    macos_args_by_module: dict[str, list[str]],
+) -> tuple[list[Path], set[str]]:
     packaged: list[Path] = []
+    packaged_modules: set[str] = set()
     for module_name in ios_framework_module_names():
         if module_name in IOS_PRIMARY_MODULES:
             continue
@@ -334,10 +354,12 @@ def package_ios_companions(
             work_root,
             output_dir,
             tag,
+            extra_args=macos_args_by_module.get(module_name),
         )
         if companion is not None:
             packaged.append(companion)
-    return packaged
+            packaged_modules.add(module_name)
+    return packaged, packaged_modules
 
 
 def package_all(release_tag: str, clean: bool) -> list[Path]:
@@ -350,6 +372,11 @@ def package_all(release_tag: str, clean: bool) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     packaged: list[Path] = []
+    ios_companion_modules = set(ios_framework_module_names()) - IOS_PRIMARY_MODULES
+    macos_companion_args = macos_companion_args_by_module(
+        WORK_DIR,
+        framework_modules=ios_companion_modules,
+    )
     primary_macos_args = make_macos_framework_argument(
         PRIMARY_MODULE,
         macos_libraries_by_name().get(PRIMARY_LIBRARY, {}),
@@ -383,8 +410,22 @@ def package_all(release_tag: str, clean: bool) -> list[Path]:
     if clitertlm is not None:
         packaged.append(clitertlm)
 
-    packaged.extend(package_ios_companions(WORK_DIR, output_dir, release_tag))
-    packaged.extend(package_macos_companions(WORK_DIR, output_dir, release_tag))
+    ios_companions, ios_companion_modules = package_ios_companions(
+        WORK_DIR,
+        output_dir,
+        release_tag,
+        macos_companion_args,
+    )
+    packaged.extend(ios_companions)
+    packaged.extend(
+        package_macos_companions(
+            WORK_DIR,
+            output_dir,
+            release_tag,
+            macos_companion_args,
+            skip_modules=ios_companion_modules,
+        )
+    )
     return packaged
 
 
