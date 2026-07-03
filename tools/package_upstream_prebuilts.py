@@ -5,8 +5,9 @@ import argparse
 import shutil
 import tarfile
 import tempfile
-import urllib.request
 from pathlib import Path
+
+from download_utils import download_to_path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
@@ -30,18 +31,13 @@ LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 
 
 def download_source(tag: str, output: Path) -> None:
-    output.parent.mkdir(parents=True, exist_ok=True)
     print(f"Downloading upstream source archive for {tag}", flush=True)
-    request = urllib.request.Request(
+    download_to_path(
         UPSTREAM_SOURCE_URL.format(tag=tag),
+        output,
         headers={"User-Agent": "litert-lm-native-prebuilt-packager"},
+        label=f"LiteRT-LM {tag} source archive",
     )
-    with urllib.request.urlopen(request) as response, output.open("wb") as file:
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            file.write(chunk)
 
 
 def extract_source(archive: Path, output_dir: Path) -> Path:

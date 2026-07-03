@@ -7,9 +7,9 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
-import urllib.request
 from pathlib import Path
 
+from download_utils import download_to_path
 from litert_lm_symbols import BRIDGE_SYMBOLS, required_c_api_symbols
 from runtime_dependency_utils import elf_needed_libraries, is_elf, is_system_needed
 
@@ -21,6 +21,7 @@ MACOS_MINIMUM_OS = "14.0"
 UPSTREAM_ARCHIVE_URL = (
     "https://github.com/google-ai-edge/LiteRT-LM/archive/refs/tags/{tag}.tar.gz"
 )
+USER_AGENT = "litert-lm-native-build"
 ZLIB_URL = "https://zlib.net/fossils/zlib-1.3.1.tar.gz"
 ZLIB_GITHUB_MIRROR_URL = (
     "https://github.com/madler/zlib/releases/download/v1.3.1/"
@@ -109,7 +110,12 @@ def download_upstream(tag: str, work_dir: Path) -> Path:
     archive_path = work_dir / f"LiteRT-LM-{tag}.tar.gz"
     url = UPSTREAM_ARCHIVE_URL.format(tag=tag)
     print(f"Downloading {url}", flush=True)
-    urllib.request.urlretrieve(url, archive_path)
+    download_to_path(
+        url,
+        archive_path,
+        headers={"User-Agent": USER_AGENT},
+        label=f"LiteRT-LM {tag} source archive",
+    )
     with tarfile.open(archive_path, "r:gz") as archive:
         archive.extractall(work_dir, filter="data")
     candidates = [path for path in work_dir.iterdir() if path.is_dir()]

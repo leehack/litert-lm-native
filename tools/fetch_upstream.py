@@ -6,8 +6,9 @@ import hashlib
 import json
 import os
 import sys
-import urllib.request
 from pathlib import Path
+
+from download_utils import download_to_path, fetch_json as fetch_json_with_retries
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DOWNLOADS_DIR = REPO_ROOT / "downloads"
@@ -27,9 +28,7 @@ def request_headers(url: str) -> dict[str, str]:
 
 
 def fetch_json(url: str) -> dict:
-    request = urllib.request.Request(url, headers=request_headers(url))
-    with urllib.request.urlopen(request) as response:
-        return json.load(response)
+    return fetch_json_with_retries(url, headers=request_headers(url))
 
 
 def sha256_file(path: Path) -> str:
@@ -41,17 +40,7 @@ def sha256_file(path: Path) -> str:
 
 
 def download(url: str, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    request = urllib.request.Request(
-        url,
-        headers=request_headers(url),
-    )
-    with urllib.request.urlopen(request) as response, path.open("wb") as file:
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            file.write(chunk)
+    download_to_path(url, path, headers=request_headers(url))
 
 
 def release_url(args: argparse.Namespace) -> str:
