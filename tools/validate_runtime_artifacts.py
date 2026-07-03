@@ -31,7 +31,6 @@ V0_14_RUNTIME_ARTIFACTS = [
         "GemmaModelConstraintProvider.framework/GemmaModelConstraintProvider"
     ),
     Path("bin/macos/arm64/libGemmaModelConstraintProvider.dylib"),
-    Path("bin/macos/x64/libGemmaModelConstraintProvider.dylib"),
 ]
 
 
