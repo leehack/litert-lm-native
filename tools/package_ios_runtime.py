@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import plistlib
 import re
 import shutil
@@ -23,6 +24,14 @@ LITERTLM_INSTALL_NAME = "@rpath/LiteRtLm.framework/LiteRtLm"
 CLITERTLM_INSTALL_NAME = "@rpath/CLiteRTLM.framework/CLiteRTLM"
 LITERTLM_REEXPORT_NAME = LITERTLM_INSTALL_NAME.encode("ascii")
 CLITERTLM_REEXPORT_NAME = CLITERTLM_INSTALL_NAME.encode("ascii")
+IOS_GPU_SYMBOLS = (
+    b"LiteRtAcceleratorImpl",
+    b"LiteRtTopKMetalSampler_Create_Static",
+    b"LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static",
+)
+EXPECTED_OFFICIAL_ARCHIVE_SHA256 = {
+    "v0.14.0": "dddac2f6713ed65eaf01c18e115d9fec22184adf575cc7856a21387e8ba937e1",
+}
 
 IOS_ARCH_ORDER = {"arm64": 0, "arm64-sim": 1, "x64-sim": 2}
 REQUIRED_IOS_ARCHES = {"arm64", "arm64-sim"}
@@ -116,6 +125,14 @@ def validate_upstream_symbols(output: Path, upstream_tag: str) -> None:
             f"{output} does not contain required LiteRT-LM C API symbols: "
             + ", ".join(missing)
         )
+    missing_gpu_symbols = [
+        symbol.decode("ascii") for symbol in IOS_GPU_SYMBOLS if symbol not in data
+    ]
+    if missing_gpu_symbols:
+        raise RuntimeError(
+            f"{output} does not contain required iOS Metal symbols: "
+            + ", ".join(missing_gpu_symbols)
+        )
     print(f"Validated upstream LiteRT-LM C API symbols in {output}", flush=True)
 
 
@@ -133,6 +150,22 @@ def validate_source_built_symbols(output: Path, upstream_tag: str) -> None:
             + ", ".join(missing)
         )
     print(f"Validated source-built LiteRtLm symbols in {output}", flush=True)
+
+
+def validate_official_archive_checksum(archive: Path, upstream_tag: str) -> None:
+    expected = EXPECTED_OFFICIAL_ARCHIVE_SHA256.get(upstream_tag)
+    if expected is None:
+        return
+    digest = hashlib.sha256()
+    with archive.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    actual = digest.hexdigest()
+    if actual != expected:
+        raise RuntimeError(
+            f"Official iOS XCFramework checksum mismatch for {upstream_tag}: "
+            f"expected {expected}, got {actual}"
+        )
 
 
 def discover_ios_slices(extracted_root: Path) -> list[dict]:
@@ -453,8 +486,21 @@ def stage_source_built_dependency_frameworks(
         print(f"Staged {binary}", flush=True)
 
 
-def package_ios_runtime(archive: Path, clean: bool, upstream_tag: str) -> list[Path]:
+def package_ios_runtime(
+    archive: Path,
+    clean: bool,
+    upstream_tag: str,
+    require_official: bool = False,
+) -> list[Path]:
+    official_required = (
+        require_official or upstream_tag in EXPECTED_OFFICIAL_ARCHIVE_SHA256
+    )
     if not archive.is_file():
+        if official_required:
+            raise RuntimeError(
+                "Missing required official upstream iOS XCFramework archive: "
+                f"{archive}"
+            )
         print(
             f"Missing upstream iOS xcframework archive: {archive}; "
             "using source-built LiteRtLm dylibs",
@@ -467,6 +513,7 @@ def package_ios_runtime(archive: Path, clean: bool, upstream_tag: str) -> list[P
         ]
 
     with tempfile.TemporaryDirectory(prefix="litert-lm-native-ios-") as temp:
+        validate_official_archive_checksum(archive, upstream_tag)
         temp_dir = Path(temp)
         with zipfile.ZipFile(archive) as zip_file:
             zip_file.extractall(temp_dir)
@@ -499,6 +546,14 @@ def main() -> int:
         ),
     )
     parser.add_argument("--clean", action="store_true")
+    parser.add_argument(
+        "--require-official",
+        action="store_true",
+        help=(
+            "Fail instead of using source-built dylibs when the official "
+            "iOS XCFramework is unavailable."
+        ),
+    )
     args = parser.parse_args()
 
     archive = args.archive or (
@@ -508,6 +563,7 @@ def main() -> int:
         archive.resolve(),
         clean=args.clean,
         upstream_tag=args.upstream_tag,
+        require_official=args.require_official,
     )
     print(f"Packaged {len(staged)} iOS LiteRT-LM runtime slices")
     return 0

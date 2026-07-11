@@ -33,9 +33,14 @@ jobs:
             tools/package_upstream_prebuilts.py \
             tools/package_official_release_assets.py \
             tools/package_ios_runtime.py \
+            tools/package_macos_runtime.py \
             tools/package_apple_xcframeworks.py \
             tools/validate_runtime_artifacts.py \
             tools/validate_runtime_dependencies.py \
-            tools/validate_release_manifest.py
+            tools/validate_release_manifest.py \
+            tools/test_package_ios_runtime.py \
+            tools/test_package_macos_runtime.py \
+            tools/test_runtime_dependency_utils.py
+          python3 -m unittest discover -s tools -p 'test_*.py'
       - name: Web scaffold self-test
         run: node web/src/index.js --self-test

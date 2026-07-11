@@ -11,7 +11,12 @@ from pathlib import Path
 
 from download_utils import download_to_path
 from litert_lm_symbols import BRIDGE_SYMBOLS, required_c_api_symbols
-from runtime_dependency_utils import elf_needed_libraries, is_elf, is_system_needed
+from runtime_dependency_utils import (
+    elf_has_global_flag,
+    elf_needed_libraries,
+    is_elf,
+    is_system_needed,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
@@ -35,6 +40,7 @@ RUNTIME_TARGETS = {
         "bazel_options": [
             "--linkopt=-Wl,-z,max-page-size=16384",
             "--linkopt=-Wl,-z,common-page-size=16384",
+            "--linkopt=-Wl,-z,global",
         ],
         "output": "bazel-bin/bridge/libLiteRtLm.so",
         "library": "libLiteRtLm.so",
@@ -45,6 +51,7 @@ RUNTIME_TARGETS = {
         "bazel_options": [
             "--linkopt=-Wl,-z,max-page-size=16384",
             "--linkopt=-Wl,-z,common-page-size=16384",
+            "--linkopt=-Wl,-z,global",
         ],
         "output": "bazel-bin/bridge/libLiteRtLm.so",
         "library": "libLiteRtLm.so",
@@ -395,6 +402,17 @@ def validate_exported_symbols(output: Path, upstream_tag: str) -> None:
     print(f"Validated LiteRT-LM and bridge symbols in {output}", flush=True)
 
 
+def validate_android_global_visibility(output: Path, platform: str) -> None:
+    if platform != "android":
+        return
+    if not elf_has_global_flag(output):
+        raise RuntimeError(
+            f"{output} is missing the ELF DF_1_GLOBAL flag required for "
+            "dlopened LiteRT GPU sampler plugins to resolve runtime symbols."
+        )
+    print(f"Validated Android global symbol visibility in {output}", flush=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=f"Build the upstream {UPSTREAM_REPO} C runtime library."
@@ -415,6 +433,7 @@ def main() -> int:
         source_root = args.source_root.resolve()
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)
         validate_exported_symbols(output, args.upstream_tag)
+        validate_android_global_visibility(output, args.platform)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         return 0
@@ -432,6 +451,7 @@ def main() -> int:
         source_root = download_upstream(args.upstream_tag, Path(tmp))
         output = build_runtime(source_root, args.platform, args.arch, args.jobs)
         validate_exported_symbols(output, args.upstream_tag)
+        validate_android_global_visibility(output, args.platform)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
     return 0
