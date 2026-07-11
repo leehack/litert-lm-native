@@ -60,8 +60,8 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
 - `tools/package_ios_runtime.py`: extracts official upstream
   `CLiteRTLM.xcframework` slices when present, or wraps source-built iOS
   `libLiteRtLm.dylib` outputs when upstream no longer publishes the archive.
-  It stages `LiteRtLm.framework`, `CLiteRTLM.framework`, and required companion
-  frameworks such as `GemmaModelConstraintProvider.framework`.
+  It stages `LiteRtLm.framework`, `CLiteRTLM.framework`, and any required
+  companion frameworks.
 - `tools/package_macos_runtime.py`: extracts official upstream
   `CLiteRTLM_mac.xcframework` slices when present, or wraps source-built macOS
   `libLiteRtLm.dylib` outputs when upstream no longer publishes the archive.
@@ -163,10 +163,11 @@ Apple SPM consumers should depend on the release's direct
 `litert-lm-native-apple-*-xcframework-<tag>.zip` assets. The `LiteRtLm`
 XCFramework contains the primary iOS runtime and macOS framework wrapper.
 `CLiteRTLM` is retained as an iOS compatibility re-export target, and
-`CLiteRTLMMac` is retained as a macOS compatibility re-export target. For
-source-built Apple releases such as upstream `v0.14.0`, downstream SPM
-integration must also include required companion XCFrameworks published by this
-repo, for example `GemmaModelConstraintProvider`.
+`CLiteRTLMMac` is retained as a macOS compatibility re-export target. Upstream
+`v0.14.0` uses the official consolidated Apple XCFrameworks and does not require
+a separate iOS `GemmaModelConstraintProvider` target. Source-built Apple
+releases may still require companion XCFrameworks when the primary runtime
+links against them.
 
 ## Consumer Contract
 

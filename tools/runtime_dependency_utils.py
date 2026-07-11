@@ -11,6 +11,8 @@ DT_NULL = 0
 DT_NEEDED = 1
 DT_STRTAB = 5
 DT_STRSZ = 10
+DT_FLAGS_1 = 0x6FFFFFFB
+DF_1_GLOBAL = 0x2
 
 ANDROID_SYSTEM_LIBRARIES = {
     "libandroid.so",
@@ -114,6 +116,45 @@ def elf_needed_libraries(path: Path) -> list[str]:
             raise ValueError(f"{path} has a DT_NEEDED entry past DT_STRSZ")
         names.append(data[start:end].decode("utf-8"))
     return names
+
+
+def elf_has_global_flag(path: Path) -> bool:
+    data = path.read_bytes()
+    if len(data) < 64 or not data.startswith(ELF_MAGIC):
+        return False
+    if data[4] != 2:
+        raise ValueError(f"{path} is not a 64-bit ELF file")
+    if data[5] == 1:
+        endian = "<"
+    elif data[5] == 2:
+        endian = ">"
+    else:
+        raise ValueError(f"{path} has an unknown ELF endianness")
+
+    header = struct.unpack_from(endian + "16sHHIQQQIHHHHHH", data, 0)
+    program_header_offset = header[5]
+    program_header_size = header[9]
+    program_header_count = header[10]
+
+    for index in range(program_header_count):
+        offset = program_header_offset + index * program_header_size
+        fields = struct.unpack_from(endian + "IIQQQQQQ", data, offset)
+        if fields[0] != PT_DYNAMIC:
+            continue
+        dynamic_offset = fields[2]
+        dynamic_size = fields[5]
+        for entry_offset in range(
+            dynamic_offset,
+            dynamic_offset + dynamic_size,
+            16,
+        ):
+            tag, value = struct.unpack_from(endian + "qQ", data, entry_offset)
+            if tag == DT_NULL:
+                return False
+            if tag == DT_FLAGS_1:
+                return value & DF_1_GLOBAL != 0
+        return False
+    return False
 
 
 def elf_load_alignments(path: Path) -> list[int]:

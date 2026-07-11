@@ -45,12 +45,13 @@ targets, such as `GemmaModelConstraintProvider`, when the primary runtime links
 against them.
 
 The Apple LiteRT-LM SPM path must account for the architecture coverage of the
-native payload. Upstream `v0.13.1` publishes universal Apple XCFrameworks;
-upstream `v0.14.0` publishes no Apple XCFramework archives, so this repository
-source-builds Apple runtimes and companion targets. Keep native-assets runtime
-archives as the source of truth, and only wire SPM dependencies in downstream
-packages when the required binary targets cover the selected architecture and
-deployment target.
+native payload. Upstream `v0.13.1` and `v0.14.0` publish universal Apple
+XCFrameworks. For `v0.14.0`, the official archives were added after the release
+was first published, so the packaging workflow pins their checksums and requires
+them instead of silently falling back to a different payload. Keep native-assets
+runtime archives as the source of truth, and only wire SPM dependencies in
+downstream packages when the required binary targets cover the selected
+architecture and deployment target.
 
 Initial native targets:
 

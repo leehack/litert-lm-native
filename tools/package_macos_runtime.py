@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import plistlib
 import shutil
 import subprocess
@@ -22,6 +23,16 @@ REQUIRED_PROVIDER_SYMBOLS = [
     b"LiteRtLmGemmaModelConstraintProvider_CreateConstraintFromTools",
     b"LiteRtLmGemmaModelConstraintProvider_Destroy",
 ]
+
+MACOS_GPU_SYMBOLS = (
+    b"LiteRtAcceleratorImpl",
+    b"LiteRtTopKMetalSampler_Create_Static",
+    b"LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static",
+)
+
+EXPECTED_OFFICIAL_ARCHIVE_SHA256 = {
+    "v0.14.0": "450615483509aaa6d34b321fdc6862e41a224b674468ab10aff64ebe113d21b7",
+}
 
 LITERTLM_LIBRARY = "libLiteRtLm.dylib"
 CLITERTLM_MAC_LIBRARY = "libCLiteRTLM_mac.dylib"
@@ -78,7 +89,11 @@ def validate_reexport_symbols(output: Path, reexport_name: bytes) -> None:
 
 def validate_upstream_symbols(output: Path, upstream_tag: str) -> None:
     data = output.read_bytes()
-    required_symbols = required_c_api_symbols(upstream_tag) + REQUIRED_PROVIDER_SYMBOLS
+    required_symbols = (
+        required_c_api_symbols(upstream_tag)
+        + REQUIRED_PROVIDER_SYMBOLS
+        + list(MACOS_GPU_SYMBOLS)
+    )
     missing = [
         symbol.decode("ascii")
         for symbol in required_symbols
@@ -106,6 +121,22 @@ def validate_source_built_symbols(output: Path, upstream_tag: str) -> None:
             + ", ".join(missing)
         )
     print(f"Validated source-built LiteRtLm macOS symbols in {output}", flush=True)
+
+
+def validate_official_archive_checksum(archive: Path, upstream_tag: str) -> None:
+    expected = EXPECTED_OFFICIAL_ARCHIVE_SHA256.get(upstream_tag)
+    if expected is None:
+        return
+    digest = hashlib.sha256()
+    with archive.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    actual = digest.hexdigest()
+    if actual != expected:
+        raise RuntimeError(
+            f"Official macOS XCFramework checksum mismatch for {upstream_tag}: "
+            f"expected {expected}, got {actual}"
+        )
 
 
 def discover_macos_slices(extracted_root: Path) -> list[dict]:
@@ -334,8 +365,17 @@ def package_macos_runtime(
     archive: Path,
     clean: bool,
     upstream_tag: str,
+    require_official: bool = False,
 ) -> list[Path]:
+    official_required = (
+        require_official or upstream_tag in EXPECTED_OFFICIAL_ARCHIVE_SHA256
+    )
     if not archive.is_file():
+        if official_required:
+            raise RuntimeError(
+                "Missing required official upstream macOS XCFramework archive: "
+                f"{archive}"
+            )
         print(
             f"Missing upstream macOS xcframework archive: {archive}; "
             "using source-built LiteRtLm dylibs",
@@ -349,6 +389,7 @@ def package_macos_runtime(
         )
 
     with tempfile.TemporaryDirectory(prefix="litert-lm-native-macos-") as temp:
+        validate_official_archive_checksum(archive, upstream_tag)
         temp_dir = Path(temp)
         with zipfile.ZipFile(archive) as zip_file:
             zip_file.extractall(temp_dir)
@@ -381,6 +422,14 @@ def main() -> int:
         ),
     )
     parser.add_argument("--clean", action="store_true")
+    parser.add_argument(
+        "--require-official",
+        action="store_true",
+        help=(
+            "Fail instead of using source-built dylibs when the official "
+            "macOS XCFramework is unavailable."
+        ),
+    )
     args = parser.parse_args()
 
     archive = args.archive or (
@@ -390,6 +439,7 @@ def main() -> int:
         archive.resolve(),
         clean=args.clean,
         upstream_tag=args.upstream_tag,
+        require_official=args.require_official,
     )
     print(f"Packaged {len(staged)} macOS LiteRT-LM runtime files")
     return 0

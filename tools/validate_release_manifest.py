@@ -27,10 +27,6 @@ REQUIRED_SPM_XCFRAMEWORKS = [
     "litert-lm-native-apple-LiteRtLm-xcframework-{tag}.zip",
 ]
 
-V0_14_REQUIRED_SPM_XCFRAMEWORKS = [
-    "litert-lm-native-apple-GemmaModelConstraintProvider-xcframework-{tag}.zip",
-]
-
 BASE_REQUIRED_RELEASE_ASSETS = [
     "manifest.json",
     "SHA256SUMS",
@@ -90,8 +86,6 @@ def main() -> int:
             ]
         )
     required_spm_xcframeworks = list(REQUIRED_SPM_XCFRAMEWORKS)
-    if is_at_least(args.upstream_tag, (0, 14, 0)):
-        required_spm_xcframeworks.extend(V0_14_REQUIRED_SPM_XCFRAMEWORKS)
     required.extend(
         f"dist/spm/{release_tag}/{asset.format(tag=release_tag)}"
         for asset in required_spm_xcframeworks

@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from runtime_dependency_utils import (
+    elf_has_global_flag,
     elf_load_alignments,
     elf_needed_libraries,
     is_elf,
@@ -72,6 +73,15 @@ def validate_elf_dependencies(root: Path) -> int:
                 errors.append(
                     f"{library.relative_to(root).as_posix()} has Android LOAD "
                     f"alignment below 16 KB: {formatted}"
+                )
+            if (
+                library.name == "libLiteRtLm.so"
+                and not elf_has_global_flag(library)
+            ):
+                errors.append(
+                    f"{library.relative_to(root).as_posix()} is missing the "
+                    "ELF DF_1_GLOBAL flag required by dlopened LiteRT GPU "
+                    "sampler plugins."
                 )
 
     if errors:
@@ -186,9 +196,8 @@ def allows_unresolved_macos_provider_symbols(path: Path, root: Path) -> bool:
         relative = path.relative_to(root)
     except ValueError:
         return False
-    # Upstream v0.14.0 only provides a macOS arm64 Gemma provider dylib.
-    # The source-built x64 LiteRtLm dylib leaves those optional symbols as
-    # dynamic lookups and does not link a provider install name.
+    # The source-built v0.14.0 x64 LiteRtLm dylib leaves these optional symbols
+    # as dynamic lookups and does not link a provider install name.
     return relative.parts == ("bin", "macos", "x64", "libLiteRtLm.dylib")
 
 
