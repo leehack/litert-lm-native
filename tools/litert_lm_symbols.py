@@ -32,7 +32,14 @@ V0_14_C_API_SYMBOLS = [
     b"litert_lm_conversation_render_preface_to_string",
 ]
 
+V0_15_C_API_SYMBOLS = [
+    b"litert_lm_stream_chunk_get_text",
+    b"litert_lm_stream_chunk_is_final",
+    b"litert_lm_stream_chunk_get_error",
+]
+
 BRIDGE_SYMBOLS = [
+    b"stream_proxy_callback_abi_version",
     b"stream_proxy_load_global",
     b"stream_proxy_create",
     b"stream_proxy_delete",
@@ -54,8 +61,14 @@ def is_at_least(tag: str, version: tuple[int, int, int]) -> bool:
     return parsed >= version
 
 
+def uses_stream_chunk_api(upstream_tag: str) -> bool:
+    return is_at_least(upstream_tag, (0, 15, 0))
+
+
 def required_c_api_symbols(upstream_tag: str) -> list[bytes]:
     symbols = list(BASE_C_API_SYMBOLS)
     if is_at_least(upstream_tag, (0, 14, 0)):
         symbols.extend(V0_14_C_API_SYMBOLS)
+    if uses_stream_chunk_api(upstream_tag):
+        symbols.extend(V0_15_C_API_SYMBOLS)
     return symbols

@@ -10,6 +10,42 @@ import package_macos_runtime
 
 
 class PackageMacosRuntimeTest(unittest.TestCase):
+    def test_v015_wrapper_enables_stream_chunk_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_dir = Path(temp)
+            with patch.object(package_macos_runtime, "run") as run:
+                with patch.object(
+                    package_macos_runtime,
+                    "validate_exported_symbols",
+                ):
+                    package_macos_runtime.build_wrapper(
+                        temp_dir / "libCLiteRTLM_mac.dylib",
+                        temp_dir,
+                        ["arm64"],
+                        "v0.15.0",
+                    )
+
+            command = run.call_args.args[0]
+            self.assertIn("-DLITERT_LM_STREAM_CHUNK_API=1", command)
+
+    def test_v014_wrapper_keeps_legacy_callback_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_dir = Path(temp)
+            with patch.object(package_macos_runtime, "run") as run:
+                with patch.object(
+                    package_macos_runtime,
+                    "validate_exported_symbols",
+                ):
+                    package_macos_runtime.build_wrapper(
+                        temp_dir / "libCLiteRTLM_mac.dylib",
+                        temp_dir,
+                        ["arm64"],
+                        "v0.14.0",
+                    )
+
+            command = run.call_args.args[0]
+            self.assertNotIn("-DLITERT_LM_STREAM_CHUNK_API=1", command)
+
     def test_pinned_tag_rejects_missing_official_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             archive = Path(temp) / "missing.zip"

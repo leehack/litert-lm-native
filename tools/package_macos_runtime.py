@@ -10,7 +10,11 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from litert_lm_symbols import BRIDGE_SYMBOLS, required_c_api_symbols
+from litert_lm_symbols import (
+    BRIDGE_SYMBOLS,
+    required_c_api_symbols,
+    uses_stream_chunk_api,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
@@ -222,31 +226,39 @@ def create_universal_upstream(
     return upstream
 
 
-def build_wrapper(upstream: Path, work_dir: Path, target_arches: list[str]) -> Path:
+def build_wrapper(
+    upstream: Path,
+    work_dir: Path,
+    target_arches: list[str],
+    upstream_tag: str,
+) -> Path:
     output = work_dir / LITERTLM_LIBRARY
     arch_args: list[str] = []
     for target_arch in target_arches:
         arch_args.extend(["-arch", target_arch])
+    compile_defines = []
+    if uses_stream_chunk_api(upstream_tag):
+        compile_defines.append("-DLITERT_LM_STREAM_CHUNK_API=1")
 
-    run(
-        [
-            "xcrun",
-            "clang",
-            "-dynamiclib",
-            "-O2",
-            "-std=c11",
-            "-fvisibility=hidden",
-            *arch_args,
-            f"-mmacosx-version-min={DEFAULT_MACOS_MINIMUM_OS}",
-            "-install_name",
-            LITERTLM_INSTALL_NAME,
-            "-Wl,-rpath,@loader_path",
-            "-Wl,-reexport_library," + str(upstream),
-            "-o",
-            str(output),
-            str(BRIDGE_SOURCE),
-        ]
-    )
+    command = [
+        "xcrun",
+        "clang",
+        "-dynamiclib",
+        "-O2",
+        "-std=c11",
+        "-fvisibility=hidden",
+        *arch_args,
+        f"-mmacosx-version-min={DEFAULT_MACOS_MINIMUM_OS}",
+        "-install_name",
+        LITERTLM_INSTALL_NAME,
+        "-Wl,-rpath,@loader_path",
+        "-Wl,-reexport_library," + str(upstream),
+        *compile_defines,
+        "-o",
+        str(output),
+        str(BRIDGE_SOURCE),
+    ]
+    run(command)
     validate_exported_symbols(output)
     return output
 
@@ -396,7 +408,12 @@ def package_macos_runtime(
         specs = discover_macos_slices(temp_dir)
         upstream = create_universal_upstream(specs, temp_dir, upstream_tag)
         target_arches = [RUNTIME_ARCH_TO_MACHO_ARCH[spec["arch"]] for spec in specs]
-        wrapper = build_wrapper(upstream, temp_dir, target_arches)
+        wrapper = build_wrapper(
+            upstream,
+            temp_dir,
+            target_arches,
+            upstream_tag,
+        )
         if clean:
             for arch in MACOS_ARCH_ORDER:
                 target_dir = BIN_DIR / "macos" / arch

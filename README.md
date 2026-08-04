@@ -156,8 +156,11 @@ on Windows to avoid Bazel's Windows package-path parser. The workflow does not
 edit upstream LiteRT-LM source files in the repository.
 LiteRtLmBridge symbols are embedded into the same runtime library surface; no
 standalone bridge runtime artifact is part of the release contract. The bridge
-currently exports the `stream_proxy_*` compatibility symbols used by
-asynchronous callback loaders.
+exports the `stream_proxy_*` compatibility symbols used by asynchronous
+callback loaders. For LiteRT-LM 0.15 and newer, it translates upstream opaque
+stream chunks back to the stable text/final/error callback consumed by existing
+FFI clients. `stream_proxy_callback_abi_version` lets consumers reject an
+incompatible bridge before starting an asynchronous callback.
 
 Apple SPM consumers should depend on the release's direct
 `litert-lm-native-apple-*-xcframework-<tag>.zip` assets. The `LiteRtLm`

@@ -1,9 +1,18 @@
 package(default_visibility = ["//visibility:public"])
 
+config_setting(
+    name = "stream_chunk_api",
+    define_values = {"litert_lm_stream_chunk_api": "true"},
+)
+
 cc_library(
     name = "litert_lm_bridge",
     srcs = ["litert_lm_bridge.c"],
     alwayslink = True,
+    defines = select({
+        ":stream_chunk_api": ["LITERT_LM_STREAM_CHUNK_API=1"],
+        "//conditions:default": [],
+    }),
     linkopts = select({
         "@platforms//os:android": ["-ldl"],
         "@platforms//os:linux": ["-ldl"],
