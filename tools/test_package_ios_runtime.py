@@ -10,6 +10,42 @@ import package_ios_runtime
 
 
 class PackageIosRuntimeTest(unittest.TestCase):
+    def test_v015_wrapper_enables_stream_chunk_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_dir = Path(temp)
+            with patch.object(package_ios_runtime, "run") as run:
+                with patch.object(package_ios_runtime, "validate_bridge_symbols"):
+                    package_ios_runtime.build_wrapper(
+                        {
+                            "sdk": "iphoneos",
+                            "target_arch": "arm64",
+                        },
+                        temp_dir,
+                        temp_dir / "CLiteRTLM",
+                        "v0.15.0",
+                    )
+
+            command = run.call_args.args[0]
+            self.assertIn("-DLITERT_LM_STREAM_CHUNK_API=1", command)
+
+    def test_v014_wrapper_keeps_legacy_callback_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_dir = Path(temp)
+            with patch.object(package_ios_runtime, "run") as run:
+                with patch.object(package_ios_runtime, "validate_bridge_symbols"):
+                    package_ios_runtime.build_wrapper(
+                        {
+                            "sdk": "iphoneos",
+                            "target_arch": "arm64",
+                        },
+                        temp_dir,
+                        temp_dir / "CLiteRTLM",
+                        "v0.14.0",
+                    )
+
+            command = run.call_args.args[0]
+            self.assertNotIn("-DLITERT_LM_STREAM_CHUNK_API=1", command)
+
     def test_pinned_tag_rejects_missing_official_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             archive = Path(temp) / "missing.zip"

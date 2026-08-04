@@ -11,7 +11,11 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from litert_lm_symbols import BRIDGE_SYMBOLS, required_c_api_symbols
+from litert_lm_symbols import (
+    BRIDGE_SYMBOLS,
+    required_c_api_symbols,
+    uses_stream_chunk_api,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
@@ -259,9 +263,17 @@ def min_version_flag(sdk: str) -> str:
     return f"-mios-simulator-version-min={DEFAULT_IOS_MINIMUM_OS}"
 
 
-def build_wrapper(spec: dict, framework_dir: Path, upstream: Path) -> Path:
+def build_wrapper(
+    spec: dict,
+    framework_dir: Path,
+    upstream: Path,
+    upstream_tag: str,
+) -> Path:
     output = framework_dir / "LiteRtLm"
-    run([
+    compile_defines = []
+    if uses_stream_chunk_api(upstream_tag):
+        compile_defines.append("-DLITERT_LM_STREAM_CHUNK_API=1")
+    command = [
         "xcrun",
         "--sdk",
         spec["sdk"],
@@ -276,10 +288,12 @@ def build_wrapper(spec: dict, framework_dir: Path, upstream: Path) -> Path:
         "-install_name",
         LITERTLM_INSTALL_NAME,
         "-Wl,-reexport_library," + str(upstream),
+        *compile_defines,
         "-o",
         str(output),
         str(BRIDGE_SOURCE),
-    ])
+    ]
+    run(command)
     validate_bridge_symbols(output, CLITERTLM_REEXPORT_NAME)
     return output
 
@@ -356,7 +370,12 @@ def stage_slice(spec: dict, clean: bool, upstream_tag: str) -> Path:
 
     wrapper_framework_dir = target_dir / "LiteRtLm.framework"
     wrapper_framework_dir.mkdir(parents=True, exist_ok=True)
-    output = build_wrapper(spec, wrapper_framework_dir, upstream)
+    output = build_wrapper(
+        spec,
+        wrapper_framework_dir,
+        upstream,
+        upstream_tag,
+    )
 
     write_framework_info_plist(
         wrapper_framework_dir,

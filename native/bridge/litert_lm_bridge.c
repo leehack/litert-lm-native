@@ -1,10 +1,14 @@
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 // LiteRtLmBridge hosts downstream FFI bridge helpers. The stream_proxy_* exports
-// are the current streaming callback ABI and stay stable for compatibility.
+// preserve the legacy four-field callback ABI used by downstream FFI clients.
+// LiteRT-LM 0.15 changed its upstream callback to an opaque stream chunk, so
+// runtime builds and wrappers for 0.15+ define LITERT_LM_STREAM_CHUNK_API and
+// translate that chunk back to the stable downstream callback here.
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -14,14 +18,39 @@
 #define LITERT_LM_BRIDGE_EXPORT __attribute__((visibility("default")))
 #endif
 
-typedef void (*stream_proxy_callback_t)(
+LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_callback_abi_version(void) {
+#if defined(LITERT_LM_STREAM_CHUNK_API)
+  return 2;
+#else
+  return 1;
+#endif
+}
+
+typedef void (*stream_proxy_dart_callback_t)(
     void *callback_data,
     char *chunk,
     bool is_final,
     char *error_message);
 
+#if defined(LITERT_LM_STREAM_CHUNK_API)
+typedef struct LiteRtLmStreamChunk LiteRtLmStreamChunk;
+
+extern const char *litert_lm_stream_chunk_get_text(
+    const LiteRtLmStreamChunk *chunk);
+extern bool litert_lm_stream_chunk_is_final(
+    const LiteRtLmStreamChunk *chunk);
+extern const char *litert_lm_stream_chunk_get_error(
+    const LiteRtLmStreamChunk *chunk);
+
+typedef void (*stream_proxy_upstream_callback_t)(
+    void *callback_data,
+    const LiteRtLmStreamChunk *chunk);
+#else
+typedef stream_proxy_dart_callback_t stream_proxy_upstream_callback_t;
+#endif
+
 typedef struct stream_proxy_context {
-  stream_proxy_callback_t dart_callback;
+  stream_proxy_dart_callback_t dart_callback;
   void *dart_data;
 } stream_proxy_context_t;
 
@@ -39,6 +68,34 @@ static char *stream_proxy_copy_string(const char *value) {
   return copy;
 }
 
+#if defined(LITERT_LM_STREAM_CHUNK_API)
+static void stream_proxy_forward(
+    void *callback_data,
+    const LiteRtLmStreamChunk *stream_chunk) {
+  stream_proxy_context_t *context =
+      (stream_proxy_context_t *)callback_data;
+  if (context == NULL || context->dart_callback == NULL) {
+    return;
+  }
+
+  const char *chunk = NULL;
+  const char *error_message = NULL;
+  bool is_final = false;
+  if (stream_chunk != NULL) {
+    chunk = litert_lm_stream_chunk_get_text(stream_chunk);
+    error_message = litert_lm_stream_chunk_get_error(stream_chunk);
+    is_final = litert_lm_stream_chunk_is_final(stream_chunk);
+  }
+
+  char *chunk_copy = stream_proxy_copy_string(chunk);
+  char *error_copy = stream_proxy_copy_string(error_message);
+  context->dart_callback(
+      context->dart_data,
+      chunk_copy,
+      is_final,
+      error_copy);
+}
+#else
 static void stream_proxy_forward(
     void *callback_data,
     char *chunk,
@@ -58,6 +115,7 @@ static void stream_proxy_forward(
       is_final,
       error_copy);
 }
+#endif
 
 LITERT_LM_BRIDGE_EXPORT void *stream_proxy_load_global(const char *path) {
   if (path == NULL) {
@@ -72,9 +130,9 @@ LITERT_LM_BRIDGE_EXPORT void *stream_proxy_load_global(const char *path) {
 }
 
 LITERT_LM_BRIDGE_EXPORT void *stream_proxy_create(
-    stream_proxy_callback_t dart_callback,
+    stream_proxy_dart_callback_t dart_callback,
     void *dart_data,
-    stream_proxy_callback_t *out_proxy_callback) {
+    stream_proxy_upstream_callback_t *out_proxy_callback) {
   if (dart_callback == NULL || out_proxy_callback == NULL) {
     return NULL;
   }

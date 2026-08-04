@@ -10,7 +10,11 @@ import tempfile
 from pathlib import Path
 
 from download_utils import download_to_path
-from litert_lm_symbols import BRIDGE_SYMBOLS, required_c_api_symbols
+from litert_lm_symbols import (
+    BRIDGE_SYMBOLS,
+    required_c_api_symbols,
+    uses_stream_chunk_api,
+)
 from runtime_dependency_utils import (
     elf_has_global_flag,
     elf_needed_libraries,
@@ -191,7 +195,13 @@ def prepare_bridge_package(source_root: Path) -> list[str]:
     return []
 
 
-def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None) -> Path:
+def build_runtime(
+    source_root: Path,
+    platform: str,
+    arch: str,
+    upstream_tag: str,
+    jobs: str | None,
+) -> Path:
     target = RUNTIME_TARGETS[(platform, arch)]
     configs = [
         f"--config={config}"
@@ -216,6 +226,8 @@ def build_runtime(source_root: Path, platform: str, arch: str, jobs: str | None)
         "--define=litert_link_capi_so=true",
         "--define=resolve_symbols_in_exec=false",
     ]
+    if uses_stream_chunk_api(upstream_tag):
+        command.append("--define=litert_lm_stream_chunk_api=true")
     if platform == "macos":
         command.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
     if platform == "ios":
@@ -431,7 +443,13 @@ def main() -> int:
 
     if args.source_root:
         source_root = args.source_root.resolve()
-        output = build_runtime(source_root, args.platform, args.arch, args.jobs)
+        output = build_runtime(
+            source_root,
+            args.platform,
+            args.arch,
+            args.upstream_tag,
+            args.jobs,
+        )
         validate_exported_symbols(output, args.upstream_tag)
         validate_android_global_visibility(output, args.platform)
         stage_runtime(output, args.platform, args.arch)
@@ -449,7 +467,13 @@ def main() -> int:
         ignore_cleanup_errors=os.name == "nt",
     ) as tmp:
         source_root = download_upstream(args.upstream_tag, Path(tmp))
-        output = build_runtime(source_root, args.platform, args.arch, args.jobs)
+        output = build_runtime(
+            source_root,
+            args.platform,
+            args.arch,
+            args.upstream_tag,
+            args.jobs,
+        )
         validate_exported_symbols(output, args.upstream_tag)
         validate_android_global_visibility(output, args.platform)
         stage_runtime(output, args.platform, args.arch)
