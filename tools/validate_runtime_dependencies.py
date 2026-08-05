@@ -8,12 +8,14 @@ import subprocess
 from pathlib import Path
 
 from runtime_dependency_utils import (
+    elf_exported_symbols,
     elf_has_global_flag,
     elf_load_alignments,
     elf_needed_libraries,
     is_elf,
     is_system_needed,
 )
+from litert_lm_symbols import ANDROID_OPENCL_SAMPLER_SYMBOLS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANDROID_MIN_LOAD_ALIGNMENT = 0x4000
@@ -83,6 +85,15 @@ def validate_elf_dependencies(root: Path) -> int:
                     "ELF DF_1_GLOBAL flag required by dlopened LiteRT GPU "
                     "sampler plugins."
                 )
+            if library.name == "libLiteRtTopKOpenClSampler.so":
+                exported = elf_exported_symbols(library)
+                missing = sorted(set(ANDROID_OPENCL_SAMPLER_SYMBOLS) - exported)
+                if missing:
+                    errors.append(
+                        f"{library.relative_to(root).as_posix()} is missing "
+                        "required OpenCL sampler exports: "
+                        + ", ".join(missing)
+                    )
 
     if errors:
         fail(

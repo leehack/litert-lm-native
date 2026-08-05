@@ -26,6 +26,7 @@ jobs:
           python3 -m py_compile \
             tools/runtime_dependency_utils.py \
             tools/litert_lm_symbols.py \
+            tools/prebuilt_overrides.py \
             tools/fetch_upstream.py \
             tools/build_upstream_runtime.py \
             tools/package_release.py \
@@ -42,6 +43,7 @@ jobs:
             tools/test_package_macos_runtime.py \
             tools/test_litert_lm_bridge.py \
             tools/test_litert_lm_symbols.py \
+            tools/test_prebuilt_overrides.py \
             tools/test_runtime_dependency_utils.py
           python3 -m unittest discover -s tools -p 'test_*.py'
       - name: Web scaffold self-test

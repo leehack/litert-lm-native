@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from litert_lm_symbols import is_at_least
+from prebuilt_overrides import prebuilt_override_manifest
 from validate_runtime_artifacts import required_runtime_artifacts
 
 
@@ -64,6 +65,13 @@ def main() -> int:
         raise SystemExit(
             "Release manifest upstream tag mismatch: "
             f"expected {args.upstream_tag}, got {actual}"
+        )
+    expected_overrides = prebuilt_override_manifest(args.upstream_tag)
+    if upstream.get("prebuiltOverrides", []) != expected_overrides:
+        raise SystemExit(
+            "Release manifest prebuilt override provenance mismatch: "
+            f"expected {expected_overrides}, "
+            f"got {upstream.get('prebuiltOverrides')}"
         )
     release = manifest.get("release", {})
     if not isinstance(release, dict) or release.get("tag") != release_tag:

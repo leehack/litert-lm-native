@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import shutil
 import tarfile
 import tempfile
 from pathlib import Path
 
 from download_utils import download_to_path
+from prebuilt_overrides import (
+    UPSTREAM_MEDIA_BASE_URL,
+    PrebuiltOverride,
+    prebuilt_overrides,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
@@ -71,6 +77,56 @@ def copy_prebuilts(source_root: Path, clean: bool) -> int:
     return copied
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def apply_prebuilt_override(override: PrebuiltOverride) -> None:
+    target = BIN_DIR / override.platform / override.arch / override.filename
+    staged = target.with_name(f"{target.name}.override")
+    staged.unlink(missing_ok=True)
+    url = (
+        f"{UPSTREAM_MEDIA_BASE_URL}/{override.source_commit}/"
+        f"{override.source_path}"
+    )
+    try:
+        download_to_path(
+            url,
+            staged,
+            headers={"User-Agent": "litert-lm-native-prebuilt-override"},
+            label=(
+                f"{override.source_path} at "
+                f"{override.source_commit}"
+            ),
+        )
+        actual = sha256_file(staged)
+        if actual != override.sha256:
+            raise RuntimeError(
+                f"Prebuilt override checksum mismatch for {override.source_path}: "
+                f"expected {override.sha256}, got {actual}"
+            )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        staged.replace(target)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
+def apply_prebuilt_overrides(upstream_tag: str) -> int:
+    overrides = prebuilt_overrides(upstream_tag)
+    for override in overrides:
+        print(
+            "Applying pinned prebuilt override: "
+            f"{override.source_path} @ {override.source_commit}",
+            flush=True,
+        )
+        apply_prebuilt_override(override)
+    return len(overrides)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Copy upstream LiteRT-LM prebuilt runtime libs into bin/."
@@ -93,7 +149,12 @@ def main() -> int:
             source_root = extract_source(archive, temp_dir / "src")
             copied = copy_prebuilts(source_root, clean=args.clean)
 
-    print(f"Copied {copied} upstream prebuilt libraries", flush=True)
+    overridden = apply_prebuilt_overrides(args.upstream_tag)
+    print(
+        f"Copied {copied} upstream prebuilt libraries; "
+        f"applied {overridden} pinned overrides",
+        flush=True,
+    )
     return 0
 
 

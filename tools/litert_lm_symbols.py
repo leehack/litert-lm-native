@@ -46,6 +46,16 @@ BRIDGE_SYMBOLS = [
     b"stream_proxy_free_string",
 ]
 
+ANDROID_OPENCL_SAMPLER_SYMBOLS = [
+    "LiteRtTopKOpenClSampler_Create",
+    "LiteRtTopKOpenClSampler_Destroy",
+    "LiteRtTopKOpenClSampler_SampleToIdAndScoreBuffer",
+    "LiteRtTopKOpenClSampler_UpdateConfig",
+    "LiteRtTopKOpenClSampler_CanHandleInput",
+    "LiteRtTopKOpenClSampler_HandlesInput",
+    "LiteRtTopKOpenClSampler_SetInferenceFuncAndInputTensors",
+]
+
 
 def _version_tuple(tag: str) -> tuple[int, int, int] | None:
     match = re.search(r"v?(\d+)\.(\d+)\.(\d+)", tag)

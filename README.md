@@ -115,6 +115,14 @@ python3 tools/validate_artifacts.py
   rules change and an existing release no longer matches, the scheduled workflow
   reports it but does not overwrite the tag automatically.
 
+For upstream `v0.15.0`, packaging replaces only the Android arm64/x64
+`libLiteRtTopKOpenClSampler.so` files with checksum-pinned copies from upstream
+commit `8bee4dddc3794958b4bdd8a3a4ba75bcb71f6fbb`. The tagged binaries omit three
+symbols required by `sampler_factory` and otherwise fall back to CPU sampling.
+The release manifest records the exact override source commit, paths, and
+checksums, and packaging rejects sampler libraries that do not expose the full
+seven-symbol plugin contract.
+
 ## Native Version Management
 
 The published native release tag is the version contract consumed by downstream

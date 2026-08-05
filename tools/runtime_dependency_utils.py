@@ -7,6 +7,10 @@ from pathlib import Path
 ELF_MAGIC = b"\x7fELF"
 PT_LOAD = 1
 PT_DYNAMIC = 2
+SHT_DYNSYM = 11
+SHN_UNDEF = 0
+STB_GLOBAL = 1
+STB_WEAK = 2
 DT_NULL = 0
 DT_NEEDED = 1
 DT_STRTAB = 5
@@ -155,6 +159,75 @@ def elf_has_global_flag(path: Path) -> bool:
                 return value & DF_1_GLOBAL != 0
         return False
     return False
+
+
+def elf_exported_symbols(path: Path) -> set[str]:
+    data = path.read_bytes()
+    if len(data) < 64 or not data.startswith(ELF_MAGIC):
+        return set()
+    if data[4] != 2:
+        raise ValueError(f"{path} is not a 64-bit ELF file")
+    if data[5] == 1:
+        endian = "<"
+    elif data[5] == 2:
+        endian = ">"
+    else:
+        raise ValueError(f"{path} has an unknown ELF endianness")
+
+    header = struct.unpack_from(endian + "16sHHIQQQIHHHHHH", data, 0)
+    section_header_offset = header[6]
+    section_header_size = header[11]
+    section_header_count = header[12]
+    sections: list[tuple[int, int, int, int, int]] = []
+    for index in range(section_header_count):
+        offset = section_header_offset + index * section_header_size
+        fields = struct.unpack_from(endian + "IIQQQQIIQQ", data, offset)
+        sections.append(
+            (
+                fields[1],
+                fields[4],
+                fields[5],
+                fields[6],
+                fields[9],
+            )
+        )
+
+    symbols: set[str] = set()
+    for (
+        section_type,
+        section_offset,
+        section_size,
+        string_index,
+        entry_size,
+    ) in sections:
+        if section_type != SHT_DYNSYM or entry_size == 0:
+            continue
+        if string_index >= len(sections):
+            raise ValueError(
+                f"{path} has a dynamic symbol table with an invalid string table"
+            )
+        _, string_offset, string_size, _, _ = sections[string_index]
+        for offset in range(
+            section_offset,
+            section_offset + section_size,
+            entry_size,
+        ):
+            name_offset, info, _, section_index, _, _ = struct.unpack_from(
+                endian + "IBBHQQ", data, offset
+            )
+            binding = info >> 4
+            if (
+                name_offset == 0
+                or section_index == SHN_UNDEF
+                or binding not in (STB_GLOBAL, STB_WEAK)
+            ):
+                continue
+            start = string_offset + name_offset
+            end = data.find(b"\0", start, string_offset + string_size)
+            if end < 0:
+                raise ValueError(f"{path} has an unterminated dynamic symbol name")
+            symbols.add(data[start:end].decode("utf-8"))
+    return symbols
 
 
 def elf_load_alignments(path: Path) -> list[int]:

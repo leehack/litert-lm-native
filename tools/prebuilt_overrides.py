@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class PrebuiltOverride:
+    upstream_target: str
+    platform: str
+    arch: str
+    filename: str
+    source_commit: str
+    sha256: str
+
+    @property
+    def source_path(self) -> str:
+        return f"prebuilt/{self.upstream_target}/{self.filename}"
+
+    @property
+    def target_path(self) -> str:
+        return f"bin/{self.platform}/{self.arch}/{self.filename}"
+
+
+UPSTREAM_REPOSITORY = "google-ai-edge/LiteRT-LM"
+UPSTREAM_MEDIA_BASE_URL = (
+    "https://media.githubusercontent.com/media/google-ai-edge/LiteRT-LM"
+)
+
+V0_15_ANDROID_SAMPLER_FIX_COMMIT = (
+    "8bee4dddc3794958b4bdd8a3a4ba75bcb71f6fbb"
+)
+
+PREBUILT_OVERRIDES: dict[str, tuple[PrebuiltOverride, ...]] = {
+    "v0.15.0": (
+        PrebuiltOverride(
+            upstream_target="android_arm64",
+            platform="android",
+            arch="arm64",
+            filename="libLiteRtTopKOpenClSampler.so",
+            source_commit=V0_15_ANDROID_SAMPLER_FIX_COMMIT,
+            sha256=(
+                "4404dc68786460602685cab62ddfa29035e9cfc38bb4550dec15abaaa1302a82"
+            ),
+        ),
+        PrebuiltOverride(
+            upstream_target="android_x86_64",
+            platform="android",
+            arch="x64",
+            filename="libLiteRtTopKOpenClSampler.so",
+            source_commit=V0_15_ANDROID_SAMPLER_FIX_COMMIT,
+            sha256=(
+                "747ca5ed6a175fb4c2854ccee1d6ad97f11fe14d9e0d2b0c1710e1435376d51e"
+            ),
+        ),
+    ),
+}
+
+
+def prebuilt_overrides(upstream_tag: str | None) -> tuple[PrebuiltOverride, ...]:
+    if upstream_tag is None:
+        return ()
+    return PREBUILT_OVERRIDES.get(upstream_tag, ())
+
+
+def prebuilt_override_manifest(upstream_tag: str | None) -> list[dict[str, str]]:
+    return [
+        {
+            "sourceRepository": UPSTREAM_REPOSITORY,
+            "sourceCommit": override.source_commit,
+            "sourcePath": override.source_path,
+            "targetPath": override.target_path,
+            "sha256": override.sha256,
+        }
+        for override in prebuilt_overrides(upstream_tag)
+    ]
