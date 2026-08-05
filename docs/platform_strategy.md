@@ -12,6 +12,9 @@ The release automation publishes these runtime artifact groups:
   with LiteRtLmBridge symbols embedded by the repo-owned `native/bridge` Bazel
   package for downstream FFI streaming on source-built platforms
 - upstream `prebuilt/` companion libraries copied from the tagged source archive
+- narrowly scoped, checksum-pinned prebuilt corrections when a released
+  upstream binary is known to violate its runtime plugin contract; override
+  provenance is recorded in `manifest.json`
 - official upstream release assets, including Apple `CLiteRTLM*.xcframework`
   archives when Google publishes them
 - iOS framework-style runtime wrappers derived from official

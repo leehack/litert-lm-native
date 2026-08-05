@@ -6,6 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from prebuilt_overrides import prebuilt_override_manifest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 WEB_DIST_DIR = REPO_ROOT / "web" / "dist"
@@ -103,6 +105,7 @@ def build_manifest(upstream_tag: str | None, release_tag: str | None) -> dict:
             "repository": "google-ai-edge/LiteRT-LM",
             "tag": upstream_tag,
             "commit": None,
+            "prebuiltOverrides": prebuilt_override_manifest(upstream_tag),
         },
         "release": {
             "tag": release_tag,
