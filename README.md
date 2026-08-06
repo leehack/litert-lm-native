@@ -115,13 +115,17 @@ python3 tools/validate_artifacts.py
   rules change and an existing release no longer matches, the scheduled workflow
   reports it but does not overwrite the tag automatically.
 
-For upstream `v0.15.0`, packaging replaces only the Android arm64/x64
-`libLiteRtTopKOpenClSampler.so` files with checksum-pinned copies from upstream
-commit `8bee4dddc3794958b4bdd8a3a4ba75bcb71f6fbb`. The tagged binaries omit three
-symbols required by `sampler_factory` and otherwise fall back to CPU sampling.
-The release manifest records the exact override source commit, paths, and
-checksums, and packaging rejects sampler libraries that do not expose the full
-seven-symbol plugin contract.
+For upstream `v0.15.0`, packaging applies two checksum-pinned Android arm64/x64
+corrections. `libLiteRtTopKOpenClSampler.so` comes from upstream commit
+`8bee4dddc3794958b4bdd8a3a4ba75bcb71f6fbb` because the tagged binaries omit
+three symbols required by `sampler_factory` and otherwise fall back to CPU
+sampling. `libwebgpu_dawn.so` comes from the upstream `v0.14.0` commit
+`f73637c57f0940b53da184e0d5adfc52a4e55eef` because the tagged v0.15 Dawn
+binary produced `VK_ERROR_DEVICE_LOST` on a Mali-G715 during generation, while
+the exact v0.14 binary completed the same workload. The release manifest
+records the exact override source commits, paths, and checksums, and packaging
+rejects sampler libraries that do not expose the full seven-symbol plugin
+contract.
 
 ## Native Version Management
 
