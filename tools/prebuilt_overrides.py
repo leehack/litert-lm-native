@@ -29,6 +29,9 @@ UPSTREAM_MEDIA_BASE_URL = (
 V0_15_ANDROID_SAMPLER_FIX_COMMIT = (
     "8bee4dddc3794958b4bdd8a3a4ba75bcb71f6fbb"
 )
+V0_15_ANDROID_DAWN_ROLLBACK_COMMIT = (
+    "f73637c57f0940b53da184e0d5adfc52a4e55eef"
+)
 
 PREBUILT_OVERRIDES: dict[str, tuple[PrebuiltOverride, ...]] = {
     "v0.15.0": (
@@ -50,6 +53,26 @@ PREBUILT_OVERRIDES: dict[str, tuple[PrebuiltOverride, ...]] = {
             source_commit=V0_15_ANDROID_SAMPLER_FIX_COMMIT,
             sha256=(
                 "747ca5ed6a175fb4c2854ccee1d6ad97f11fe14d9e0d2b0c1710e1435376d51e"
+            ),
+        ),
+        PrebuiltOverride(
+            upstream_target="android_arm64",
+            platform="android",
+            arch="arm64",
+            filename="libwebgpu_dawn.so",
+            source_commit=V0_15_ANDROID_DAWN_ROLLBACK_COMMIT,
+            sha256=(
+                "7282aacdb076ce89f0c9d93107a145b991b99eb1dfbd5b5746dd0d99466ab3c3"
+            ),
+        ),
+        PrebuiltOverride(
+            upstream_target="android_x86_64",
+            platform="android",
+            arch="x64",
+            filename="libwebgpu_dawn.so",
+            source_commit=V0_15_ANDROID_DAWN_ROLLBACK_COMMIT,
+            sha256=(
+                "fcfb9a0b902f7dd3f81f01295f381c10b22a2d5774f95ee0db813f284a0ab087"
             ),
         ),
     ),
