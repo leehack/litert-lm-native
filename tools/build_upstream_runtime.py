@@ -17,6 +17,7 @@ from litert_lm_symbols import (
     required_c_api_symbols,
     uses_stream_chunk_api,
 )
+from package_upstream_prebuilts import apply_prebuilt_overrides
 from runtime_dependency_utils import (
     elf_has_global_flag,
     elf_needed_libraries,
@@ -341,6 +342,20 @@ def stage_runtime_dependencies(
             queued.append(destination)
 
 
+def stage_runtime_overrides(upstream_tag: str, platform: str, arch: str) -> None:
+    overridden = apply_prebuilt_overrides(
+        upstream_tag,
+        platform=platform,
+        arch=arch,
+    )
+    if overridden:
+        print(
+            f"Applied {overridden} pinned runtime overrides for "
+            f"{platform}/{arch}",
+            flush=True,
+        )
+
+
 def stage_windows_runtime_dependencies(source_root: Path, arch: str) -> None:
     prebuilt_target = PREBUILT_TARGETS.get(("windows", arch))
     if prebuilt_target is None:
@@ -504,6 +519,7 @@ def main() -> int:
         validate_android_global_visibility(output, args.platform)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
+        stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)
         return 0
 
     tmp_parent = None
@@ -528,6 +544,7 @@ def main() -> int:
         validate_android_global_visibility(output, args.platform)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
+        stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)
     return 0
 
 

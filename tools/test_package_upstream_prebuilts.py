@@ -55,6 +55,71 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
                 b"\x7fELF materialized",
             )
 
+    def test_overrides_only_does_not_download_or_copy_upstream_source(self) -> None:
+        with patch(
+            "sys.argv",
+            [
+                "package_upstream_prebuilts.py",
+                "--upstream-tag",
+                "v0.16.0",
+                "--overrides-only",
+            ],
+        ):
+            with patch.object(
+                package_upstream_prebuilts,
+                "download_source",
+            ) as download_source:
+                with patch.object(
+                    package_upstream_prebuilts,
+                    "copy_prebuilts",
+                ) as copy_prebuilts:
+                    with patch.object(
+                        package_upstream_prebuilts,
+                        "apply_prebuilt_overrides",
+                        return_value=2,
+                    ) as apply_overrides:
+                        self.assertEqual(package_upstream_prebuilts.main(), 0)
+
+        download_source.assert_not_called()
+        copy_prebuilts.assert_not_called()
+        apply_overrides.assert_called_once_with("v0.16.0")
+
+    def test_override_application_can_be_scoped_to_one_target(self) -> None:
+        with patch.object(
+            package_upstream_prebuilts,
+            "apply_prebuilt_override",
+        ) as apply_override:
+            count = package_upstream_prebuilts.apply_prebuilt_overrides(
+                "v0.16.0",
+                platform="android",
+                arch="arm64",
+            )
+
+        self.assertEqual(count, 1)
+        self.assertEqual(apply_override.call_count, 1)
+        selected = apply_override.call_args.args[0]
+        self.assertEqual(selected.platform, "android")
+        self.assertEqual(selected.arch, "arm64")
+
+    def test_release_applies_overrides_after_runtime_artifact_merge(self) -> None:
+        workflow = (
+            package_upstream_prebuilts.REPO_ROOT
+            / ".github"
+            / "workflows"
+            / "native_release.yml"
+        ).read_text(encoding="utf-8")
+
+        initial_package = workflow.index("- name: Package upstream prebuilt libraries")
+        runtime_merge = workflow.index("- name: Add upstream runtime libraries")
+        final_overrides = workflow.index("- name: Apply pinned prebuilt overrides")
+        manifest = workflow.index("- name: Generate manifest and checksums")
+
+        self.assertLess(initial_package, runtime_merge)
+        self.assertLess(runtime_merge, final_overrides)
+        self.assertLess(final_overrides, manifest)
+        self.assertIn("--skip-overrides", workflow)
+        self.assertIn("--overrides-only", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

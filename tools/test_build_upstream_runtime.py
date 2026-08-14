@@ -32,6 +32,24 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 (output / "windows" / "x64" / "LiteRt.lib").exists()
             )
 
+    def test_runtime_override_is_filtered_to_the_target(self) -> None:
+        with patch.object(
+            build_upstream_runtime,
+            "apply_prebuilt_overrides",
+            return_value=1,
+        ) as apply_overrides:
+            build_upstream_runtime.stage_runtime_overrides(
+                "v0.16.0",
+                "android",
+                "arm64",
+            )
+
+        apply_overrides.assert_called_once_with(
+            "v0.16.0",
+            platform="android",
+            arch="arm64",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
