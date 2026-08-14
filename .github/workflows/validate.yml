@@ -26,6 +26,7 @@ jobs:
           python3 -m py_compile \
             tools/runtime_dependency_utils.py \
             tools/litert_lm_symbols.py \
+            tools/litert_lm_asr_smoke.py \
             tools/prebuilt_overrides.py \
             tools/fetch_upstream.py \
             tools/build_upstream_runtime.py \

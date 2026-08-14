@@ -11,7 +11,8 @@ from pathlib import Path
 
 from download_utils import download_to_path
 from litert_lm_symbols import (
-    BRIDGE_SYMBOLS,
+    has_asr_bridge,
+    required_bridge_symbols,
     required_c_api_symbols,
     uses_stream_chunk_api,
 )
@@ -228,6 +229,8 @@ def build_runtime(
     ]
     if uses_stream_chunk_api(upstream_tag):
         command.append("--define=litert_lm_stream_chunk_api=true")
+    if has_asr_bridge(upstream_tag):
+        command.append("--define=litert_lm_asr_api=true")
     if platform == "macos":
         command.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
     if platform == "ios":
@@ -400,7 +403,10 @@ def find_runtime_dependency(
 
 def validate_exported_symbols(output: Path, upstream_tag: str) -> None:
     data = output.read_bytes()
-    required_symbols = required_c_api_symbols(upstream_tag) + BRIDGE_SYMBOLS
+    required_symbols = (
+        required_c_api_symbols(upstream_tag)
+        + required_bridge_symbols(upstream_tag)
+    )
     missing = [
         symbol.decode("ascii")
         for symbol in required_symbols

@@ -15,6 +15,8 @@ Responsibilities:
 - Preserve upstream LiteRT-LM's C runtime ABI as the FFI boundary.
 - Embed the small LiteRtLmBridge callback helper into runtime libraries used by
   asynchronous FFI clients.
+- For LiteRT-LM 0.16+, expose the upstream C++ ASR session through a narrow,
+  versioned C bridge because the released upstream C ABI omits speech engines.
 - Package web assets around official LiteRT-LM/LiteRT.js distribution paths.
 - Publish Apple Swift Package Manager XCFramework zip assets built from the
   same bridge runtimes as the native release payload.
@@ -174,6 +176,15 @@ stream chunks back to the stable text/final/error callback consumed by existing
 FFI clients. `stream_proxy_callback_abi_version` lets consumers reject an
 incompatible bridge before starting an asynchronous callback.
 
+LiteRT-LM 0.16 source contains a stateful ASR pipeline but does not publish it
+through `c/engine.h` or its official C binaries. Source-built 0.16+ runtimes
+therefore also export `litert_lm_asr_*` bridge ABI version 1. It accepts bounded
+mono float PCM and returns confirmed/unconfirmed transcript updates with
+explicit backpressure, finish, reset, and between-window cancellation. See
+[`docs/asr_bridge.md`](docs/asr_bridge.md) for the contract and real-model
+smoke. Apple packaging intentionally keeps the source-built runtime for these
+tags; an official C-binary wrapper cannot recover omitted ASR C++ objects.
+
 Apple SPM consumers should depend on the release's direct
 `litert-lm-native-apple-*-xcframework-<tag>.zip` assets. The `LiteRtLm`
 XCFramework contains the primary iOS runtime and macOS framework wrapper.
@@ -190,6 +201,8 @@ Downstream packages should read `manifest.json`, choose a target by platform,
 architecture, runtime kind (`native` or `web`), and accelerator metadata, then
 verify checksums before bundling or loading the files.
 
-Upstream LiteRT-LM's native C ABI is the compatibility boundary. This repository
-does not add a second model wrapper ABI unless a future upstream change requires
-it; bridge helpers remain narrow FFI utilities around that runtime surface.
+Upstream LiteRT-LM's native C ABI remains the default compatibility boundary.
+Where upstream source exposes a needed engine but its released C ABI does not,
+this repository may add a narrow, independently versioned bridge after runtime
+and packaging validation. The LiteRT-LM 0.16+ ASR bridge is the first such
+exception; high-level model selection and download policy remain downstream.

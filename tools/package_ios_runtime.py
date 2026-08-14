@@ -13,6 +13,8 @@ from pathlib import Path
 
 from litert_lm_symbols import (
     BRIDGE_SYMBOLS,
+    has_asr_bridge,
+    required_bridge_symbols,
     required_c_api_symbols,
     uses_stream_chunk_api,
 )
@@ -142,7 +144,10 @@ def validate_upstream_symbols(output: Path, upstream_tag: str) -> None:
 
 def validate_source_built_symbols(output: Path, upstream_tag: str) -> None:
     data = output.read_bytes()
-    required_symbols = required_c_api_symbols(upstream_tag) + BRIDGE_SYMBOLS
+    required_symbols = (
+        required_c_api_symbols(upstream_tag)
+        + required_bridge_symbols(upstream_tag)
+    )
     missing = [
         symbol.decode("ascii")
         for symbol in required_symbols
@@ -511,6 +516,19 @@ def package_ios_runtime(
     upstream_tag: str,
     require_official: bool = False,
 ) -> list[Path]:
+    if has_asr_bridge(upstream_tag):
+        print(
+            "Using source-built iOS runtimes so the v0.16+ ASR bridge and "
+            "upstream ASR implementation remain in the packaged binary.",
+            flush=True,
+        )
+        return [
+            stage_source_built_slice(
+                spec, clean=clean, upstream_tag=upstream_tag
+            )
+            for spec in discover_source_built_ios_slices()
+        ]
+
     official_required = (
         require_official or upstream_tag in EXPECTED_OFFICIAL_ARCHIVE_SHA256
     )
