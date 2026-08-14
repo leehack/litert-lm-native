@@ -77,7 +77,11 @@ python3 tools/litert_lm_asr_smoke.py \
 
 The smoke reads WAV only as test-fixture input, converts it to float PCM in the
 runner, pushes 100 ms fragments through the exported ABI, and asserts a known
-transcript substring. Large remote models stay out of default CI.
+transcript substring. `tools/fetch_litert_lm_asr_smoke_assets.py` downloads the
+Moonshine model, tokenizer, and WAV from immutable revisions and verifies their
+SHA-256 digests. The manually dispatched native release workflow can run the
+real-model smoke on compatible host targets by setting `run_asr_smoke=true`.
+Large remote models stay out of default CI.
 
 ## TTS boundary
 

@@ -27,6 +27,11 @@ on:
         required: false
         default: all
         type: string
+      run_asr_smoke:
+        description: "Run the pinned Moonshine real-model smoke on host targets"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -122,6 +127,52 @@ jobs:
             --platform "${{ matrix.platform }}" \
             --arch "${{ matrix.arch }}" \
             --jobs "${{ matrix.jobs }}"
+
+      - name: Fetch pinned ASR smoke assets
+        if: >-
+          inputs.run_asr_smoke &&
+          ((matrix.platform == 'linux' && matrix.arch == 'x64') ||
+           (matrix.platform == 'windows' && matrix.arch == 'x64') ||
+           (matrix.platform == 'macos' && matrix.arch == 'arm64'))
+        run: python3 tools/fetch_litert_lm_asr_smoke_assets.py --output-dir asr-smoke-assets
+
+      - name: Run Linux ASR real-model smoke
+        if: inputs.run_asr_smoke && matrix.platform == 'linux' && matrix.arch == 'x64'
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/bin/linux/x64
+        run: |
+          python3 tools/litert_lm_asr_smoke.py \
+            --library bin/linux/x64/libLiteRtLm.so \
+            --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite \
+            --tokenizer asr-smoke-assets/moonshine_tokenizer.json \
+            --audio asr-smoke-assets/jfk.wav \
+            --expect country
+
+      - name: Run Windows ASR real-model smoke
+        if: inputs.run_asr_smoke && matrix.platform == 'windows' && matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $env:PATH = "$pwd\bin\windows\x64;$env:PATH"
+          python tools/litert_lm_asr_smoke.py `
+            --library bin/windows/x64/LiteRtLm.dll `
+            --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite `
+            --tokenizer asr-smoke-assets/moonshine_tokenizer.json `
+            --audio asr-smoke-assets/jfk.wav `
+            --expect country
+
+      - name: Run macOS arm64 ASR real-model smoke
+        if: >-
+          inputs.run_asr_smoke && matrix.platform == 'macos' &&
+          matrix.arch == 'arm64' && runner.arch == 'ARM64'
+        env:
+          DYLD_LIBRARY_PATH: ${{ github.workspace }}/bin/macos/arm64
+        run: |
+          python3 tools/litert_lm_asr_smoke.py \
+            --library bin/macos/arm64/libLiteRtLm.dylib \
+            --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite \
+            --tokenizer asr-smoke-assets/moonshine_tokenizer.json \
+            --audio asr-smoke-assets/jfk.wav \
+            --expect country
 
       - uses: actions/upload-artifact@v4
         with:

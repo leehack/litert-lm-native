@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import json
+import os
 import struct
 import wave
 from pathlib import Path
@@ -15,6 +16,8 @@ STATUS_CANCELLED = 7
 STATUS_NEEDS_MORE_AUDIO = 10
 STATUS_END_OF_STREAM = 11
 STATUS_WOULD_BLOCK = 12
+
+_DLL_DIRECTORY_HANDLES: list[object] = []
 
 
 class AsrConfig(ctypes.Structure):
@@ -60,6 +63,10 @@ class AsrResult(ctypes.Structure):
 
 
 def bind(library_path: Path) -> ctypes.CDLL:
+    if os.name == "nt":
+        _DLL_DIRECTORY_HANDLES.append(
+            os.add_dll_directory(str(library_path.parent))
+        )
     library = ctypes.CDLL(str(library_path))
     library.litert_lm_asr_abi_version.restype = ctypes.c_uint32
     library.litert_lm_asr_config_size.restype = ctypes.c_size_t
