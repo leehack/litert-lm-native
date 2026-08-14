@@ -10,6 +10,33 @@ import package_ios_runtime
 
 
 class PackageIosRuntimeTest(unittest.TestCase):
+    def test_source_built_slice_stages_dlopen_gpu_frameworks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target_dir = root / "bin" / "ios" / "arm64"
+            target_dir.mkdir(parents=True)
+            litertlm = target_dir / "libLiteRtLm.dylib"
+            litertlm.write_bytes(b"runtime")
+            for library_name in package_ios_runtime.IOS_DLOPEN_DEPENDENCIES:
+                (target_dir / library_name).write_bytes(b"gpu")
+
+            with patch.object(package_ios_runtime, "macho_needed_libraries", return_value=[]):
+                with patch.object(package_ios_runtime, "run"):
+                    package_ios_runtime.stage_source_built_dependency_frameworks(
+                        {"sdk": "iphoneos"},
+                        target_dir,
+                        litertlm,
+                    )
+
+            for library_name in package_ios_runtime.IOS_DLOPEN_DEPENDENCIES:
+                module_name = package_ios_runtime.module_name_for_dylib(
+                    Path(library_name)
+                )
+                self.assertEqual(
+                    (target_dir / f"{module_name}.framework" / module_name).read_bytes(),
+                    b"gpu",
+                )
+
     def test_framework_executable_is_owner_writable_and_executable(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_dir = Path(temp)

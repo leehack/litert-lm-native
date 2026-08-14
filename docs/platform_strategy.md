@@ -56,8 +56,10 @@ SPM artifacts are intentionally split by binary target. `LiteRtLm` carries the
 primary iOS runtime and macOS framework wrapper. `CLiteRTLM` is published for
 iOS re-export support, and `CLiteRTLMMac` is published for macOS re-export
 support. Source-built Apple releases can publish additional companion binary
-targets, such as `GemmaModelConstraintProvider`, when the primary runtime links
-against them.
+targets when the primary runtime links or dynamically loads them. The v0.16 iOS
+package includes `GemmaModelConstraintProvider`, `LiteRtMetalAccelerator`, and
+`LiteRtTopKMetalSampler`; the Metal modules use framework-relative loader paths
+that are compatible with App Store bundle layout.
 
 The Apple LiteRT-LM SPM path must account for the architecture coverage of the
 native payload. Upstream `v0.13.1` and `v0.14.0` publish universal Apple

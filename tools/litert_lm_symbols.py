@@ -76,6 +76,20 @@ ANDROID_OPENCL_SAMPLER_SYMBOLS = [
     "LiteRtTopKOpenClSampler_SetInferenceFuncAndInputTensors",
 ]
 
+APPLE_METAL_SAMPLER_SYMBOLS = [
+    "LiteRtTopKMetalSampler_Create",
+    "LiteRtTopKMetalSampler_Destroy",
+    "LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer",
+    "LiteRtTopKMetalSampler_UpdateConfig",
+    "LiteRtTopKMetalSampler_CanHandleInput",
+    "LiteRtTopKMetalSampler_HandlesInput",
+    "LiteRtTopKMetalSampler_SetInferenceFuncAndInputTensors",
+]
+
+APPLE_METAL_ACCELERATOR_SYMBOLS = [
+    "LiteRtAcceleratorImpl",
+]
+
 
 def _version_tuple(tag: str) -> tuple[int, int, int] | None:
     match = re.search(r"v?(\d+)\.(\d+)\.(\d+)", tag)

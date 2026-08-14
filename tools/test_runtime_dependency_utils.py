@@ -5,10 +5,17 @@ import struct
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import runtime_dependency_utils
-from litert_lm_symbols import ANDROID_OPENCL_SAMPLER_SYMBOLS
-from validate_runtime_dependencies import validate_elf_dependencies
+from litert_lm_symbols import (
+    ANDROID_OPENCL_SAMPLER_SYMBOLS,
+    APPLE_METAL_SAMPLER_SYMBOLS,
+)
+from validate_runtime_dependencies import (
+    validate_elf_dependencies,
+    validate_macho_dependencies,
+)
 
 
 def write_elf_with_flags(path: Path, flags: int | None) -> None:
@@ -196,6 +203,38 @@ class RuntimeDependencyUtilsTest(unittest.TestCase):
             write_elf_with_exports(library, ANDROID_OPENCL_SAMPLER_SYMBOLS)
 
             self.assertEqual(validate_elf_dependencies(root), 1)
+
+    def test_ios_metal_sampler_requires_complete_plugin_api(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            library = (
+                root
+                / "bin"
+                / "ios"
+                / "arm64"
+                / "LiteRtTopKMetalSampler.framework"
+                / "LiteRtTopKMetalSampler"
+            )
+            library.parent.mkdir(parents=True)
+            library.write_bytes(b"macho")
+            with patch("validate_runtime_dependencies.shutil.which", return_value="nm"):
+                with patch(
+                    "validate_runtime_dependencies.macho_needed_libraries",
+                    return_value=[],
+                ):
+                    with patch(
+                        "validate_runtime_dependencies.unresolved_dynamic_lookup_symbols",
+                        return_value=[],
+                    ):
+                        with patch(
+                            "validate_runtime_dependencies.macho_exported_symbols",
+                            return_value=set(APPLE_METAL_SAMPLER_SYMBOLS[:-1]),
+                        ):
+                            with self.assertRaisesRegex(
+                                SystemExit,
+                                "LiteRtTopKMetalSampler_SetInferenceFuncAndInputTensors",
+                            ):
+                                validate_macho_dependencies(root)
 
 
 if __name__ == "__main__":

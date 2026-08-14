@@ -15,7 +15,11 @@ from runtime_dependency_utils import (
     is_elf,
     is_system_needed,
 )
-from litert_lm_symbols import ANDROID_OPENCL_SAMPLER_SYMBOLS
+from litert_lm_symbols import (
+    ANDROID_OPENCL_SAMPLER_SYMBOLS,
+    APPLE_METAL_ACCELERATOR_SYMBOLS,
+    APPLE_METAL_SAMPLER_SYMBOLS,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANDROID_MIN_LOAD_ALIGNMENT = 0x4000
@@ -202,6 +206,25 @@ def unresolved_dynamic_lookup_symbols(path: Path) -> list[str]:
     return symbols
 
 
+def macho_exported_symbols(path: Path) -> set[str]:
+    if shutil.which("nm") is None:
+        return set()
+    result = subprocess.run(
+        ["nm", "-gU", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    symbols: set[str] = set()
+    for line in result.stdout.splitlines():
+        symbol = line.rsplit(maxsplit=1)[-1] if line.strip() else ""
+        if symbol.startswith("_"):
+            symbol = symbol[1:]
+        if symbol:
+            symbols.add(symbol)
+    return symbols
+
+
 def allows_unresolved_macos_provider_symbols(path: Path, root: Path) -> bool:
     try:
         relative = path.relative_to(root)
@@ -238,6 +261,19 @@ def validate_macho_dependencies(root: Path) -> int:
                 f"{library.relative_to(root).as_posix()} leaves required Gemma "
                 f"constraint provider symbols unresolved: {formatted}"
             )
+
+        required_exports: set[str] = set()
+        if library.name == "LiteRtMetalAccelerator":
+            required_exports.update(APPLE_METAL_ACCELERATOR_SYMBOLS)
+        elif library.name == "LiteRtTopKMetalSampler":
+            required_exports.update(APPLE_METAL_SAMPLER_SYMBOLS)
+        if required_exports:
+            missing = sorted(required_exports - macho_exported_symbols(library))
+            if missing:
+                errors.append(
+                    f"{library.relative_to(root).as_posix()} is missing required "
+                    "Metal plugin exports: " + ", ".join(missing)
+                )
 
     if errors:
         fail(

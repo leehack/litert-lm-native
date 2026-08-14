@@ -35,6 +35,10 @@ IOS_GPU_SYMBOLS = (
     b"LiteRtTopKMetalSampler_Create_Static",
     b"LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static",
 )
+IOS_DLOPEN_DEPENDENCIES = (
+    "libLiteRtMetalAccelerator.dylib",
+    "libLiteRtTopKMetalSampler.dylib",
+)
 EXPECTED_OFFICIAL_ARCHIVE_SHA256 = {
     "v0.14.0": "dddac2f6713ed65eaf01c18e115d9fec22184adf575cc7856a21387e8ba937e1",
 }
@@ -477,6 +481,7 @@ def stage_source_built_dependency_frameworks(
     target_dir: Path,
     litertlm: Path,
 ) -> None:
+    staged_library_names: set[str] = set()
     for install_name in macho_needed_libraries(litertlm):
         if is_system_macho_needed(install_name):
             continue
@@ -488,13 +493,11 @@ def stage_source_built_dependency_frameworks(
             raise RuntimeError(
                 f"{litertlm} depends on {install_name}, but {source} is missing"
             )
-        module_name = module_name_for_dylib(source)
-        framework_dir = target_dir / f"{module_name}.framework"
-        framework_dir.mkdir(parents=True, exist_ok=True)
-        binary = framework_dir / module_name
-        copy_framework_executable(source, binary)
-        dependency_install_name = framework_install_name(module_name)
-        run(["install_name_tool", "-id", dependency_install_name, str(binary)])
+        stage_dependency_framework(spec, target_dir, source)
+        staged_library_names.add(library_name)
+        dependency_install_name = framework_install_name(
+            module_name_for_dylib(source)
+        )
         run(
             [
                 "install_name_tool",
@@ -504,17 +507,35 @@ def stage_source_built_dependency_frameworks(
                 str(litertlm),
             ]
         )
-        write_framework_info_plist(
-            framework_dir,
-            executable=module_name,
-            bundle_identifier=(
-                f"dev.leehack.litertlm.native.{module_name}"
-            ),
-            supported_platform=(
-                "iPhoneOS" if spec["sdk"] == "iphoneos" else "iPhoneSimulator"
-            ),
-        )
-        print(f"Staged {binary}", flush=True)
+
+    for library_name in IOS_DLOPEN_DEPENDENCIES:
+        if library_name in staged_library_names:
+            continue
+        source = target_dir / library_name
+        if not source.is_file():
+            raise RuntimeError(
+                f"Missing required iOS GPU runtime dependency: {source}"
+            )
+        stage_dependency_framework(spec, target_dir, source)
+
+
+def stage_dependency_framework(spec: dict, target_dir: Path, source: Path) -> None:
+    module_name = module_name_for_dylib(source)
+    framework_dir = target_dir / f"{module_name}.framework"
+    framework_dir.mkdir(parents=True, exist_ok=True)
+    binary = framework_dir / module_name
+    copy_framework_executable(source, binary)
+    dependency_install_name = framework_install_name(module_name)
+    run(["install_name_tool", "-id", dependency_install_name, str(binary)])
+    write_framework_info_plist(
+        framework_dir,
+        executable=module_name,
+        bundle_identifier=f"dev.leehack.litertlm.native.{module_name}",
+        supported_platform=(
+            "iPhoneOS" if spec["sdk"] == "iphoneos" else "iPhoneSimulator"
+        ),
+    )
+    print(f"Staged {binary}", flush=True)
 
 
 def package_ios_runtime(

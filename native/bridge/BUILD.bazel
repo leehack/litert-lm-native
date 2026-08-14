@@ -1,5 +1,7 @@
 package(default_visibility = ["//visibility:public"])
 
+exports_files(["litert_ios_framework_paths.patch"])
+
 config_setting(
     name = "stream_chunk_api",
     define_values = {"litert_lm_stream_chunk_api": "true"},

@@ -9,6 +9,84 @@ import build_upstream_runtime
 
 
 class BuildUpstreamRuntimeTest(unittest.TestCase):
+    def test_workspace_adds_litert_apple_framework_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "WORKSPACE"
+            workspace.write_text(
+                "\n".join(
+                    [
+                        "http_archive(",
+                        '    name = "minizip",',
+                        f'    url = "{build_upstream_runtime.ZLIB_URL}",',
+                        ")",
+                        "http_archive(",
+                        '    name = "litert",',
+                        ")",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            build_upstream_runtime.patch_upstream_workspace(root)
+            build_upstream_runtime.patch_upstream_workspace(root)
+
+            patched = workspace.read_text(encoding="utf-8")
+            self.assertEqual(
+                patched.count("litert_ios_framework_paths.patch"),
+                1,
+            )
+            self.assertIn(
+                build_upstream_runtime.ZLIB_GITHUB_MIRROR_URL,
+                patched,
+            )
+
+    def test_legacy_workspace_keeps_litert_archive_unpatched(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "WORKSPACE"
+            workspace.write_text(
+                "\n".join(
+                    [
+                        "http_archive(",
+                        '    name = "minizip",',
+                        f'    url = "{build_upstream_runtime.ZLIB_URL}",',
+                        ")",
+                        "http_archive(",
+                        '    name = "litert",',
+                        ")",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            build_upstream_runtime.patch_upstream_workspace(
+                root,
+                patch_ios_framework_paths=False,
+            )
+
+            patched = workspace.read_text(encoding="utf-8")
+            self.assertNotIn("litert_ios_framework_paths.patch", patched)
+            self.assertIn(build_upstream_runtime.ZLIB_GITHUB_MIRROR_URL, patched)
+
+    def test_ios_sampler_uses_embedded_framework_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            sampler = root / "runtime" / "components" / "sampler_factory.cc"
+            sampler.parent.mkdir(parents=True)
+            sampler.write_text(
+                'auto path = "libLiteRtTopKMetalSampler.dylib";\n',
+                encoding="utf-8",
+            )
+
+            build_upstream_runtime.patch_upstream_ios_sampler_path(root)
+
+            self.assertIn(
+                "@executable_path/Frameworks/"
+                "LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler",
+                sampler.read_text(encoding="utf-8"),
+            )
+
     def test_windows_stages_materialized_runtime_dlls_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

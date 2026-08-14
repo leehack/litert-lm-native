@@ -57,8 +57,11 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
 - `tools/build_upstream_runtime.py`: builds upstream LiteRT-LM C runtime
   libraries from tagged source with Bazel/Bazelisk through the repo-owned
   `native/bridge` Bazel package, embeds LiteRtLmBridge symbols into
-  source-built runtime libraries without patching upstream source files, and
-  stages them for release. Local upstream checkouts may retain Git LFS pointers
+  source-built runtime libraries, applies the scoped iOS framework-path
+  compatibility rewrites required by upstream's dynamic Metal loaders, and
+  stages them for release. The rewrites apply only to the extracted build tree;
+  upstream sources are not vendored here. Local upstream checkouts may retain
+  Git LFS pointers
   for link-time dependencies; the build resolves those objects from upstream
   media URLs and verifies their embedded size and SHA-256 first.
 - `tools/package_ios_runtime.py`: extracts official upstream
@@ -197,8 +200,10 @@ XCFramework contains the primary iOS runtime and macOS framework wrapper.
 `CLiteRTLMMac` is retained as a macOS compatibility re-export target. Upstream
 `v0.14.0` uses the official consolidated Apple XCFrameworks and does not require
 a separate iOS `GemmaModelConstraintProvider` target. Source-built Apple
-releases may still require companion XCFrameworks when the primary runtime
-links against them.
+releases also publish any required companion XCFrameworks. For v0.16 this
+includes the iOS `LiteRtMetalAccelerator` and `LiteRtTopKMetalSampler` modules;
+their framework-relative loader paths avoid flat dylibs that App Store bundles
+cannot ship.
 
 ## Consumer Contract
 

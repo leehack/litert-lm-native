@@ -148,11 +148,18 @@ def download_upstream(tag: str, work_dir: Path) -> Path:
     if len(candidates) != 1:
         raise RuntimeError(f"Expected one extracted source directory, got {candidates}")
     source_root = candidates[0]
-    patch_upstream_workspace(source_root)
+    patch_upstream_workspace(
+        source_root,
+        patch_ios_framework_paths=has_asr_bridge(tag),
+    )
     return source_root
 
 
-def patch_upstream_workspace(source_root: Path) -> None:
+def patch_upstream_workspace(
+    source_root: Path,
+    *,
+    patch_ios_framework_paths: bool = True,
+) -> None:
     workspace = source_root / "WORKSPACE"
     text = workspace.read_text(encoding="utf-8")
     needle = f'    url = "{ZLIB_URL}",'
@@ -163,14 +170,44 @@ def patch_upstream_workspace(source_root: Path) -> None:
         "    ],"
     )
     if needle not in text:
-        if ZLIB_GITHUB_MIRROR_URL in text:
-            return
-        raise RuntimeError(f"Expected zlib URL not found in {workspace}")
-    workspace.write_text(text.replace(needle, replacement), encoding="utf-8")
+        if ZLIB_GITHUB_MIRROR_URL not in text:
+            raise RuntimeError(f"Expected zlib URL not found in {workspace}")
+    else:
+        text = text.replace(needle, replacement)
+    litert_archive = 'http_archive(\n    name = "litert",\n'
+    litert_archive_with_patch = (
+        'http_archive(\n'
+        '    name = "litert",\n'
+        '    patch_args = ["-p1"],\n'
+        '    patches = ["@//bridge:litert_ios_framework_paths.patch"],\n'
+    )
+    if patch_ios_framework_paths and litert_archive_with_patch not in text:
+        if litert_archive not in text:
+            raise RuntimeError(f"Expected LiteRT archive not found in {workspace}")
+        text = text.replace(litert_archive, litert_archive_with_patch, 1)
+    workspace.write_text(text, encoding="utf-8")
     print(
-        "Patched upstream WORKSPACE minizip archive URLs with GitHub zlib mirror",
+        "Patched upstream WORKSPACE dependency URLs and iOS framework paths",
         flush=True,
     )
+
+
+def patch_upstream_ios_sampler_path(source_root: Path) -> None:
+    sampler = source_root / "runtime" / "components" / "sampler_factory.cc"
+    text = sampler.read_text(encoding="utf-8")
+    original = '"libLiteRtTopKMetalSampler.dylib"'
+    replacement = (
+        '"@executable_path/Frameworks/LiteRtTopKMetalSampler.framework/'
+        'LiteRtTopKMetalSampler"'
+    )
+    if replacement in text:
+        return
+    if text.count(original) != 1:
+        raise RuntimeError(
+            f"Expected one Metal sampler library path in {sampler}"
+        )
+    sampler.write_text(text.replace(original, replacement), encoding="utf-8")
+    print("Patched upstream iOS Metal sampler framework path", flush=True)
 
 
 def bazel_command() -> list[str]:
@@ -217,6 +254,8 @@ def build_runtime(
     upstream_tag: str,
     jobs: str | None,
 ) -> Path:
+    if platform == "ios" and has_asr_bridge(upstream_tag):
+        patch_upstream_ios_sampler_path(source_root)
     prebuilt_target = PREBUILT_TARGETS.get((platform, arch))
     if prebuilt_target is not None:
         source_dir = source_root / "prebuilt" / prebuilt_target

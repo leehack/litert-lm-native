@@ -24,8 +24,17 @@ REQUIRED_RUNTIME_ARTIFACTS = [
     Path("bin/windows/x64/LiteRtLm.dll"),
 ]
 
+V0_16_IOS_GPU_ARTIFACTS = [
+    Path("bin/ios/arm64/LiteRtMetalAccelerator.framework/LiteRtMetalAccelerator"),
+    Path("bin/ios/arm64/LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler"),
+    Path("bin/ios/arm64-sim/LiteRtMetalAccelerator.framework/LiteRtMetalAccelerator"),
+    Path("bin/ios/arm64-sim/LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler"),
+]
+
 def required_runtime_artifacts(upstream_tag: str) -> list[Path]:
     required = list(REQUIRED_RUNTIME_ARTIFACTS)
+    if is_at_least(upstream_tag, (0, 16, 0)):
+        required.extend(V0_16_IOS_GPU_ARTIFACTS)
     if is_at_least(upstream_tag, (0, 14, 0)):
         required.extend(
             Path("dist") / "official" / upstream_tag / archive
