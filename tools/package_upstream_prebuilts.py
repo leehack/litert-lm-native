@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 from download_utils import download_to_path
+from git_lfs_utils import materialize_git_lfs_libraries
 from prebuilt_overrides import (
     UPSTREAM_MEDIA_BASE_URL,
     PrebuiltOverride,
@@ -56,13 +57,19 @@ def extract_source(archive: Path, output_dir: Path) -> Path:
     return roots[0]
 
 
-def copy_prebuilts(source_root: Path, clean: bool) -> int:
+def copy_prebuilts(source_root: Path, upstream_tag: str, clean: bool) -> int:
     copied = 0
     for upstream_name, (platform, arch) in PREBUILT_TARGETS.items():
         source_dir = source_root / "prebuilt" / upstream_name
         if not source_dir.is_dir():
             print(f"missing upstream prebuilt dir: {source_dir}", flush=True)
             continue
+        materialize_git_lfs_libraries(
+            source_dir,
+            upstream_tag=upstream_tag,
+            source_root=source_root,
+            suffixes=LIB_SUFFIXES,
+        )
         target_dir = BIN_DIR / platform / arch
         if clean and target_dir.exists():
             shutil.rmtree(target_dir)
@@ -140,14 +147,22 @@ def main() -> int:
         source_root = args.source_root
         if not source_root.is_dir():
             raise SystemExit(f"source root does not exist: {source_root}")
-        copied = copy_prebuilts(source_root, clean=args.clean)
+        copied = copy_prebuilts(
+            source_root,
+            upstream_tag=args.upstream_tag,
+            clean=args.clean,
+        )
     else:
         with tempfile.TemporaryDirectory(prefix="litert-lm-native-") as temp:
             temp_dir = Path(temp)
             archive = temp_dir / f"LiteRT-LM-{args.upstream_tag}.tar.gz"
             download_source(args.upstream_tag, archive)
             source_root = extract_source(archive, temp_dir / "src")
-            copied = copy_prebuilts(source_root, clean=args.clean)
+            copied = copy_prebuilts(
+                source_root,
+                upstream_tag=args.upstream_tag,
+                clean=args.clean,
+            )
 
     overridden = apply_prebuilt_overrides(args.upstream_tag)
     print(

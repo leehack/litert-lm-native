@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 
 from download_utils import download_to_path
+from git_lfs_utils import materialize_git_lfs_libraries
 from litert_lm_symbols import (
     has_asr_bridge,
     required_bridge_symbols,
@@ -109,6 +110,18 @@ RUNTIME_TARGETS = {
     },
 }
 
+PREBUILT_TARGETS = {
+    ("android", "arm64"): "android_arm64",
+    ("android", "x64"): "android_x86_64",
+    ("ios", "arm64"): "ios_arm64",
+    ("ios", "arm64-sim"): "ios_sim_arm64",
+    ("linux", "arm64"): "linux_arm64",
+    ("linux", "x64"): "linux_x86_64",
+    ("macos", "arm64"): "macos_arm64",
+    ("windows", "x64"): "windows_x86_64",
+}
+LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
+
 def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
     printable = " ".join(command)
     print(f"+ {printable}", flush=True)
@@ -203,6 +216,21 @@ def build_runtime(
     upstream_tag: str,
     jobs: str | None,
 ) -> Path:
+    prebuilt_target = PREBUILT_TARGETS.get((platform, arch))
+    if prebuilt_target is not None:
+        source_dir = source_root / "prebuilt" / prebuilt_target
+        materialized = materialize_git_lfs_libraries(
+            source_dir,
+            upstream_tag=upstream_tag,
+            source_root=source_root,
+            suffixes=LIB_SUFFIXES,
+        )
+        if materialized:
+            print(
+                f"Materialized {materialized} pointer-backed libraries for "
+                f"{platform}/{arch}",
+                flush=True,
+            )
     target = RUNTIME_TARGETS[(platform, arch)]
     configs = [
         f"--config={config}"
@@ -272,6 +300,9 @@ def stage_runtime_dependencies(
     platform: str,
     arch: str,
 ) -> None:
+    if platform == "windows":
+        stage_windows_runtime_dependencies(source_root, arch)
+        return
     if platform in {"ios", "macos"}:
         stage_macho_runtime_dependencies(output, source_root, platform, arch)
         return
@@ -308,6 +339,19 @@ def stage_runtime_dependencies(
                 copy_artifact(dependency, destination)
                 print(f"Staged runtime dependency {destination}", flush=True)
             queued.append(destination)
+
+
+def stage_windows_runtime_dependencies(source_root: Path, arch: str) -> None:
+    prebuilt_target = PREBUILT_TARGETS.get(("windows", arch))
+    if prebuilt_target is None:
+        return
+    source_dir = source_root / "prebuilt" / prebuilt_target
+    stage_dir = BIN_DIR / "windows" / arch
+    stage_dir.mkdir(parents=True, exist_ok=True)
+    for source in sorted(source_dir.glob("*.dll")):
+        destination = stage_dir / source.name
+        copy_artifact(source, destination)
+        print(f"Staged runtime dependency {destination}", flush=True)
 
 
 def stage_macho_runtime_dependencies(

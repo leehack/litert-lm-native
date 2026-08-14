@@ -58,7 +58,9 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
   libraries from tagged source with Bazel/Bazelisk through the repo-owned
   `native/bridge` Bazel package, embeds LiteRtLmBridge symbols into
   source-built runtime libraries without patching upstream source files, and
-  stages them for release.
+  stages them for release. Local upstream checkouts may retain Git LFS pointers
+  for link-time dependencies; the build resolves those objects from upstream
+  media URLs and verifies their embedded size and SHA-256 first.
 - `tools/package_ios_runtime.py`: extracts official upstream
   `CLiteRTLM.xcframework` slices when present, or wraps source-built iOS
   `libLiteRtLm.dylib` outputs when upstream no longer publishes the archive.

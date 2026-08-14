@@ -262,6 +262,12 @@ def copy_framework_info_plist(
     shutil.copy2(source_plist, target_framework_dir / "Info.plist")
 
 
+def copy_framework_executable(source: Path, destination: Path) -> None:
+    """Copies a framework binary with Xcode-strip-compatible permissions."""
+    shutil.copy2(source, destination)
+    destination.chmod(0o755)
+
+
 def min_version_flag(sdk: str) -> str:
     if sdk == "iphoneos":
         return f"-miphoneos-version-min={DEFAULT_IOS_MINIMUM_OS}"
@@ -361,8 +367,9 @@ def stage_slice(spec: dict, clean: bool, upstream_tag: str) -> Path:
     thin_arch = spec["thin_arch"]
     if thin_arch:
         run(["lipo", str(source), "-thin", thin_arch, "-output", str(upstream)])
+        upstream.chmod(0o755)
     else:
-        shutil.copy2(source, upstream)
+        copy_framework_executable(source, upstream)
 
     run([
         "install_name_tool",
@@ -432,7 +439,7 @@ def stage_source_built_slice(spec: dict, clean: bool, upstream_tag: str) -> Path
     litertlm_framework_dir = target_dir / "LiteRtLm.framework"
     litertlm_framework_dir.mkdir(parents=True, exist_ok=True)
     litertlm = litertlm_framework_dir / "LiteRtLm"
-    shutil.copy2(source, litertlm)
+    copy_framework_executable(source, litertlm)
     run(["install_name_tool", "-id", LITERTLM_INSTALL_NAME, str(litertlm)])
     stage_source_built_dependency_frameworks(spec, target_dir, litertlm)
     validate_source_built_symbols(litertlm, upstream_tag)
@@ -485,7 +492,7 @@ def stage_source_built_dependency_frameworks(
         framework_dir = target_dir / f"{module_name}.framework"
         framework_dir.mkdir(parents=True, exist_ok=True)
         binary = framework_dir / module_name
-        shutil.copy2(source, binary)
+        copy_framework_executable(source, binary)
         dependency_install_name = framework_install_name(module_name)
         run(["install_name_tool", "-id", dependency_install_name, str(binary)])
         run(

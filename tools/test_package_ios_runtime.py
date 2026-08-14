@@ -10,6 +10,19 @@ import package_ios_runtime
 
 
 class PackageIosRuntimeTest(unittest.TestCase):
+    def test_framework_executable_is_owner_writable_and_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_dir = Path(temp)
+            source = temp_dir / "source"
+            destination = temp_dir / "destination"
+            source.write_bytes(b"runtime")
+            source.chmod(0o555)
+
+            package_ios_runtime.copy_framework_executable(source, destination)
+
+            self.assertEqual(destination.read_bytes(), b"runtime")
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o755)
+
     def test_v015_wrapper_enables_stream_chunk_adapter(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_dir = Path(temp)
