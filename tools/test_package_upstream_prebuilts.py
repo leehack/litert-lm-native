@@ -120,6 +120,21 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
         self.assertIn("--skip-overrides", workflow)
         self.assertIn("--overrides-only", workflow)
 
+    def test_new_release_tag_targets_the_built_commit(self) -> None:
+        workflow = (
+            package_upstream_prebuilts.REPO_ROOT
+            / ".github"
+            / "workflows"
+            / "native_release.yml"
+        ).read_text(encoding="utf-8")
+
+        create_release = workflow[workflow.index('gh release create "'):]
+        self.assertIn('--target "${{ github.sha }}"', create_release)
+        self.assertIn("Choose a new immutable release_tag", workflow)
+        self.assertNotIn("gh release edit", workflow)
+        self.assertNotIn("gh release upload", workflow)
+        self.assertNotIn("--clobber", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
