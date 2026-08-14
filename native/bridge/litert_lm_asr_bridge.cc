@@ -123,9 +123,10 @@ absl::Status ValidateConfig(const LitertLmAsrConfig *config) {
     return absl::InvalidArgumentError(
         "ASR max_buffered_audio_milliseconds must fit one input window.");
   }
-  if (config->overlap_ratio < 0.0f || config->overlap_ratio >= 1.0f) {
+  if (!std::isfinite(config->overlap_ratio) || config->overlap_ratio < 0.0f ||
+      config->overlap_ratio >= 1.0f) {
     return absl::InvalidArgumentError(
-        "ASR overlap_ratio must be in the range [0, 1).");
+        "ASR overlap_ratio must be finite and in the range [0, 1).");
   }
   const int64_t window_samples = static_cast<int64_t>(config->sample_rate_hz) *
                                  config->input_milliseconds / 1000;

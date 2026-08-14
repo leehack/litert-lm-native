@@ -1,5 +1,6 @@
 #include "bridge/litert_lm_asr_bridge.h"
 
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -55,6 +56,21 @@ int main(void) {
       LITERT_LM_ASR_STATUS_INVALID_ARGUMENT) {
     return 8;
   }
+  litert_lm_asr_config_init_for_model_preset(
+      &config, LITERT_LM_ASR_MODEL_PRESET_MOONSHINE_TINY);
+  config.model_path = "model.tflite";
+  config.tokenizer_path = "tokenizer.json";
+  config.overlap_ratio = NAN;
+  LitertLmAsrEngine *engine = NULL;
+  char *error = NULL;
+  if (litert_lm_asr_engine_create(&config, &engine, &error) !=
+          LITERT_LM_ASR_STATUS_INVALID_ARGUMENT ||
+      engine != NULL) {
+    litert_lm_asr_engine_delete(engine);
+    litert_lm_asr_free_string(error);
+    return 9;
+  }
+  litert_lm_asr_free_string(error);
 
   LitertLmAsrResult result;
   litert_lm_asr_result_init(&result);
