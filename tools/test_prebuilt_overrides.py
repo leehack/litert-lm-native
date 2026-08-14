@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from prebuilt_overrides import (
-    V0_15_ANDROID_DAWN_ROLLBACK_COMMIT,
+    ANDROID_DAWN_ROLLBACK_COMMIT,
     V0_15_ANDROID_SAMPLER_FIX_COMMIT,
     prebuilt_override_manifest,
     prebuilt_overrides,
@@ -28,7 +28,7 @@ class PrebuiltOverridesTest(unittest.TestCase):
             {override.source_commit for override in overrides},
             {
                 V0_15_ANDROID_SAMPLER_FIX_COMMIT,
-                V0_15_ANDROID_DAWN_ROLLBACK_COMMIT,
+                ANDROID_DAWN_ROLLBACK_COMMIT,
             },
         )
         self.assertTrue(all(len(override.sha256) == 64 for override in overrides))
@@ -57,12 +57,35 @@ class PrebuiltOverridesTest(unittest.TestCase):
                     V0_15_ANDROID_SAMPLER_FIX_COMMIT
                 ),
                 "bin/android/arm64/libwebgpu_dawn.so": (
-                    V0_15_ANDROID_DAWN_ROLLBACK_COMMIT
+                    ANDROID_DAWN_ROLLBACK_COMMIT
                 ),
                 "bin/android/x64/libwebgpu_dawn.so": (
-                    V0_15_ANDROID_DAWN_ROLLBACK_COMMIT
+                    ANDROID_DAWN_ROLLBACK_COMMIT
                 ),
             },
+        )
+
+    def test_v016_keeps_the_validated_android_dawn_rollback(self) -> None:
+        overrides = prebuilt_overrides("v0.16.0")
+
+        self.assertEqual(
+            {(override.arch, override.filename) for override in overrides},
+            {
+                ("arm64", "libwebgpu_dawn.so"),
+                ("x64", "libwebgpu_dawn.so"),
+            },
+        )
+        self.assertEqual(
+            {override.source_commit for override in overrides},
+            {ANDROID_DAWN_ROLLBACK_COMMIT},
+        )
+        self.assertTrue(all(len(override.sha256) == 64 for override in overrides))
+
+        manifest = prebuilt_override_manifest("v0.16.0")
+        self.assertEqual(len(manifest), 2)
+        self.assertEqual(
+            {entry["sourceCommit"] for entry in manifest},
+            {ANDROID_DAWN_ROLLBACK_COMMIT},
         )
 
     def test_other_versions_have_no_override(self) -> None:

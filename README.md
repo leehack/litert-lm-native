@@ -129,7 +129,10 @@ binary produced `VK_ERROR_DEVICE_LOST` on a Mali-G715 during generation, while
 the exact v0.14 binary completed the same workload. The release manifest
 records the exact override source commits, paths, and checksums, and packaging
 rejects sampler libraries that do not expose the full seven-symbol plugin
-contract.
+contract. Upstream `v0.16.0` keeps the same checksum-pinned Dawn rollback: its
+tagged Android arm64 binary reproduced `VK_ERROR_DEVICE_LOST` on a Pixel 9 Pro,
+while the rollback completed the same Gemma 4 GPU workload and exact-answer
+gate. The v0.16 sampler binaries do not require the v0.15 sampler override.
 
 ## Native Version Management
 
