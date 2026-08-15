@@ -27,6 +27,14 @@ on:
         required: false
         default: all
         type: string
+      windows_bazel_jobs:
+        description: "Windows Bazel concurrency; keep 1 for releases, use 2 for the isolated A/B trial"
+        required: false
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "2"
       run_asr_smoke:
         description: "Run the pinned Moonshine real-model smoke on host targets"
         required: false
@@ -48,10 +56,11 @@ jobs:
         run: |
           import json
           import os
+          windows_bazel_jobs = "${{ inputs.windows_bazel_jobs }}"
           targets = [
               {"os": "ubuntu-latest", "platform": "linux", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
               {"os": "ubuntu-24.04-arm", "platform": "linux", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
-              {"os": "windows-latest", "platform": "windows", "arch": "x64", "jobs": "1", "bazel_output_root": "C:/bzl", "timeout_minutes": 120},
+              {"os": "windows-latest", "platform": "windows", "arch": "x64", "jobs": windows_bazel_jobs, "bazel_output_root": "C:/bzl", "timeout_minutes": 120},
               {"os": "ubuntu-latest", "platform": "android", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
               {"os": "ubuntu-latest", "platform": "android", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
               {"os": "macos-latest", "platform": "ios", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 120},
