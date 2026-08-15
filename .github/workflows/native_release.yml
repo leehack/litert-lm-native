@@ -28,9 +28,9 @@ on:
         default: all
         type: string
       windows_bazel_jobs:
-        description: "Windows Bazel concurrency; keep 1 for releases, use 2 for the isolated A/B trial"
+        description: "Windows Bazel concurrency; 3 is the tested default, with lower values available for troubleshooting"
         required: false
-        default: "1"
+        default: "3"
         type: choice
         options:
           - "1"
