@@ -46,6 +46,26 @@ BRIDGE_SYMBOLS = [
     b"stream_proxy_free_string",
 ]
 
+V0_16_ASR_BRIDGE_SYMBOLS = [
+    b"litert_lm_asr_abi_version",
+    b"litert_lm_asr_config_size",
+    b"litert_lm_asr_result_size",
+    b"litert_lm_asr_config_init",
+    b"litert_lm_asr_config_init_for_model_preset",
+    b"litert_lm_asr_result_init",
+    b"litert_lm_asr_result_release",
+    b"litert_lm_asr_free_string",
+    b"litert_lm_asr_engine_create",
+    b"litert_lm_asr_engine_delete",
+    b"litert_lm_asr_session_create",
+    b"litert_lm_asr_session_delete",
+    b"litert_lm_asr_session_push_audio_f32",
+    b"litert_lm_asr_session_finish_audio",
+    b"litert_lm_asr_session_process_next",
+    b"litert_lm_asr_session_reset",
+    b"litert_lm_asr_session_cancel",
+]
+
 ANDROID_OPENCL_SAMPLER_SYMBOLS = [
     "LiteRtTopKOpenClSampler_Create",
     "LiteRtTopKOpenClSampler_Destroy",
@@ -54,6 +74,20 @@ ANDROID_OPENCL_SAMPLER_SYMBOLS = [
     "LiteRtTopKOpenClSampler_CanHandleInput",
     "LiteRtTopKOpenClSampler_HandlesInput",
     "LiteRtTopKOpenClSampler_SetInferenceFuncAndInputTensors",
+]
+
+APPLE_METAL_SAMPLER_SYMBOLS = [
+    "LiteRtTopKMetalSampler_Create",
+    "LiteRtTopKMetalSampler_Destroy",
+    "LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer",
+    "LiteRtTopKMetalSampler_UpdateConfig",
+    "LiteRtTopKMetalSampler_CanHandleInput",
+    "LiteRtTopKMetalSampler_HandlesInput",
+    "LiteRtTopKMetalSampler_SetInferenceFuncAndInputTensors",
+]
+
+APPLE_METAL_ACCELERATOR_SYMBOLS = [
+    "LiteRtAcceleratorImpl",
 ]
 
 
@@ -73,6 +107,17 @@ def is_at_least(tag: str, version: tuple[int, int, int]) -> bool:
 
 def uses_stream_chunk_api(upstream_tag: str) -> bool:
     return is_at_least(upstream_tag, (0, 15, 0))
+
+
+def has_asr_bridge(upstream_tag: str) -> bool:
+    return is_at_least(upstream_tag, (0, 16, 0))
+
+
+def required_bridge_symbols(upstream_tag: str) -> list[bytes]:
+    symbols = list(BRIDGE_SYMBOLS)
+    if has_asr_bridge(upstream_tag):
+        symbols.extend(V0_16_ASR_BRIDGE_SYMBOLS)
+    return symbols
 
 
 def required_c_api_symbols(upstream_tag: str) -> list[bytes]:

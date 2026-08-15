@@ -13,6 +13,8 @@ from pathlib import Path
 
 from litert_lm_symbols import (
     BRIDGE_SYMBOLS,
+    has_asr_bridge,
+    required_bridge_symbols,
     required_c_api_symbols,
     uses_stream_chunk_api,
 )
@@ -32,6 +34,10 @@ IOS_GPU_SYMBOLS = (
     b"LiteRtAcceleratorImpl",
     b"LiteRtTopKMetalSampler_Create_Static",
     b"LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static",
+)
+IOS_DLOPEN_DEPENDENCIES = (
+    "libLiteRtMetalAccelerator.dylib",
+    "libLiteRtTopKMetalSampler.dylib",
 )
 EXPECTED_OFFICIAL_ARCHIVE_SHA256 = {
     "v0.14.0": "dddac2f6713ed65eaf01c18e115d9fec22184adf575cc7856a21387e8ba937e1",
@@ -142,7 +148,10 @@ def validate_upstream_symbols(output: Path, upstream_tag: str) -> None:
 
 def validate_source_built_symbols(output: Path, upstream_tag: str) -> None:
     data = output.read_bytes()
-    required_symbols = required_c_api_symbols(upstream_tag) + BRIDGE_SYMBOLS
+    required_symbols = (
+        required_c_api_symbols(upstream_tag)
+        + required_bridge_symbols(upstream_tag)
+    )
     missing = [
         symbol.decode("ascii")
         for symbol in required_symbols
@@ -257,6 +266,12 @@ def copy_framework_info_plist(
     shutil.copy2(source_plist, target_framework_dir / "Info.plist")
 
 
+def copy_framework_executable(source: Path, destination: Path) -> None:
+    """Copies a framework binary with Xcode-strip-compatible permissions."""
+    shutil.copy2(source, destination)
+    destination.chmod(0o755)
+
+
 def min_version_flag(sdk: str) -> str:
     if sdk == "iphoneos":
         return f"-miphoneos-version-min={DEFAULT_IOS_MINIMUM_OS}"
@@ -356,8 +371,9 @@ def stage_slice(spec: dict, clean: bool, upstream_tag: str) -> Path:
     thin_arch = spec["thin_arch"]
     if thin_arch:
         run(["lipo", str(source), "-thin", thin_arch, "-output", str(upstream)])
+        upstream.chmod(0o755)
     else:
-        shutil.copy2(source, upstream)
+        copy_framework_executable(source, upstream)
 
     run([
         "install_name_tool",
@@ -427,7 +443,7 @@ def stage_source_built_slice(spec: dict, clean: bool, upstream_tag: str) -> Path
     litertlm_framework_dir = target_dir / "LiteRtLm.framework"
     litertlm_framework_dir.mkdir(parents=True, exist_ok=True)
     litertlm = litertlm_framework_dir / "LiteRtLm"
-    shutil.copy2(source, litertlm)
+    copy_framework_executable(source, litertlm)
     run(["install_name_tool", "-id", LITERTLM_INSTALL_NAME, str(litertlm)])
     stage_source_built_dependency_frameworks(spec, target_dir, litertlm)
     validate_source_built_symbols(litertlm, upstream_tag)
@@ -465,6 +481,7 @@ def stage_source_built_dependency_frameworks(
     target_dir: Path,
     litertlm: Path,
 ) -> None:
+    staged_library_names: set[str] = set()
     for install_name in macho_needed_libraries(litertlm):
         if is_system_macho_needed(install_name):
             continue
@@ -476,13 +493,11 @@ def stage_source_built_dependency_frameworks(
             raise RuntimeError(
                 f"{litertlm} depends on {install_name}, but {source} is missing"
             )
-        module_name = module_name_for_dylib(source)
-        framework_dir = target_dir / f"{module_name}.framework"
-        framework_dir.mkdir(parents=True, exist_ok=True)
-        binary = framework_dir / module_name
-        shutil.copy2(source, binary)
-        dependency_install_name = framework_install_name(module_name)
-        run(["install_name_tool", "-id", dependency_install_name, str(binary)])
+        stage_dependency_framework(spec, target_dir, source)
+        staged_library_names.add(library_name)
+        dependency_install_name = framework_install_name(
+            module_name_for_dylib(source)
+        )
         run(
             [
                 "install_name_tool",
@@ -492,17 +507,35 @@ def stage_source_built_dependency_frameworks(
                 str(litertlm),
             ]
         )
-        write_framework_info_plist(
-            framework_dir,
-            executable=module_name,
-            bundle_identifier=(
-                f"dev.leehack.litertlm.native.{module_name}"
-            ),
-            supported_platform=(
-                "iPhoneOS" if spec["sdk"] == "iphoneos" else "iPhoneSimulator"
-            ),
-        )
-        print(f"Staged {binary}", flush=True)
+
+    for library_name in IOS_DLOPEN_DEPENDENCIES:
+        if library_name in staged_library_names:
+            continue
+        source = target_dir / library_name
+        if not source.is_file():
+            raise RuntimeError(
+                f"Missing required iOS GPU runtime dependency: {source}"
+            )
+        stage_dependency_framework(spec, target_dir, source)
+
+
+def stage_dependency_framework(spec: dict, target_dir: Path, source: Path) -> None:
+    module_name = module_name_for_dylib(source)
+    framework_dir = target_dir / f"{module_name}.framework"
+    framework_dir.mkdir(parents=True, exist_ok=True)
+    binary = framework_dir / module_name
+    copy_framework_executable(source, binary)
+    dependency_install_name = framework_install_name(module_name)
+    run(["install_name_tool", "-id", dependency_install_name, str(binary)])
+    write_framework_info_plist(
+        framework_dir,
+        executable=module_name,
+        bundle_identifier=f"dev.leehack.litertlm.native.{module_name}",
+        supported_platform=(
+            "iPhoneOS" if spec["sdk"] == "iphoneos" else "iPhoneSimulator"
+        ),
+    )
+    print(f"Staged {binary}", flush=True)
 
 
 def package_ios_runtime(
@@ -511,6 +544,19 @@ def package_ios_runtime(
     upstream_tag: str,
     require_official: bool = False,
 ) -> list[Path]:
+    if has_asr_bridge(upstream_tag):
+        print(
+            "Using source-built iOS runtimes so the v0.16+ ASR bridge and "
+            "upstream ASR implementation remain in the packaged binary.",
+            flush=True,
+        )
+        return [
+            stage_source_built_slice(
+                spec, clean=clean, upstream_tag=upstream_tag
+            )
+            for spec in discover_source_built_ios_slices()
+        ]
+
     official_required = (
         require_official or upstream_tag in EXPECTED_OFFICIAL_ARCHIVE_SHA256
     )

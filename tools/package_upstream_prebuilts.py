@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 from download_utils import download_to_path
+from git_lfs_utils import materialize_git_lfs_libraries
 from prebuilt_overrides import (
     UPSTREAM_MEDIA_BASE_URL,
     PrebuiltOverride,
@@ -56,13 +57,19 @@ def extract_source(archive: Path, output_dir: Path) -> Path:
     return roots[0]
 
 
-def copy_prebuilts(source_root: Path, clean: bool) -> int:
+def copy_prebuilts(source_root: Path, upstream_tag: str, clean: bool) -> int:
     copied = 0
     for upstream_name, (platform, arch) in PREBUILT_TARGETS.items():
         source_dir = source_root / "prebuilt" / upstream_name
         if not source_dir.is_dir():
             print(f"missing upstream prebuilt dir: {source_dir}", flush=True)
             continue
+        materialize_git_lfs_libraries(
+            source_dir,
+            upstream_tag=upstream_tag,
+            source_root=source_root,
+            suffixes=LIB_SUFFIXES,
+        )
         target_dir = BIN_DIR / platform / arch
         if clean and target_dir.exists():
             shutil.rmtree(target_dir)
@@ -115,8 +122,18 @@ def apply_prebuilt_override(override: PrebuiltOverride) -> None:
         staged.unlink(missing_ok=True)
 
 
-def apply_prebuilt_overrides(upstream_tag: str) -> int:
-    overrides = prebuilt_overrides(upstream_tag)
+def apply_prebuilt_overrides(
+    upstream_tag: str,
+    *,
+    platform: str | None = None,
+    arch: str | None = None,
+) -> int:
+    overrides = tuple(
+        override
+        for override in prebuilt_overrides(upstream_tag)
+        if (platform is None or override.platform == platform)
+        and (arch is None or override.arch == arch)
+    )
     for override in overrides:
         print(
             "Applying pinned prebuilt override: "
@@ -134,22 +151,42 @@ def main() -> int:
     parser.add_argument("--upstream-tag", required=True)
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--clean", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--skip-overrides", action="store_true")
+    mode.add_argument("--overrides-only", action="store_true")
     args = parser.parse_args()
 
-    if args.source_root is not None:
-        source_root = args.source_root
-        if not source_root.is_dir():
-            raise SystemExit(f"source root does not exist: {source_root}")
-        copied = copy_prebuilts(source_root, clean=args.clean)
+    if args.overrides_only:
+        if args.source_root is not None or args.clean:
+            parser.error(
+                "--overrides-only cannot be combined with --source-root or --clean"
+            )
+        copied = 0
     else:
-        with tempfile.TemporaryDirectory(prefix="litert-lm-native-") as temp:
-            temp_dir = Path(temp)
-            archive = temp_dir / f"LiteRT-LM-{args.upstream_tag}.tar.gz"
-            download_source(args.upstream_tag, archive)
-            source_root = extract_source(archive, temp_dir / "src")
-            copied = copy_prebuilts(source_root, clean=args.clean)
+        if args.source_root is not None:
+            source_root = args.source_root
+            if not source_root.is_dir():
+                raise SystemExit(f"source root does not exist: {source_root}")
+            copied = copy_prebuilts(
+                source_root,
+                upstream_tag=args.upstream_tag,
+                clean=args.clean,
+            )
+        else:
+            with tempfile.TemporaryDirectory(prefix="litert-lm-native-") as temp:
+                temp_dir = Path(temp)
+                archive = temp_dir / f"LiteRT-LM-{args.upstream_tag}.tar.gz"
+                download_source(args.upstream_tag, archive)
+                source_root = extract_source(archive, temp_dir / "src")
+                copied = copy_prebuilts(
+                    source_root,
+                    upstream_tag=args.upstream_tag,
+                    clean=args.clean,
+                )
 
-    overridden = apply_prebuilt_overrides(args.upstream_tag)
+    overridden = (
+        0 if args.skip_overrides else apply_prebuilt_overrides(args.upstream_tag)
+    )
     print(
         f"Copied {copied} upstream prebuilt libraries; "
         f"applied {overridden} pinned overrides",

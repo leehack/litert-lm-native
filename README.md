@@ -15,6 +15,8 @@ Responsibilities:
 - Preserve upstream LiteRT-LM's C runtime ABI as the FFI boundary.
 - Embed the small LiteRtLmBridge callback helper into runtime libraries used by
   asynchronous FFI clients.
+- For LiteRT-LM 0.16+, expose the upstream C++ ASR session through a narrow,
+  versioned C bridge because the released upstream C ABI omits speech engines.
 - Package web assets around official LiteRT-LM/LiteRT.js distribution paths.
 - Publish Apple Swift Package Manager XCFramework zip assets built from the
   same bridge runtimes as the native release payload.
@@ -55,8 +57,13 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
 - `tools/build_upstream_runtime.py`: builds upstream LiteRT-LM C runtime
   libraries from tagged source with Bazel/Bazelisk through the repo-owned
   `native/bridge` Bazel package, embeds LiteRtLmBridge symbols into
-  source-built runtime libraries without patching upstream source files, and
-  stages them for release.
+  source-built runtime libraries, applies the scoped iOS framework-path
+  compatibility rewrites required by upstream's dynamic Metal loaders, and
+  stages them for release. The rewrites apply only to the extracted build tree;
+  upstream sources are not vendored here. Local upstream checkouts may retain
+  Git LFS pointers
+  for link-time dependencies; the build resolves those objects from upstream
+  media URLs and verifies their embedded size and SHA-256 first.
 - `tools/package_ios_runtime.py`: extracts official upstream
   `CLiteRTLM.xcframework` slices when present, or wraps source-built iOS
   `libLiteRtLm.dylib` outputs when upstream no longer publishes the archive.
@@ -125,7 +132,10 @@ binary produced `VK_ERROR_DEVICE_LOST` on a Mali-G715 during generation, while
 the exact v0.14 binary completed the same workload. The release manifest
 records the exact override source commits, paths, and checksums, and packaging
 rejects sampler libraries that do not expose the full seven-symbol plugin
-contract.
+contract. Upstream `v0.16.0` keeps the same checksum-pinned Dawn rollback: its
+tagged Android arm64 binary reproduced `VK_ERROR_DEVICE_LOST` on a Pixel 9 Pro,
+while the rollback completed the same Gemma 4 GPU workload and exact-answer
+gate. The v0.16 sampler binaries do not require the v0.15 sampler override.
 
 ## Native Version Management
 
@@ -174,6 +184,15 @@ stream chunks back to the stable text/final/error callback consumed by existing
 FFI clients. `stream_proxy_callback_abi_version` lets consumers reject an
 incompatible bridge before starting an asynchronous callback.
 
+LiteRT-LM 0.16 source contains a stateful ASR pipeline but does not publish it
+through `c/engine.h` or its official C binaries. Source-built 0.16+ runtimes
+therefore also export `litert_lm_asr_*` bridge ABI version 1. It accepts bounded
+mono float PCM and returns confirmed/unconfirmed transcript updates with
+explicit backpressure, finish, reset, and between-window cancellation. See
+[`docs/asr_bridge.md`](docs/asr_bridge.md) for the contract and real-model
+smoke. Apple packaging intentionally keeps the source-built runtime for these
+tags; an official C-binary wrapper cannot recover omitted ASR C++ objects.
+
 Apple SPM consumers should depend on the release's direct
 `litert-lm-native-apple-*-xcframework-<tag>.zip` assets. The `LiteRtLm`
 XCFramework contains the primary iOS runtime and macOS framework wrapper.
@@ -181,8 +200,10 @@ XCFramework contains the primary iOS runtime and macOS framework wrapper.
 `CLiteRTLMMac` is retained as a macOS compatibility re-export target. Upstream
 `v0.14.0` uses the official consolidated Apple XCFrameworks and does not require
 a separate iOS `GemmaModelConstraintProvider` target. Source-built Apple
-releases may still require companion XCFrameworks when the primary runtime
-links against them.
+releases also publish any required companion XCFrameworks. For v0.16 this
+includes the iOS `LiteRtMetalAccelerator` and `LiteRtTopKMetalSampler` modules;
+their framework-relative loader paths avoid flat dylibs that App Store bundles
+cannot ship.
 
 ## Consumer Contract
 
@@ -190,6 +211,8 @@ Downstream packages should read `manifest.json`, choose a target by platform,
 architecture, runtime kind (`native` or `web`), and accelerator metadata, then
 verify checksums before bundling or loading the files.
 
-Upstream LiteRT-LM's native C ABI is the compatibility boundary. This repository
-does not add a second model wrapper ABI unless a future upstream change requires
-it; bridge helpers remain narrow FFI utilities around that runtime surface.
+Upstream LiteRT-LM's native C ABI remains the default compatibility boundary.
+Where upstream source exposes a needed engine but its released C ABI does not,
+this repository may add a narrow, independently versioned bridge after runtime
+and packaging validation. The LiteRT-LM 0.16+ ASR bridge is the first such
+exception; high-level model selection and download policy remain downstream.

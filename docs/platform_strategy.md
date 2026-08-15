@@ -2,9 +2,10 @@
 
 ## Native
 
-Native platforms use upstream LiteRT-LM's C runtime ABI directly. This keeps the
-release payload aligned with the runtime that downstream FFI bindings load and
-avoids publishing a second model wrapper ABI that does not add behavior.
+Native platforms use upstream LiteRT-LM's C runtime ABI directly by default.
+When released upstream source contains a required engine that the public C ABI
+omits, a narrow versioned bridge may expose that existing behavior without
+patching upstream. LiteRT-LM 0.16+ ASR is the first such exception.
 
 The release automation publishes these runtime artifact groups:
 
@@ -43,12 +44,22 @@ bridge package into the extracted source tree on Windows to avoid Bazel's
 Windows package-path parser, without patching upstream source files in the
 repository.
 
+For LiteRT-LM 0.16+, the same runtime exports `litert_lm_asr_*` ABI version 1.
+It adapts upstream `AsrEngine`/`AsrSession` to bounded push PCM and
+confirmed/unconfirmed transcript results. Official 0.16 Apple C binaries omit
+those C++ ASR objects, so Apple packaging selects the source-built runtime even
+when official XCFramework archives exist. The official archives remain
+published as provenance-preserving upstream assets, not the speech-capable
+runtime payload.
+
 SPM artifacts are intentionally split by binary target. `LiteRtLm` carries the
 primary iOS runtime and macOS framework wrapper. `CLiteRTLM` is published for
 iOS re-export support, and `CLiteRTLMMac` is published for macOS re-export
 support. Source-built Apple releases can publish additional companion binary
-targets, such as `GemmaModelConstraintProvider`, when the primary runtime links
-against them.
+targets when the primary runtime links or dynamically loads them. The v0.16 iOS
+package includes `GemmaModelConstraintProvider`, `LiteRtMetalAccelerator`, and
+`LiteRtTopKMetalSampler`; the Metal modules use framework-relative loader paths
+that are compatible with App Store bundle layout.
 
 The Apple LiteRT-LM SPM path must account for the architecture coverage of the
 native payload. Upstream `v0.13.1` and `v0.14.0` publish universal Apple

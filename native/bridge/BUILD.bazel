@@ -1,8 +1,15 @@
 package(default_visibility = ["//visibility:public"])
 
+exports_files(["litert_ios_framework_paths.patch"])
+
 config_setting(
     name = "stream_chunk_api",
     define_values = {"litert_lm_stream_chunk_api": "true"},
+)
+
+config_setting(
+    name = "asr_api",
+    define_values = {"litert_lm_asr_api": "true"},
 )
 
 cc_library(
@@ -20,11 +27,75 @@ cc_library(
     }),
 )
 
+cc_library(
+    name = "litert_lm_asr_audio_source",
+    srcs = select({
+        ":asr_api": ["litert_lm_asr_audio_source.cc"],
+        "//conditions:default": [],
+    }),
+    hdrs = ["litert_lm_asr_audio_source.h"],
+    deps = select({
+        ":asr_api": [
+            "@com_google_absl//absl/cleanup",
+            "@com_google_absl//absl/status",
+            "//omni/asr:audio_source",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "litert_lm_asr_bridge",
+    srcs = select({
+        ":asr_api": ["litert_lm_asr_bridge.cc"],
+        "//conditions:default": [],
+    }),
+    hdrs = ["litert_lm_asr_bridge.h"],
+    alwayslink = True,
+    deps = select({
+        ":asr_api": [
+            ":litert_lm_asr_audio_source",
+            "@com_google_absl//absl/status",
+            "@com_google_absl//absl/status:statusor",
+            "//omni/asr:asr_engine",
+            "//omni/asr:asr_session",
+            "//omni/asr:log_mel_spectrogram_processor",
+            "//omni/asr:text_merger",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_test(
+    name = "litert_lm_asr_audio_source_test",
+    srcs = ["litert_lm_asr_audio_source_test.cc"],
+    target_compatible_with = select({
+        ":asr_api": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        ":litert_lm_asr_audio_source",
+        "@com_google_absl//absl/status",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "litert_lm_asr_header_test",
+    srcs = ["litert_lm_asr_header_test.c"],
+    target_compatible_with = select({
+        ":asr_api": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [":litert_lm_asr_bridge"],
+)
+
 cc_binary(
     name = "libLiteRtLm.so",
     linkshared = True,
     deps = [
         ":litert_lm_bridge",
+        ":litert_lm_asr_bridge",
         "//c:engine",
         "//schema/capabilities:capabilities_c",
     ],
@@ -35,6 +106,7 @@ cc_binary(
     linkshared = True,
     deps = [
         ":litert_lm_bridge",
+        ":litert_lm_asr_bridge",
         "//c:engine",
         "//schema/capabilities:capabilities_c",
     ],
@@ -45,6 +117,7 @@ cc_binary(
     linkshared = True,
     deps = [
         ":litert_lm_bridge",
+        ":litert_lm_asr_bridge",
         "//c:engine",
         "//schema/capabilities:capabilities_c",
     ],

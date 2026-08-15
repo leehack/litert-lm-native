@@ -27,6 +27,11 @@ on:
         required: false
         default: all
         type: string
+      run_asr_smoke:
+        description: "Run the pinned Moonshine real-model smoke on host targets"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -123,6 +128,52 @@ jobs:
             --arch "${{ matrix.arch }}" \
             --jobs "${{ matrix.jobs }}"
 
+      - name: Fetch pinned ASR smoke assets
+        if: >-
+          inputs.run_asr_smoke &&
+          ((matrix.platform == 'linux' && matrix.arch == 'x64') ||
+           (matrix.platform == 'windows' && matrix.arch == 'x64') ||
+           (matrix.platform == 'macos' && matrix.arch == 'arm64'))
+        run: python3 tools/fetch_litert_lm_asr_smoke_assets.py --output-dir asr-smoke-assets
+
+      - name: Run Linux ASR real-model smoke
+        if: inputs.run_asr_smoke && matrix.platform == 'linux' && matrix.arch == 'x64'
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/bin/linux/x64
+        run: |
+          python3 tools/litert_lm_asr_smoke.py \
+            --library bin/linux/x64/libLiteRtLm.so \
+            --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite \
+            --tokenizer asr-smoke-assets/moonshine_tokenizer.json \
+            --audio asr-smoke-assets/jfk.wav \
+            --expect country
+
+      - name: Run Windows ASR real-model smoke
+        if: inputs.run_asr_smoke && matrix.platform == 'windows' && matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $env:PATH = "$pwd\bin\windows\x64;$env:PATH"
+          python tools/litert_lm_asr_smoke.py `
+            --library bin/windows/x64/LiteRtLm.dll `
+            --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite `
+            --tokenizer asr-smoke-assets/moonshine_tokenizer.json `
+            --audio asr-smoke-assets/jfk.wav `
+            --expect country
+
+      - name: Run macOS arm64 ASR real-model smoke
+        if: >-
+          inputs.run_asr_smoke && matrix.platform == 'macos' &&
+          matrix.arch == 'arm64' && runner.arch == 'ARM64'
+        env:
+          DYLD_LIBRARY_PATH: ${{ github.workspace }}/bin/macos/arm64
+        run: |
+          python3 tools/litert_lm_asr_smoke.py \
+            --library bin/macos/arm64/libLiteRtLm.dylib \
+            --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite \
+            --tokenizer asr-smoke-assets/moonshine_tokenizer.json \
+            --audio asr-smoke-assets/jfk.wav \
+            --expect country
+
       - uses: actions/upload-artifact@v4
         with:
           name: upstream-runtime-${{ matrix.platform }}-${{ matrix.arch }}
@@ -156,7 +207,8 @@ jobs:
         run: |
           python3 tools/package_upstream_prebuilts.py \
             --upstream-tag "${{ inputs.upstream_tag }}" \
-            --clean
+            --clean \
+            --skip-overrides
 
       - name: Download build artifacts
         env:
@@ -170,6 +222,12 @@ jobs:
       - name: Add upstream runtime libraries to package
         run: |
           cp -R runtime-bin/*/* bin/
+
+      - name: Apply pinned prebuilt overrides
+        run: |
+          python3 tools/package_upstream_prebuilts.py \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --overrides-only
 
       - name: Package official upstream release assets
         env:
@@ -236,44 +294,18 @@ jobs:
           notes="Packaged LiteRT-LM upstream ${{ inputs.upstream_tag }} runtime libraries, upstream prebuilts, Apple SPM XCFrameworks, and official release assets as ${{ steps.release.outputs.tag }}."
           if gh release view "${{ steps.release.outputs.tag }}" \
             --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release edit "${{ steps.release.outputs.tag }}" \
-              --repo "${{ github.repository }}" \
-              --title "LiteRT-LM ${{ steps.release.outputs.tag }}" \
-              --notes "$notes" \
-              "${args[@]}"
-            intended_assets="$(mktemp)"
-            {
-              find release -maxdepth 1 -type f -exec basename {} \;
-              printf '%s\n' manifest.json SHA256SUMS
-            } | sort > "$intended_assets"
-            while IFS= read -r asset; do
-              if ! grep -Fxq "$asset" "$intended_assets"; then
-                gh release delete-asset "${{ steps.release.outputs.tag }}" "$asset" \
-                  --repo "${{ github.repository }}" \
-                  --yes
-              fi
-            done < <(
-              gh release view "${{ steps.release.outputs.tag }}" \
-                --repo "${{ github.repository }}" \
-                --json assets \
-                --jq '.assets[].name'
-            )
-            gh release upload "${{ steps.release.outputs.tag }}" \
-              --repo "${{ github.repository }}" \
-              --clobber \
-              release/* \
-              manifest.json \
-              SHA256SUMS
-          else
-            gh release create "${{ steps.release.outputs.tag }}" \
-              --repo "${{ github.repository }}" \
-              --title "LiteRT-LM ${{ steps.release.outputs.tag }}" \
-              --notes "$notes" \
-              "${args[@]}" \
-              release/* \
-              manifest.json \
-              SHA256SUMS
+            echo "::error::Release ${{ steps.release.outputs.tag }} already exists. Choose a new immutable release_tag."
+            exit 1
           fi
+          gh release create "${{ steps.release.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "LiteRT-LM ${{ steps.release.outputs.tag }}" \
+            --notes "$notes" \
+            "${args[@]}" \
+            release/* \
+            manifest.json \
+            SHA256SUMS
 
       - name: Validate published GitHub release
         env:

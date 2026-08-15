@@ -10,6 +10,46 @@ import package_ios_runtime
 
 
 class PackageIosRuntimeTest(unittest.TestCase):
+    def test_source_built_slice_stages_dlopen_gpu_frameworks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target_dir = root / "bin" / "ios" / "arm64"
+            target_dir.mkdir(parents=True)
+            litertlm = target_dir / "libLiteRtLm.dylib"
+            litertlm.write_bytes(b"runtime")
+            for library_name in package_ios_runtime.IOS_DLOPEN_DEPENDENCIES:
+                (target_dir / library_name).write_bytes(b"gpu")
+
+            with patch.object(package_ios_runtime, "macho_needed_libraries", return_value=[]):
+                with patch.object(package_ios_runtime, "run"):
+                    package_ios_runtime.stage_source_built_dependency_frameworks(
+                        {"sdk": "iphoneos"},
+                        target_dir,
+                        litertlm,
+                    )
+
+            for library_name in package_ios_runtime.IOS_DLOPEN_DEPENDENCIES:
+                module_name = package_ios_runtime.module_name_for_dylib(
+                    Path(library_name)
+                )
+                self.assertEqual(
+                    (target_dir / f"{module_name}.framework" / module_name).read_bytes(),
+                    b"gpu",
+                )
+
+    def test_framework_executable_is_owner_writable_and_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_dir = Path(temp)
+            source = temp_dir / "source"
+            destination = temp_dir / "destination"
+            source.write_bytes(b"runtime")
+            source.chmod(0o555)
+
+            package_ios_runtime.copy_framework_executable(source, destination)
+
+            self.assertEqual(destination.read_bytes(), b"runtime")
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o755)
+
     def test_v015_wrapper_enables_stream_chunk_adapter(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_dir = Path(temp)
@@ -76,6 +116,32 @@ class PackageIosRuntimeTest(unittest.TestCase):
                     archive,
                     "v0.14.0",
                 )
+
+    def test_v016_prefers_source_built_runtime_for_asr_bridge(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / "CLiteRTLM.xcframework.zip"
+            archive.write_bytes(b"official-runtime-without-asr")
+            specs = [{"arch": "arm64", "framework_binary": Path(temp) / "source"}]
+            with patch.object(
+                package_ios_runtime,
+                "discover_source_built_ios_slices",
+                return_value=specs,
+            ):
+                with patch.object(
+                    package_ios_runtime,
+                    "stage_source_built_slice",
+                    return_value=Path(temp) / "staged",
+                ) as stage:
+                    result = package_ios_runtime.package_ios_runtime(
+                        archive,
+                        clean=True,
+                        upstream_tag="v0.16.0",
+                    )
+
+            self.assertEqual(result, [Path(temp) / "staged"])
+            stage.assert_called_once_with(
+                specs[0], clean=True, upstream_tag="v0.16.0"
+            )
 
 
 if __name__ == "__main__":

@@ -28,6 +28,11 @@ REQUIRED_SPM_XCFRAMEWORKS = [
     "litert-lm-native-apple-LiteRtLm-xcframework-{tag}.zip",
 ]
 
+V0_16_IOS_GPU_SPM_XCFRAMEWORKS = [
+    "litert-lm-native-apple-LiteRtMetalAccelerator-xcframework-{tag}.zip",
+    "litert-lm-native-apple-LiteRtTopKMetalSampler-xcframework-{tag}.zip",
+]
+
 BASE_REQUIRED_RELEASE_ASSETS = [
     "manifest.json",
     "SHA256SUMS",
@@ -94,6 +99,8 @@ def main() -> int:
             ]
         )
     required_spm_xcframeworks = list(REQUIRED_SPM_XCFRAMEWORKS)
+    if is_at_least(args.upstream_tag, (0, 16, 0)):
+        required_spm_xcframeworks.extend(V0_16_IOS_GPU_SPM_XCFRAMEWORKS)
     required.extend(
         f"dist/spm/{release_tag}/{asset.format(tag=release_tag)}"
         for asset in required_spm_xcframeworks

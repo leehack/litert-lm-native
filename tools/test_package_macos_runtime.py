@@ -86,6 +86,32 @@ class PackageMacosRuntimeTest(unittest.TestCase):
                     "v0.14.0",
                 )
 
+    def test_v016_prefers_source_built_runtime_for_asr_bridge(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / "CLiteRTLM_mac.xcframework.zip"
+            archive.write_bytes(b"official-runtime-without-asr")
+            specs = [{"arch": "arm64", "source": Path(temp) / "source"}]
+            with patch.object(
+                package_macos_runtime,
+                "discover_source_built_macos_slices",
+                return_value=specs,
+            ):
+                with patch.object(
+                    package_macos_runtime,
+                    "stage_source_built_runtime",
+                    return_value=[Path(temp) / "staged"],
+                ) as stage:
+                    result = package_macos_runtime.package_macos_runtime(
+                        archive,
+                        clean=True,
+                        upstream_tag="v0.16.0",
+                    )
+
+            self.assertEqual(result, [Path(temp) / "staged"])
+            stage.assert_called_once_with(
+                specs, clean=True, upstream_tag="v0.16.0"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
