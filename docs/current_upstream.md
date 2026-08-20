@@ -1,21 +1,23 @@
 # Current Upstream Snapshot
 
-As of `2026-08-14`, the latest upstream release resolved by
+As of `2026-08-19`, the latest upstream release resolved by
 `tools/fetch_upstream.py --latest --metadata-only` is:
 
 - Repository: `google-ai-edge/LiteRT-LM`
-- Tag: `v0.16.0`
-- Published: `2026-08-11T18:25:33Z`
-- Release URL: `https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.16.0`
+- Tag: `v0.16.1`
+- Published: `2026-08-18T16:59:00Z`
+- Release URL: `https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.16.1`
 - Assets:
-  - `CLiteRTLM.xcframework.zip`
-    - Size: `87,659,348` bytes
-  - `CLiteRTLM_mac.xcframework.zip`
-    - Size: `46,379,992` bytes
-  - `litert_lm_c_api-0.1.0.zip`
-    - Size: `161,599,098` bytes
   - `litert_lm_main.macos_arm64`
     - Size: `16,034,224` bytes
+
+Tags `v0.16.1` and `v0.16.0` both resolve to upstream commit
+`924e79c91542761242244e4f1651851f822e4cbb`. The newer release does not publish
+the required `CLiteRTLM.xcframework.zip` or `CLiteRTLM_mac.xcframework.zip`
+archives, so it is not a new consumable C runtime release. The scheduled updater
+skips this same-commit release before dispatching the platform build and checks
+it again on the next daily run. The latest consumable native package remains
+`v0.16.0-native.2`.
 
 LiteRT-LM 0.16 source includes `omni/asr` and `omni/tts`, but the released
 `c/engine.h` and official C binaries expose neither engine. Native ASR support

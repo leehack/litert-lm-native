@@ -31,6 +31,12 @@ V0_16_IOS_GPU_ARTIFACTS = [
     Path("bin/ios/arm64-sim/LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler"),
 ]
 
+OFFICIAL_APPLE_RUNTIME_ARCHIVES = (
+    "CLiteRTLM.xcframework.zip",
+    "CLiteRTLM_mac.xcframework.zip",
+)
+
+
 def required_runtime_artifacts(upstream_tag: str) -> list[Path]:
     required = list(REQUIRED_RUNTIME_ARTIFACTS)
     if is_at_least(upstream_tag, (0, 16, 0)):
@@ -38,10 +44,7 @@ def required_runtime_artifacts(upstream_tag: str) -> list[Path]:
     if is_at_least(upstream_tag, (0, 14, 0)):
         required.extend(
             Path("dist") / "official" / upstream_tag / archive
-            for archive in (
-                "CLiteRTLM.xcframework.zip",
-                "CLiteRTLM_mac.xcframework.zip",
-            )
+            for archive in OFFICIAL_APPLE_RUNTIME_ARCHIVES
         )
     return required
 

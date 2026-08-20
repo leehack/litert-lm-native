@@ -118,9 +118,13 @@ python3 tools/validate_artifacts.py
   tag without mutating an existing native release.
 - `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
   when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
-  not published yet. Existing releases are treated as immutable; if validation
-  rules change and an existing release no longer matches, the scheduled workflow
-  reports it but does not overwrite the tag automatically.
+  not published yet, resolves both tags to source commits, and verifies required
+  official C runtime assets before dispatch. Same-commit metadata releases and
+  releases missing required runtime assets are reported and retried on the next
+  daily run without starting the full platform build. Existing releases are
+  treated as immutable; if validation rules change and an existing release no
+  longer matches, the scheduled workflow reports it but does not overwrite the
+  tag automatically.
 
 For upstream `v0.15.0`, packaging applies two checksum-pinned Android arm64/x64
 corrections. `libLiteRtTopKOpenClSampler.so` comes from upstream commit
