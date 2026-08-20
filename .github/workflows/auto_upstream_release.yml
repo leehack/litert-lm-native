@@ -98,13 +98,7 @@ jobs:
           print(str(json.load(open('compatibility.json'))['shouldDispatch']).lower())
           PY
           )"
-          reason="$(python3 - <<'PY'
-          import json
-          print(json.load(open('compatibility.json'))['reason'])
-          PY
-          )"
           echo "should_dispatch=${should_dispatch}" >> "$GITHUB_OUTPUT"
-          echo "reason=${reason}" >> "$GITHUB_OUTPUT"
           cat compatibility.json
 
       - name: Dispatch native release
