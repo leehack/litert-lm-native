@@ -83,14 +83,46 @@ jobs:
             echo "complete=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Dispatch native release
+      - name: Check upstream release compatibility
+        id: compatibility
         if: steps.existing.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
+        run: |
+          python3 tools/check_upstream_release.py \
+            --candidate upstream.json \
+            --native-repository "${{ github.repository }}" \
+            > compatibility.json
+          should_dispatch="$(python3 - <<'PY'
+          import json
+          print(str(json.load(open('compatibility.json'))['shouldDispatch']).lower())
+          PY
+          )"
+          echo "should_dispatch=${should_dispatch}" >> "$GITHUB_OUTPUT"
+          cat compatibility.json
+
+      - name: Dispatch native release
+        if: steps.existing.outputs.exists == 'false' && steps.compatibility.outputs.should_dispatch == 'true'
         env:
           GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
         run: |
           gh workflow run native_release.yml \
             --repo "${{ github.repository }}" \
             -f upstream_tag="${{ steps.upstream.outputs.tag }}"
+
+      - name: Skip incompatible upstream release
+        if: steps.existing.outputs.exists == 'false' && steps.compatibility.outputs.should_dispatch == 'false'
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          result = json.load(open('compatibility.json'))
+          print("## Upstream release skipped")
+          print()
+          print(result['message'])
+          print()
+          print(f"Reason: `{result['reason']}`")
+          print("The scheduled updater will evaluate this release again on its next run.")
+          PY
 
       - name: Existing release is incomplete
         if: steps.existing.outputs.exists == 'true' && steps.complete.outputs.complete == 'false'

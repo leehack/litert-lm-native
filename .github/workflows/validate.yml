@@ -31,6 +31,7 @@ jobs:
             tools/litert_lm_asr_smoke.py \
             tools/prebuilt_overrides.py \
             tools/fetch_upstream.py \
+            tools/check_upstream_release.py \
             tools/build_upstream_runtime.py \
             tools/package_release.py \
             tools/validate_artifacts.py \
@@ -50,6 +51,7 @@ jobs:
             tools/test_fetch_litert_lm_asr_smoke_assets.py \
             tools/test_litert_lm_symbols.py \
             tools/test_prebuilt_overrides.py \
+            tools/test_check_upstream_release.py \
             tools/test_runtime_dependency_utils.py \
             tools/test_git_lfs_utils.py
           python3 -m unittest discover -s tools -p 'test_*.py'
