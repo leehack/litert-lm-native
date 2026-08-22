@@ -31,7 +31,10 @@ def required_official_assets() -> tuple[str, ...]:
 
 
 def evaluate_release(
-    candidate: dict[str, Any], baseline: dict[str, Any]
+    candidate: dict[str, Any],
+    baseline: dict[str, Any],
+    *,
+    allow_same_commit: bool = False,
 ) -> dict[str, Any]:
     candidate_tag = _required_string(candidate, "tag", "candidate metadata")
     candidate_commit = _required_string(candidate, "commit", "candidate metadata")
@@ -49,7 +52,7 @@ def evaluate_release(
     }
     missing_assets = sorted(set(required_official_assets()) - candidate_assets)
 
-    if candidate_commit == baseline_commit:
+    if candidate_commit == baseline_commit and not allow_same_commit:
         return _decision(
             candidate_tag=candidate_tag,
             candidate_commit=candidate_commit,
@@ -182,6 +185,16 @@ def main() -> int:
     )
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--native-repository", required=True)
+    parser.add_argument(
+        "--allow-same-commit",
+        action="store_true",
+        help="Allow an explicitly ordered rebuild of an existing upstream line.",
+    )
+    parser.add_argument(
+        "--require-ready",
+        action="store_true",
+        help="Exit nonzero unless the candidate is consumable for preparation.",
+    )
     args = parser.parse_args()
 
     candidate_metadata = json.loads(args.candidate.read_text(encoding="utf-8"))
@@ -190,7 +203,14 @@ def main() -> int:
 
     candidate = prepare_candidate(candidate_metadata)
     baseline = load_native_baseline(args.native_repository)
-    print(json.dumps(evaluate_release(candidate, baseline), indent=2, sort_keys=True))
+    decision = evaluate_release(
+        candidate,
+        baseline,
+        allow_same_commit=args.allow_same_commit,
+    )
+    print(json.dumps(decision, indent=2, sort_keys=True))
+    if args.require_ready and not decision["shouldPrepare"]:
+        raise SystemExit(decision["message"])
     return 0
 
 

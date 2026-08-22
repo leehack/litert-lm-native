@@ -219,6 +219,18 @@ def validate_history(candidate: ReleaseIdentity, existing_tags: Iterable[str]) -
                 f"stable line v{'.'.join(map(str, latest_core))}"
             )
         same_line = [item for item in stable if item.core == candidate.core]
+        if candidate.rebuild > 0:
+            if not same_line:
+                raise PolicyError(
+                    f"orphan stable rebuild: {candidate.tag!r} has no aligned "
+                    "base or lower same-line release"
+                )
+            predecessor = candidate.rebuild - 1
+            if not any(item.rebuild == predecessor for item in same_line):
+                raise PolicyError(
+                    f"orphan stable rebuild: {candidate.tag!r} requires same-line "
+                    f"predecessor rebuild {predecessor}"
+                )
         if same_line:
             latest_rebuild = max(item.rebuild for item in same_line)
             if candidate.rebuild <= latest_rebuild:
@@ -234,6 +246,18 @@ def validate_history(candidate: ReleaseIdentity, existing_tags: Iterable[str]) -
         for item in parsed
         if item.channel == "development" and item.core == candidate.core
     ]
+    if candidate.rebuild > 0:
+        if not same_development:
+            raise PolicyError(
+                f"orphan development rebuild: {candidate.tag!r} has no aligned "
+                "base or lower same-line release"
+            )
+        predecessor = candidate.rebuild - 1
+        if not any(item.rebuild == predecessor for item in same_development):
+            raise PolicyError(
+                f"orphan development rebuild: {candidate.tag!r} requires same-line "
+                f"predecessor rebuild {predecessor}"
+            )
     if same_development:
         latest_rebuild = max(item.rebuild for item in same_development)
         if candidate.rebuild <= latest_rebuild:

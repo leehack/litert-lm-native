@@ -95,6 +95,7 @@ def load_smoke_evidence(
     *,
     upstream_commit: str,
     native_commit: str,
+    release_tag: str,
 ) -> list[dict]:
     if evidence_dir is None or not evidence_dir.exists():
         return []
@@ -121,8 +122,30 @@ def load_smoke_evidence(
                 character not in "0123456789abcdef" for character in digest
             ):
                 raise ValueError(f"invalid {field} digest in smoke evidence: {path}")
+        source = item.get("source")
+        if not isinstance(source, dict) or any(
+            not isinstance(source.get(field), str) or not source[field]
+            for field in ("runtimeReleaseAsset", "model", "tokenizer", "fixture")
+        ):
+            raise ValueError(f"smoke evidence has no immutable source provenance: {path}")
+        expected_runtime_asset = (
+            "litert-lm-native-runtime-"
+            f"{item.get('platform')}-{item.get('arch')}-{release_tag}.tar.gz"
+        )
+        if source.get("runtimeReleaseAsset") != expected_runtime_asset:
+            raise ValueError(f"smoke evidence runtime source mismatch: {path}")
+        expectation = item.get("expectation")
+        if (
+            not isinstance(expectation, dict)
+            or expectation.get("type") != "case-insensitive-substring"
+            or not isinstance(expectation.get("value"), str)
+            or not expectation["value"].strip()
+        ):
+            raise ValueError(f"smoke evidence has no transcript expectation: {path}")
         if not isinstance(item.get("transcript"), str) or not item["transcript"].strip():
             raise ValueError(f"smoke evidence has no transcript: {path}")
+        if expectation["value"].casefold() not in item["transcript"].casefold():
+            raise ValueError(f"smoke evidence does not satisfy expectation: {path}")
         identity = (
             str(item.get("id", "")),
             str(item.get("platform", "")),
@@ -190,6 +213,7 @@ def build_manifest(
         evidence_dir,
         upstream_commit=upstream_commit,
         native_commit=native_commit,
+        release_tag=release_tag,
     )
     platforms = [
         {

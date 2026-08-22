@@ -40,6 +40,8 @@ jobs:
             tools/check_upstream_release.py \
             tools/release_version_policy.py \
             tools/release_result.py \
+            tools/publication_state.py \
+            tools/generate_schema2_contract_fixture.py \
             tools/build_upstream_runtime.py \
             tools/package_release.py \
             tools/validate_artifacts.py \
@@ -62,9 +64,15 @@ jobs:
             tools/test_check_upstream_release.py \
             tools/test_release_version_policy.py \
             tools/test_release_result.py \
+            tools/test_publication_state.py \
+            tools/test_validate_release_manifest.py \
             tools/test_package_release.py \
             tools/test_runtime_dependency_utils.py \
             tools/test_git_lfs_utils.py
           python3 -m unittest discover -s tools -p 'test_*.py'
+          python3 tools/generate_schema2_contract_fixture.py \
+            --output /tmp/schema2_contract_manifest.json
+          cmp tools/fixtures/schema2_contract_manifest.json \
+            /tmp/schema2_contract_manifest.json
       - name: Web scaffold self-test
         run: node web/src/index.js --self-test

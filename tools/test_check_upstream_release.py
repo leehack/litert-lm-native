@@ -53,6 +53,22 @@ class CheckUpstreamReleaseTest(unittest.TestCase):
             decision["preparation"]["publicationApproval"], "prepare-only"
         )
 
+    def test_explicit_rebuild_may_reuse_commit_but_still_requires_assets(self) -> None:
+        decision = evaluate_release(
+            metadata("v0.16.0", "same", OFFICIAL_APPLE_RUNTIME_ARCHIVES),
+            {"tag": "v0.16.0", "commit": "same"},
+            allow_same_commit=True,
+        )
+        self.assertTrue(decision["shouldPrepare"])
+
+        blocked = evaluate_release(
+            metadata("v0.16.0", "same", ("CLiteRTLM.xcframework.zip",)),
+            {"tag": "v0.16.0", "commit": "same"},
+            allow_same_commit=True,
+        )
+        self.assertFalse(blocked["shouldPrepare"])
+        self.assertEqual(blocked["reason"], "missing_required_official_assets")
+
 
 if __name__ == "__main__":
     unittest.main()

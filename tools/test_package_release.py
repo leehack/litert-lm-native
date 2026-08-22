@@ -34,10 +34,25 @@ class PackageReleaseTest(unittest.TestCase):
                         "nativeCommit": NATIVE_COMMIT,
                         "backend": "cpu",
                         "abiVersion": 1,
-                        "library": {"sha256": "1" * 64},
-                        "model": {"sha256": "2" * 64},
-                        "tokenizer": {"sha256": "3" * 64},
-                        "fixture": {"sha256": "4" * 64},
+                        "library": {"fileName": "lib.so", "sha256": "1" * 64},
+                        "model": {"fileName": "model.tflite", "sha256": "2" * 64},
+                        "tokenizer": {"fileName": "tokenizer.json", "sha256": "3" * 64},
+                        "fixture": {
+                            "fileName": "audio.wav",
+                            "sha256": "4" * 64,
+                            "sampleRateHz": 16000,
+                            "sampleCount": 1,
+                        },
+                        "source": {
+                            "runtimeReleaseAsset": "litert-lm-native-runtime-linux-x64-v0.16.0-3.tar.gz",
+                            "model": "https://example.invalid/model",
+                            "tokenizer": "https://example.invalid/tokenizer",
+                            "fixture": "https://example.invalid/fixture",
+                        },
+                        "expectation": {
+                            "type": "case-insensitive-substring",
+                            "value": "how are you",
+                        },
                         "transcript": "how are you doing",
                     }
                 ),
@@ -91,10 +106,25 @@ class PackageReleaseTest(unittest.TestCase):
                         "nativeCommit": NATIVE_COMMIT,
                         "backend": "cpu",
                         "abiVersion": 1,
-                        "library": {"sha256": "1" * 64},
-                        "model": {"sha256": "2" * 64},
-                        "tokenizer": {"sha256": "3" * 64},
-                        "fixture": {"sha256": "4" * 64},
+                        "library": {"fileName": "lib.so", "sha256": "1" * 64},
+                        "model": {"fileName": "model.tflite", "sha256": "2" * 64},
+                        "tokenizer": {"fileName": "tokenizer.json", "sha256": "3" * 64},
+                        "fixture": {
+                            "fileName": "audio.wav",
+                            "sha256": "4" * 64,
+                            "sampleRateHz": 16000,
+                            "sampleCount": 1,
+                        },
+                        "source": {
+                            "runtimeReleaseAsset": "litert-lm-native-runtime-linux-x64-v0.16.0-3.tar.gz",
+                            "model": "https://example.invalid/model",
+                            "tokenizer": "https://example.invalid/tokenizer",
+                            "fixture": "https://example.invalid/fixture",
+                        },
+                        "expectation": {
+                            "type": "case-insensitive-substring",
+                            "value": "how are you",
+                        },
                         "transcript": "how are you doing",
                     }
                 ),
@@ -105,6 +135,7 @@ class PackageReleaseTest(unittest.TestCase):
                     evidence_dir,
                     upstream_commit=UPSTREAM_COMMIT,
                     native_commit=NATIVE_COMMIT,
+                    release_tag="v0.16.0-3",
                 )
 
 

@@ -85,6 +85,31 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
                 ["v0.16.0", "v0.16.0-native.2"],
             )
 
+    def test_rebuild_requires_aligned_immediate_predecessor(self) -> None:
+        with self.assertRaisesRegex(PolicyError, "orphan stable rebuild"):
+            validate_history(parse_release_tag("v0.17.0-1"), ["v0.16.0"])
+        with self.assertRaisesRegex(PolicyError, "predecessor rebuild 1"):
+            validate_history(
+                parse_release_tag("v0.16.0-2"),
+                ["v0.16.0"],
+            )
+        validate_history(
+            parse_release_tag("v0.16.0-3"),
+            ["v0.16.0", "v0.16.0-native.2"],
+        )
+
+        with self.assertRaisesRegex(PolicyError, "orphan development rebuild"):
+            validate_history(parse_release_tag("gba8249987394-1"), [])
+        with self.assertRaisesRegex(PolicyError, "predecessor rebuild 1"):
+            validate_history(
+                parse_release_tag("gba8249987394-2"),
+                ["gba8249987394"],
+            )
+        validate_history(
+            parse_release_tag("gba8249987394-2"),
+            ["gba8249987394", "gba8249987394-1"],
+        )
+
     def test_collision_and_rollback_are_rejected(self) -> None:
         with self.assertRaisesRegex(PolicyError, "collision"):
             validate_history(parse_release_tag("v0.16.1"), ["v0.16.1"])

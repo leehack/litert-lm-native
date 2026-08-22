@@ -39,14 +39,28 @@ the development commit has that stable tag.
 
 The workflow checks that a stable tag resolves to the requested commit and that
 the dispatched repository ref resolves to `native_commit`. It rejects tag or
-release collisions, stable rollback, reuse or decrease of a rebuild number,
+release collisions, stable rollback, orphan rebuilds without the aligned base
+and immediate lower same-line predecessor, reuse or decrease of a rebuild number,
 legacy output forms, partial publication matrices, and publication without the
 required real-model smoke evidence.
+
+Stable manual preflight applies the same consumability decision as scheduled
+detection before any of the nine platform builds start. A metadata-only tag at
+an already packaged commit is rejected unless the requested native identity is
+an explicitly ordered rebuild, and every stable input must publish the required
+official iOS and macOS C-runtime XCFramework archives. This makes upstream
+`v0.16.1` fail before matrix allocation.
 
 `prepare-only` builds and uploads a 14-day release candidate but cannot write a
 GitHub release. `publish` is an explicit manual boundary. The publish job
 rechecks provenance and history, creates a draft release, validates its assets
 and downloaded manifest, and promotes the draft only after validation passes.
+Draft state is deterministic: a retry may resume only a still-draft release
+whose target commit, title, prerelease class, exact-input notes, and correlation
+identity all match. A matching retry removes partial draft assets and uploads
+the candidate again; any mismatched or published collision fails closed. An
+upload or validation failure therefore leaves a non-public draft that can be
+safely retried without deleting or rewriting a published release.
 Both paths emit `release-result.json`, which binds the caller correlation ID to
 the exact workflow run, inputs, commits, validation counts, smoke targets, and
 candidate identity. Published releases replace that record with the validated
@@ -73,11 +87,18 @@ Schema 2 keeps the following sections distinct:
 - `capabilities`: release-wide behavioral claims
 - `platforms`: explicit platform/architecture entries and artifact paths
 - `artifacts`: SHA-256 digest and provenance for every packaged file
-- `realModelSmokes`: model, fixture, runtime, source commits, platform, and
-  passing result recorded by the release run
+- `realModelSmokes`: model, tokenizer, fixture, and runtime hashes; immutable
+  source URLs/release asset; exact commits; ABI/backend; transcript expectation;
+  platform; and passing transcript recorded by the release run
+
+Schema 2 requires the exact package identity, all nine platform records, every
+native artifact bound to one platform with digest and provenance, and complete
+release/ABI/capability declarations. The owner-generated canonical fixture is
+checked at `tools/fixtures/schema2_contract_manifest.json`.
 
 Schema 1 manifests and all existing archives remain valid for explicit legacy
-consumption. New releases emit schema 2 only. Consumers must not infer upstream
+consumption; they never require the schema-2-only `release-result.json` asset.
+New releases emit schema 2 only. Consumers must not infer upstream
 source, capability, platform support, or rebuild order from the release tag or
 filename alone.
 

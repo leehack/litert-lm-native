@@ -4,8 +4,9 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 
-from litert_lm_symbols import is_at_least
+from litert_lm_symbols import has_asr_bridge, is_at_least, uses_stream_chunk_api
 from prebuilt_overrides import prebuilt_override_manifest
 from release_version_policy import parse_upstream, validate_pair
 from validate_runtime_artifacts import required_runtime_artifacts
@@ -33,6 +34,361 @@ V0_16_IOS_GPU_SPM_XCFRAMEWORKS = [
     "litert-lm-native-apple-LiteRtMetalAccelerator-xcframework-{tag}.zip",
     "litert-lm-native-apple-LiteRtTopKMetalSampler-xcframework-{tag}.zip",
 ]
+
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+REQUIRED_PLATFORM_KEYS = {
+    ("android", "arm64"),
+    ("android", "x64"),
+    ("ios", "arm64"),
+    ("ios", "arm64-sim"),
+    ("linux", "arm64"),
+    ("linux", "x64"),
+    ("macos", "arm64"),
+    ("macos", "x64"),
+    ("windows", "x64"),
+}
+
+
+def _require_exact_keys(value: dict, expected: set[str], label: str) -> None:
+    actual = set(value)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        unexpected = sorted(actual - expected)
+        raise SystemExit(
+            f"{label} keys do not match schema 2; missing={missing}, "
+            f"unexpected={unexpected}"
+        )
+
+
+def _require_digest(value: object, label: str) -> str:
+    if not isinstance(value, str) or SHA256_RE.fullmatch(value) is None:
+        raise SystemExit(f"{label} must be a lowercase 64-hex SHA-256 digest")
+    return value
+
+
+def _require_relative_path(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise SystemExit(f"{label} must be a non-empty repository-relative path")
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts or path.as_posix() != value:
+        raise SystemExit(f"{label} must be a safe normalized repository-relative path")
+    return value
+
+
+def validate_schema_2_payload(
+    manifest: dict,
+    *,
+    upstream_tag: str | None,
+    upstream_commit: str,
+    compatibility_tag: str,
+    native_commit: str,
+    release_tag: str,
+) -> None:
+    """Validate the complete, finalized schema-2 owner contract fail closed."""
+    _require_exact_keys(
+        manifest,
+        {
+            "schemaVersion",
+            "package",
+            "release",
+            "upstream",
+            "native",
+            "abi",
+            "capabilities",
+            "platforms",
+            "artifacts",
+            "realModelSmokes",
+        },
+        "manifest",
+    )
+    if manifest.get("package") != "litert-lm-native":
+        raise SystemExit("Release manifest package must be litert-lm-native")
+
+    release = manifest["release"]
+    upstream = manifest["upstream"]
+    native = manifest["native"]
+    abi = manifest["abi"]
+    capabilities = manifest["capabilities"]
+    for value, label in (
+        (release, "release"),
+        (upstream, "upstream"),
+        (native, "native"),
+        (abi, "abi"),
+        (capabilities, "capabilities"),
+    ):
+        if not isinstance(value, dict):
+            raise SystemExit(f"Release manifest {label} must be an object")
+    _require_exact_keys(
+        release,
+        {"tag", "channel", "kind", "rebuild", "githubPrerelease"},
+        "release",
+    )
+    _require_exact_keys(
+        upstream,
+        {
+            "repository",
+            "tag",
+            "commit",
+            "compatibilityTag",
+            "developmentIdentity",
+            "prebuiltOverrides",
+        },
+        "upstream",
+    )
+    _require_exact_keys(native, {"repository", "commit"}, "native")
+    _require_exact_keys(
+        abi,
+        {"upstreamC", "streamProxyCallback", "asrBridge"},
+        "abi",
+    )
+    _require_exact_keys(
+        capabilities,
+        {
+            "textGeneration",
+            "streaming",
+            "streamChunkAccessors",
+            "asr",
+            "officialUpstreamAssets",
+        },
+        "capabilities",
+    )
+    if upstream.get("repository") != "google-ai-edge/LiteRT-LM":
+        raise SystemExit("Release manifest has an unexpected upstream repository")
+    if native.get("repository") != "leehack/litert-lm-native":
+        raise SystemExit("Release manifest has an unexpected native repository")
+    if upstream.get("tag") != upstream_tag:
+        raise SystemExit("Release manifest upstream tag does not match exact input")
+    if upstream.get("commit") != upstream_commit or not FULL_SHA_RE.fullmatch(
+        str(upstream.get("commit", ""))
+    ):
+        raise SystemExit("Release manifest upstream commit does not match exact input")
+    if upstream.get("compatibilityTag") != compatibility_tag:
+        raise SystemExit("Release manifest compatibility tag does not match exact input")
+    if upstream.get("developmentIdentity") != f"g{upstream_commit[:12]}":
+        raise SystemExit("Release manifest development identity is invalid")
+    if upstream.get("prebuiltOverrides") != prebuilt_override_manifest(
+        compatibility_tag
+    ):
+        raise SystemExit("Release manifest prebuilt override provenance is invalid")
+    if native.get("commit") != native_commit or not FULL_SHA_RE.fullmatch(
+        str(native.get("commit", ""))
+    ):
+        raise SystemExit("Release manifest native commit does not match exact input")
+
+    identity = parse_upstream(
+        upstream_tag=upstream_tag,
+        upstream_commit=upstream_commit,
+        compatibility_tag=compatibility_tag,
+    )
+    parsed_release = validate_pair(identity, release_tag)
+    expected_release = {
+        "tag": release_tag,
+        "channel": parsed_release.channel,
+        "kind": parsed_release.kind,
+        "rebuild": parsed_release.rebuild,
+        "githubPrerelease": parsed_release.github_prerelease,
+    }
+    if release != expected_release:
+        raise SystemExit("Release manifest release identity is incomplete or inconsistent")
+
+    expected_asr = 1 if has_asr_bridge(compatibility_tag) else None
+    expected_abi = {
+        "upstreamC": "c/engine.h",
+        "streamProxyCallback": 1,
+        "asrBridge": expected_asr,
+    }
+    if abi != expected_abi:
+        raise SystemExit("Release manifest ABI declaration is incomplete or inconsistent")
+    expected_capabilities = {
+        "textGeneration": True,
+        "streaming": True,
+        "streamChunkAccessors": uses_stream_chunk_api(compatibility_tag),
+        "asr": has_asr_bridge(compatibility_tag),
+        "officialUpstreamAssets": upstream_tag is not None,
+    }
+    if capabilities != expected_capabilities:
+        raise SystemExit(
+            "Release manifest capability declaration is incomplete or inconsistent"
+        )
+
+    platforms = manifest.get("platforms")
+    if not isinstance(platforms, list) or len(platforms) != len(
+        REQUIRED_PLATFORM_KEYS
+    ):
+        raise SystemExit("Release manifest must contain exactly nine platform bundles")
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, list) or not artifacts:
+        raise SystemExit("Release manifest must contain provenance-bearing artifacts")
+
+    artifacts_by_path: dict[str, dict] = {}
+    for index, artifact in enumerate(artifacts):
+        if not isinstance(artifact, dict):
+            raise SystemExit(f"artifact[{index}] must be an object")
+        _require_exact_keys(
+            artifact,
+            {
+                "runtime",
+                "platform",
+                "arch",
+                "path",
+                "fileName",
+                "sha256",
+                "upstreamTag",
+                "upstreamCommit",
+                "releaseTag",
+                "accelerators",
+            },
+            f"artifact[{index}]",
+        )
+        path = _require_relative_path(artifact.get("path"), f"artifact[{index}].path")
+        if path in artifacts_by_path:
+            raise SystemExit(f"Duplicate artifact path {path}")
+        if artifact.get("fileName") != Path(path).name:
+            raise SystemExit(f"artifact[{index}] fileName does not match path")
+        _require_digest(artifact.get("sha256"), f"artifact[{index}].sha256")
+        if artifact.get("upstreamTag") != upstream_tag:
+            raise SystemExit(f"artifact[{index}] upstream tag provenance mismatch")
+        if artifact.get("upstreamCommit") != upstream_commit:
+            raise SystemExit(f"artifact[{index}] upstream commit provenance mismatch")
+        if artifact.get("releaseTag") != release_tag:
+            raise SystemExit(f"artifact[{index}] release tag provenance mismatch")
+        if artifact.get("runtime") not in {"native", "archive", "web"}:
+            raise SystemExit(f"artifact[{index}] has an invalid runtime family")
+        accelerators = artifact.get("accelerators")
+        if not isinstance(accelerators, list) or any(
+            not isinstance(item, str) or not item for item in accelerators
+        ) or len(accelerators) != len(set(accelerators)):
+            raise SystemExit(f"artifact[{index}] accelerators must be unique strings")
+        artifacts_by_path[path] = artifact
+
+    seen_platforms: set[tuple[str, str]] = set()
+    covered_paths: set[str] = set()
+    for index, platform in enumerate(platforms):
+        if not isinstance(platform, dict):
+            raise SystemExit(f"platform[{index}] must be an object")
+        _require_exact_keys(
+            platform,
+            {"platform", "arch", "releaseAsset", "artifactPaths", "accelerators"},
+            f"platform[{index}]",
+        )
+        key = (platform.get("platform"), platform.get("arch"))
+        if key not in REQUIRED_PLATFORM_KEYS or key in seen_platforms:
+            raise SystemExit(f"platform[{index}] is missing, duplicate, or unsupported")
+        seen_platforms.add(key)
+        expected_asset = f"litert-lm-native-runtime-{key[0]}-{key[1]}-{release_tag}.tar.gz"
+        if platform.get("releaseAsset") != expected_asset:
+            raise SystemExit(f"platform[{index}] release asset does not match identity")
+        paths = platform.get("artifactPaths")
+        if not isinstance(paths, list) or not paths or len(paths) != len(set(paths)):
+            raise SystemExit(f"platform[{index}] must contain unique artifact paths")
+        for path in paths:
+            if path not in artifacts_by_path:
+                raise SystemExit(f"platform[{index}] references an unknown artifact")
+            artifact = artifacts_by_path[path]
+            if artifact.get("runtime") != "native" or (
+                artifact.get("platform"), artifact.get("arch")
+            ) != key:
+                raise SystemExit(f"platform[{index}] artifact provenance mismatch")
+            covered_paths.add(path)
+        accelerators = platform.get("accelerators")
+        if not isinstance(accelerators, list) or len(accelerators) != len(
+            set(accelerators)
+        ):
+            raise SystemExit(f"platform[{index}] accelerators must be unique")
+    if seen_platforms != REQUIRED_PLATFORM_KEYS:
+        raise SystemExit("Release manifest is missing required platform bundles")
+    native_paths = {
+        path
+        for path, artifact in artifacts_by_path.items()
+        if artifact.get("runtime") == "native"
+    }
+    if covered_paths != native_paths:
+        raise SystemExit("Release manifest has unbound native artifact provenance")
+
+    smokes = manifest.get("realModelSmokes")
+    if not isinstance(smokes, list):
+        raise SystemExit("Release manifest realModelSmokes must be a list")
+    seen_smokes: set[tuple[str, str, str]] = set()
+    for index, smoke in enumerate(smokes):
+        if not isinstance(smoke, dict):
+            raise SystemExit(f"smoke[{index}] must be an object")
+        _require_exact_keys(
+            smoke,
+            {
+                "id",
+                "result",
+                "platform",
+                "arch",
+                "backend",
+                "upstreamCommit",
+                "nativeCommit",
+                "abiVersion",
+                "library",
+                "model",
+                "tokenizer",
+                "fixture",
+                "source",
+                "expectation",
+                "transcript",
+            },
+            f"smoke[{index}]",
+        )
+        key = (str(smoke.get("id")), str(smoke.get("platform")), str(smoke.get("arch")))
+        if key in seen_smokes or (key[1], key[2]) not in REQUIRED_PLATFORM_KEYS:
+            raise SystemExit(f"smoke[{index}] has a duplicate or unsupported identity")
+        seen_smokes.add(key)
+        if smoke.get("id") != "litert_lm_asr_moonshine" or smoke.get("result") != "pass":
+            raise SystemExit(f"smoke[{index}] is not the required passing real-model smoke")
+        if smoke.get("backend") != "cpu" or smoke.get("abiVersion") != 1:
+            raise SystemExit(f"smoke[{index}] has invalid backend or ABI evidence")
+        if smoke.get("upstreamCommit") != upstream_commit or smoke.get("nativeCommit") != native_commit:
+            raise SystemExit(f"smoke[{index}] source commits do not match manifest")
+        for field, expected_keys in (
+            ("library", {"fileName", "sha256"}),
+            ("model", {"fileName", "sha256"}),
+            ("tokenizer", {"fileName", "sha256"}),
+            ("fixture", {"fileName", "sha256", "sampleRateHz", "sampleCount"}),
+        ):
+            payload = smoke.get(field)
+            if not isinstance(payload, dict):
+                raise SystemExit(f"smoke[{index}].{field} must be an object")
+            _require_exact_keys(payload, expected_keys, f"smoke[{index}].{field}")
+            if not isinstance(payload.get("fileName"), str) or not payload["fileName"]:
+                raise SystemExit(f"smoke[{index}].{field} is missing file identity")
+            _require_digest(payload.get("sha256"), f"smoke[{index}].{field}.sha256")
+        fixture = smoke["fixture"]
+        if fixture.get("sampleRateHz") != 16000 or not isinstance(
+            fixture.get("sampleCount"), int
+        ) or fixture["sampleCount"] <= 0:
+            raise SystemExit(f"smoke[{index}] has invalid fixture metadata")
+        source = smoke.get("source")
+        if not isinstance(source, dict):
+            raise SystemExit(f"smoke[{index}] is missing immutable source provenance")
+        _require_exact_keys(
+            source,
+            {"runtimeReleaseAsset", "model", "tokenizer", "fixture"},
+            f"smoke[{index}].source",
+        )
+        expected_asset = f"litert-lm-native-runtime-{key[1]}-{key[2]}-{release_tag}.tar.gz"
+        if source.get("runtimeReleaseAsset") != expected_asset or any(
+            not isinstance(source.get(field), str)
+            or not source[field].startswith("https://")
+            for field in ("model", "tokenizer", "fixture")
+        ):
+            raise SystemExit(f"smoke[{index}] has invalid immutable source provenance")
+        expectation = smoke.get("expectation")
+        if not isinstance(expectation, dict):
+            raise SystemExit(f"smoke[{index}] is missing transcript expectation")
+        _require_exact_keys(expectation, {"type", "value"}, f"smoke[{index}].expectation")
+        expected_text = expectation.get("value")
+        transcript = smoke.get("transcript")
+        if expectation.get("type") != "case-insensitive-substring" or not isinstance(
+            expected_text, str
+        ) or not expected_text.strip() or not isinstance(transcript, str) or (
+            expected_text.casefold() not in transcript.casefold()
+        ):
+            raise SystemExit(f"smoke[{index}] does not satisfy its transcript expectation")
 
 
 def required_spm_assets(compatibility_tag: str) -> list[str]:
@@ -179,6 +535,14 @@ def main() -> int:
             native_commit=args.native_commit,
             release_tag=args.release_tag,
         )
+        validate_schema_2_payload(
+            manifest,
+            upstream_tag=upstream_tag,
+            upstream_commit=str(manifest["upstream"]["commit"]),
+            compatibility_tag=compatibility_tag,
+            native_commit=str(manifest["native"]["commit"]),
+            release_tag=args.release_tag,
+        )
     elif schema_version == 1:
         compatibility_tag, official_assets = validate_legacy_identity(
             manifest, upstream_tag=upstream_tag, release_tag=args.release_tag
@@ -245,7 +609,6 @@ def main() -> int:
         required_assets = [
             "manifest.json",
             "SHA256SUMS",
-            "release-result.json",
             f"litert-lm-native-prebuilts-{args.release_tag}.tar.gz",
             *[
                 pattern.format(tag=args.release_tag)
@@ -254,6 +617,8 @@ def main() -> int:
             *[pattern.format(tag=args.release_tag) for pattern in required_spm],
             *spm_assets,
         ]
+        if schema_version == 2:
+            required_assets.append("release-result.json")
         if official_assets:
             required_assets.append(
                 f"litert-lm-native-official-assets-{args.release_tag}.tar.gz"

@@ -97,7 +97,13 @@ python3 tools/fetch_upstream.py --latest
 Generate release metadata for local `bin/` and `web/dist/` contents:
 
 ```bash
-python3 tools/package_release.py --upstream-tag v0.12.0
+python3 tools/package_release.py \
+  --upstream-tag v0.12.0 \
+  --upstream-commit ffed38adbc33509480b5340e5173638bc20a68ff \
+  --compatibility-tag v0.12.0 \
+  --release-tag v0.12.0 \
+  --native-commit "$(git rev-parse HEAD)" \
+  --official-upstream-assets
 python3 tools/validate_artifacts.py
 ```
 
@@ -114,7 +120,7 @@ python3 tools/validate_artifacts.py
   upstream publishes them, falls back to the source-built Apple runtimes when
   those archives are missing, packages Apple SPM XCFramework zips from the same
   runtime payloads, includes the official upstream release assets, then
-  writes a schema 2 `manifest.json` plus `SHA256SUMS`, and uploads a prepared
+  writes a fail-closed schema 2 `manifest.json` plus `SHA256SUMS`, and uploads a prepared
   candidate by default. Publication requires the explicit `publish` input,
   exact-input revalidation, required real-model evidence, draft validation, and
   draft promotion. Existing releases are never edited or overwritten.

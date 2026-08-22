@@ -130,7 +130,10 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
 
         create_release = workflow[workflow.index('gh release create "'):]
         self.assertIn('--target "${{ inputs.native_commit }}"', create_release)
-        self.assertIn("already exists and is immutable", workflow)
+        self.assertIn("tools/publication_state.py", workflow)
+        self.assertIn("Create or safely resume exact draft", workflow)
+        self.assertIn("releases/assets/$asset_id", workflow)
+        self.assertIn("jq -jr .notes", workflow)
         self.assertIn("--draft", create_release)
         self.assertIn("gh release edit", create_release)
         self.assertIn("--draft=false", create_release)

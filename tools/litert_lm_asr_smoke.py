@@ -10,6 +10,8 @@ import struct
 import wave
 from pathlib import Path
 
+from fetch_litert_lm_asr_smoke_assets import ASSETS
+
 
 ABI_VERSION = 1
 STATUS_OK = 0
@@ -230,13 +232,21 @@ def main() -> int:
     parser.add_argument("--arch")
     parser.add_argument("--upstream-commit")
     parser.add_argument("--native-commit")
+    parser.add_argument("--release-tag")
     args = parser.parse_args()
     if args.evidence_json and not all(
-        (args.platform, args.arch, args.upstream_commit, args.native_commit)
+        (
+            args.platform,
+            args.arch,
+            args.upstream_commit,
+            args.native_commit,
+            args.release_tag,
+            args.expect,
+        )
     ):
         parser.error(
             "--evidence-json requires --platform, --arch, --upstream-commit, "
-            "and --native-commit"
+            "--native-commit, --release-tag, and --expect"
         )
 
     library = bind(args.library.resolve())
@@ -327,6 +337,7 @@ def main() -> int:
     }
     print("RESULT litert_lm_asr " + json.dumps(result, sort_keys=True))
     if args.evidence_json:
+        source_by_name = {asset.filename: asset.url for asset in ASSETS}
         evidence = {
             "id": "litert_lm_asr_moonshine",
             "result": "pass",
@@ -354,7 +365,19 @@ def main() -> int:
                 "sampleRateHz": sample_rate,
                 "sampleCount": len(samples),
             },
-            "expect": args.expect,
+            "source": {
+                "runtimeReleaseAsset": (
+                    "litert-lm-native-runtime-"
+                    f"{args.platform}-{args.arch}-{args.release_tag}.tar.gz"
+                ),
+                "model": source_by_name[args.model.name],
+                "tokenizer": source_by_name[args.tokenizer.name],
+                "fixture": source_by_name[args.audio.name],
+            },
+            "expectation": {
+                "type": "case-insensitive-substring",
+                "value": args.expect,
+            },
             "transcript": transcript,
         }
         args.evidence_json.parent.mkdir(parents=True, exist_ok=True)

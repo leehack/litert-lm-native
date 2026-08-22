@@ -153,10 +153,47 @@ jobs:
           done < release-policy.env
           echo "official_upstream_assets=$official_upstream_assets" >> "$GITHUB_OUTPUT"
 
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::Release $RELEASE_TAG already exists and is immutable"
-            exit 1
+          if [ -n "$UPSTREAM_TAG" ]; then
+            gh api "repos/google-ai-edge/LiteRT-LM/releases/tags/$UPSTREAM_TAG" \
+              > upstream-release.json
+            python3 - <<'PY'
+          import json
+          import os
+          release = json.load(open("upstream-release.json", encoding="utf-8"))
+          candidate = {
+              "tag": release["tag_name"],
+              "commit": os.environ["UPSTREAM_COMMIT"],
+              "assets": [
+                  {"name": asset["name"]}
+                  for asset in release.get("assets", [])
+              ],
+          }
+          with open("upstream-candidate.json", "w", encoding="utf-8") as output:
+              json.dump(candidate, output)
+          PY
+            consumability_args=(--require-ready)
+            if grep -qx 'release_kind=rebuild' release-policy.env; then
+              consumability_args+=(--allow-same-commit)
+            fi
+            python3 tools/check_upstream_release.py \
+              --candidate upstream-candidate.json \
+              --native-repository "$GITHUB_REPOSITORY" \
+              "${consumability_args[@]}"
           fi
+
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq 'add' > existing-releases.json
+          python3 tools/publication_state.py \
+            --releases existing-releases.json \
+            --approval "$PUBLICATION_APPROVAL" \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --native-commit "$NATIVE_COMMIT" \
+            --correlation-id "$CORRELATION_ID" \
+            --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
+            --output publication-plan.json
           if [ "$PUBLICATION_APPROVAL" = "publish" ]; then
             test "$TARGET_PLATFORM" = all
             test "$TARGET_ARCH" = all
@@ -282,7 +319,8 @@ jobs:
             --platform "${{ matrix.platform }}" \
             --arch "${{ matrix.arch }}" \
             --upstream-commit "${{ inputs.upstream_commit }}" \
-            --native-commit "${{ inputs.native_commit }}"
+            --native-commit "${{ inputs.native_commit }}" \
+            --release-tag "${{ inputs.release_tag }}"
 
       - name: Run Windows ASR real-model smoke
         if: inputs.run_asr_smoke && matrix.platform == 'windows' && matrix.arch == 'x64'
@@ -299,7 +337,8 @@ jobs:
             --platform windows `
             --arch x64 `
             --upstream-commit "${{ inputs.upstream_commit }}" `
-            --native-commit "${{ inputs.native_commit }}"
+            --native-commit "${{ inputs.native_commit }}" `
+            --release-tag "${{ inputs.release_tag }}"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -527,23 +566,62 @@ jobs:
             --release-tag "${{ inputs.release_tag }}" \
             --existing-tags-file existing-tags.txt
 
-      - name: Create draft release with candidate assets
+      - name: Create or safely resume exact draft and replace candidate assets
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq 'add' > existing-releases.json
+          python3 tools/publication_state.py \
+            --releases existing-releases.json \
+            --approval publish \
+            --release-tag "${{ inputs.release_tag }}" \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-commit "${{ inputs.upstream_commit }}" \
+            --native-commit "${{ inputs.native_commit }}" \
+            --correlation-id "${{ inputs.correlation_id }}" \
+            --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
+            --output publication-plan.json
           prerelease_args=()
           if [ "${{ needs.preflight.outputs.github_prerelease }}" = true ]; then
             prerelease_args+=(--prerelease)
           fi
-          notes="Release ${{ inputs.release_tag }}; upstream tag ${{ inputs.upstream_tag || '(development)' }}; upstream commit ${{ inputs.upstream_commit }}; native commit ${{ inputs.native_commit }}; correlation ${{ inputs.correlation_id }}."
-          gh release create "${{ inputs.release_tag }}" \
+          if [ "$(jq -r .action publication-plan.json)" = create ]; then
+            jq -jr .notes publication-plan.json > release-notes.txt
+            gh release create "${{ inputs.release_tag }}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "${{ inputs.native_commit }}" \
+              --title "LiteRT-LM ${{ inputs.release_tag }}" \
+              --notes-file release-notes.txt \
+              --draft \
+              "${prerelease_args[@]}"
+          fi
+
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq 'add' > existing-releases.json
+          python3 tools/publication_state.py \
+            --releases existing-releases.json \
+            --approval publish \
+            --release-tag "${{ inputs.release_tag }}" \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-commit "${{ inputs.upstream_commit }}" \
+            --native-commit "${{ inputs.native_commit }}" \
+            --correlation-id "${{ inputs.correlation_id }}" \
+            --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
+            --output publication-plan.json
+          release_id="$(jq -r .releaseId publication-plan.json)"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
+            > draft-release.json
+          while IFS= read -r asset_id; do
+            gh api --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/releases/assets/$asset_id"
+          done < <(jq -r '.assets[].id' draft-release.json)
+          gh release upload "${{ inputs.release_tag }}" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "${{ inputs.native_commit }}" \
-            --title "LiteRT-LM ${{ inputs.release_tag }}" \
-            --notes "$notes" \
-            --draft \
-            "${prerelease_args[@]}" \
             candidate/release/* \
             candidate/manifest.json \
             candidate/SHA256SUMS \
