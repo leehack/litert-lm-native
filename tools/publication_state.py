@@ -17,12 +17,14 @@ def release_notes(
     release_tag: str,
     upstream_tag: str | None,
     upstream_commit: str,
+    compatibility_tag: str,
     native_commit: str,
     correlation_id: str,
 ) -> str:
     return (
         f"Release {release_tag}; upstream tag {upstream_tag or '(development)'}; "
-        f"upstream commit {upstream_commit}; native commit {native_commit}; "
+        f"upstream commit {upstream_commit}; compatibility tag {compatibility_tag}; "
+        f"native commit {native_commit}; "
         f"correlation {correlation_id}."
     )
 
@@ -34,6 +36,7 @@ def plan_publication(
     release_tag: str,
     upstream_tag: str | None,
     upstream_commit: str,
+    compatibility_tag: str,
     native_commit: str,
     correlation_id: str,
     prerelease: bool,
@@ -43,6 +46,7 @@ def plan_publication(
         release_tag=release_tag,
         upstream_tag=upstream_tag,
         upstream_commit=upstream_commit,
+        compatibility_tag=compatibility_tag,
         native_commit=native_commit,
         correlation_id=correlation_id,
     )
@@ -102,6 +106,7 @@ def main() -> int:
     parser.add_argument("--release-tag", required=True)
     parser.add_argument("--upstream-tag", default="")
     parser.add_argument("--upstream-commit", required=True)
+    parser.add_argument("--compatibility-tag", required=True)
     parser.add_argument("--native-commit", required=True)
     parser.add_argument("--correlation-id", required=True)
     parser.add_argument("--prerelease", choices=("true", "false"), required=True)
@@ -117,6 +122,7 @@ def main() -> int:
             release_tag=args.release_tag,
             upstream_tag=args.upstream_tag or None,
             upstream_commit=args.upstream_commit,
+            compatibility_tag=args.compatibility_tag,
             native_commit=args.native_commit,
             correlation_id=args.correlation_id,
             prerelease=args.prerelease == "true",

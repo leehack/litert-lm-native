@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 
+from fetch_litert_lm_asr_smoke_assets import ASSETS
 from litert_lm_symbols import has_asr_bridge, is_at_least, uses_stream_chunk_api
 from prebuilt_overrides import prebuilt_override_manifest
 from release_version_policy import parse_upstream, validate_pair
@@ -310,6 +311,7 @@ def validate_schema_2_payload(
     if not isinstance(smokes, list):
         raise SystemExit("Release manifest realModelSmokes must be a list")
     seen_smokes: set[tuple[str, str, str]] = set()
+    pinned_smoke_assets = {asset.filename: asset for asset in ASSETS}
     for index, smoke in enumerate(smokes):
         if not isinstance(smoke, dict):
             raise SystemExit(f"smoke[{index}] must be an object")
@@ -362,6 +364,34 @@ def validate_schema_2_payload(
             fixture.get("sampleCount"), int
         ) or fixture["sampleCount"] <= 0:
             raise SystemExit(f"smoke[{index}] has invalid fixture metadata")
+        for field, expected_filename in (
+            ("model", "moonshine_tiny_5s_i8.tflite"),
+            ("tokenizer", "moonshine_tokenizer.json"),
+            ("fixture", "jfk.wav"),
+        ):
+            pinned = pinned_smoke_assets[expected_filename]
+            payload = smoke[field]
+            if (
+                payload.get("fileName") != pinned.filename
+                or payload.get("sha256") != pinned.sha256
+            ):
+                raise SystemExit(
+                    f"smoke[{index}] {field} does not match the pinned smoke asset"
+                )
+        library = smoke["library"]
+        matching_libraries = [
+            artifact
+            for artifact in artifacts_by_path.values()
+            if artifact.get("runtime") == "native"
+            and artifact.get("platform") == key[1]
+            and artifact.get("arch") == key[2]
+            and artifact.get("fileName") == library.get("fileName")
+            and artifact.get("sha256") == library.get("sha256")
+        ]
+        if len(matching_libraries) != 1:
+            raise SystemExit(
+                f"smoke[{index}] library does not match one packaged runtime artifact"
+            )
         source = smoke.get("source")
         if not isinstance(source, dict):
             raise SystemExit(f"smoke[{index}] is missing immutable source provenance")
@@ -372,8 +402,7 @@ def validate_schema_2_payload(
         )
         expected_asset = f"litert-lm-native-runtime-{key[1]}-{key[2]}-{release_tag}.tar.gz"
         if source.get("runtimeReleaseAsset") != expected_asset or any(
-            not isinstance(source.get(field), str)
-            or not source[field].startswith("https://")
+            source.get(field) != pinned_smoke_assets[smoke[field]["fileName"]].url
             for field in ("model", "tokenizer", "fixture")
         ):
             raise SystemExit(f"smoke[{index}] has invalid immutable source provenance")
@@ -383,12 +412,15 @@ def validate_schema_2_payload(
         _require_exact_keys(expectation, {"type", "value"}, f"smoke[{index}].expectation")
         expected_text = expectation.get("value")
         transcript = smoke.get("transcript")
-        if expectation.get("type") != "case-insensitive-substring" or not isinstance(
-            expected_text, str
-        ) or not expected_text.strip() or not isinstance(transcript, str) or (
+        if expectation != {
+            "type": "case-insensitive-substring",
+            "value": "country",
+        } or not isinstance(transcript, str) or (
             expected_text.casefold() not in transcript.casefold()
         ):
-            raise SystemExit(f"smoke[{index}] does not satisfy its transcript expectation")
+            raise SystemExit(
+                f"smoke[{index}] does not satisfy the pinned transcript expectation"
+            )
 
 
 def required_spm_assets(compatibility_tag: str) -> list[str]:

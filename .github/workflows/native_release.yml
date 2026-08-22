@@ -191,6 +191,7 @@ jobs:
             --release-tag "$RELEASE_TAG" \
             --upstream-tag "$UPSTREAM_TAG" \
             --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
             --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
@@ -583,6 +584,7 @@ jobs:
             --release-tag "${{ inputs.release_tag }}" \
             --upstream-tag "${{ inputs.upstream_tag }}" \
             --upstream-commit "${{ inputs.upstream_commit }}" \
+            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
             --native-commit "${{ inputs.native_commit }}" \
             --correlation-id "${{ inputs.correlation_id }}" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
@@ -612,6 +614,7 @@ jobs:
             --release-tag "${{ inputs.release_tag }}" \
             --upstream-tag "${{ inputs.upstream_tag }}" \
             --upstream-commit "${{ inputs.upstream_commit }}" \
+            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
             --native-commit "${{ inputs.native_commit }}" \
             --correlation-id "${{ inputs.correlation_id }}" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \

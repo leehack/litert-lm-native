@@ -220,10 +220,10 @@ def validate_history(candidate: ReleaseIdentity, existing_tags: Iterable[str]) -
             )
         same_line = [item for item in stable if item.core == candidate.core]
         if candidate.rebuild > 0:
-            if not same_line:
+            if not any(item.rebuild == 0 for item in same_line):
                 raise PolicyError(
                     f"orphan stable rebuild: {candidate.tag!r} has no aligned "
-                    "base or lower same-line release"
+                    "base release"
                 )
             predecessor = candidate.rebuild - 1
             if not any(item.rebuild == predecessor for item in same_line):
@@ -247,10 +247,10 @@ def validate_history(candidate: ReleaseIdentity, existing_tags: Iterable[str]) -
         if item.channel == "development" and item.core == candidate.core
     ]
     if candidate.rebuild > 0:
-        if not same_development:
+        if not any(item.rebuild == 0 for item in same_development):
             raise PolicyError(
                 f"orphan development rebuild: {candidate.tag!r} has no aligned "
-                "base or lower same-line release"
+                "base release"
             )
         predecessor = candidate.rebuild - 1
         if not any(item.rebuild == predecessor for item in same_development):

@@ -26,7 +26,11 @@ def _digest(data: bytes) -> str:
 
 
 def _smoke(platform: str, arch: str) -> dict:
-    sources = {asset.filename: asset.url for asset in ASSETS}
+    assets = {asset.filename: asset for asset in ASSETS}
+    library_path = {
+        ("linux", "x64"): Path("bin/linux/x64/libLiteRtLm.so"),
+        ("windows", "x64"): Path("bin/windows/x64/LiteRtLm.dll"),
+    }[(platform, arch)]
     return {
         "id": "litert_lm_asr_moonshine",
         "result": "pass",
@@ -36,18 +40,21 @@ def _smoke(platform: str, arch: str) -> dict:
         "upstreamCommit": UPSTREAM_COMMIT,
         "nativeCommit": NATIVE_COMMIT,
         "abiVersion": 1,
-        "library": {"fileName": "libLiteRtLm", "sha256": "1" * 64},
+        "library": {
+            "fileName": library_path.name,
+            "sha256": _digest(f"fixture:{library_path.as_posix()}".encode()),
+        },
         "model": {
             "fileName": "moonshine_tiny_5s_i8.tflite",
-            "sha256": "2" * 64,
+            "sha256": assets["moonshine_tiny_5s_i8.tflite"].sha256,
         },
         "tokenizer": {
             "fileName": "moonshine_tokenizer.json",
-            "sha256": "3" * 64,
+            "sha256": assets["moonshine_tokenizer.json"].sha256,
         },
         "fixture": {
             "fileName": "jfk.wav",
-            "sha256": "4" * 64,
+            "sha256": assets["jfk.wav"].sha256,
             "sampleRateHz": 16000,
             "sampleCount": 176000,
         },
@@ -55,9 +62,9 @@ def _smoke(platform: str, arch: str) -> dict:
             "runtimeReleaseAsset": (
                 f"litert-lm-native-runtime-{platform}-{arch}-{RELEASE_TAG}.tar.gz"
             ),
-            "model": sources["moonshine_tiny_5s_i8.tflite"],
-            "tokenizer": sources["moonshine_tokenizer.json"],
-            "fixture": sources["jfk.wav"],
+            "model": assets["moonshine_tiny_5s_i8.tflite"].url,
+            "tokenizer": assets["moonshine_tokenizer.json"].url,
+            "fixture": assets["jfk.wav"].url,
         },
         "expectation": {
             "type": "case-insensitive-substring",

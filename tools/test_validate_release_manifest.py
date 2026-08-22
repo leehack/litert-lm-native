@@ -74,6 +74,30 @@ class ValidateReleaseManifestTest(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "keys do not match"):
                     self.validate(incomplete)
 
+    def test_smoke_evidence_is_bound_to_pinned_assets_and_runtime(self) -> None:
+        wrong_model = deepcopy(self.valid)
+        wrong_model["realModelSmokes"][0]["model"]["sha256"] = "a" * 64
+        with self.assertRaisesRegex(SystemExit, "pinned smoke asset"):
+            self.validate(wrong_model)
+
+        wrong_source = deepcopy(self.valid)
+        wrong_source["realModelSmokes"][0]["source"]["model"] = (
+            "https://example.invalid/model.tflite"
+        )
+        with self.assertRaisesRegex(SystemExit, "immutable source provenance"):
+            self.validate(wrong_source)
+
+        wrong_library = deepcopy(self.valid)
+        wrong_library["realModelSmokes"][0]["library"]["sha256"] = "b" * 64
+        with self.assertRaisesRegex(SystemExit, "packaged runtime artifact"):
+            self.validate(wrong_library)
+
+        fabricated = deepcopy(self.valid)
+        fabricated["realModelSmokes"][0]["expectation"]["value"] = "fabricated"
+        fabricated["realModelSmokes"][0]["transcript"] = "fabricated"
+        with self.assertRaisesRegex(SystemExit, "pinned transcript expectation"):
+            self.validate(fabricated)
+
     def test_incomplete_abi_capabilities_and_release_fail_closed(self) -> None:
         for section, field in (
             ("abi", "upstreamC"),

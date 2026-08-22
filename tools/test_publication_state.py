@@ -16,6 +16,7 @@ def plan(releases: list[dict], approval: str = "publish") -> dict:
         release_tag="v0.16.0-3",
         upstream_tag="v0.16.0",
         upstream_commit=UPSTREAM,
+        compatibility_tag="v0.16.0",
         native_commit=NATIVE,
         correlation_id="llamadart-400-1",
         prerelease=True,
@@ -35,6 +36,7 @@ class PublicationStateTest(unittest.TestCase):
                 release_tag="v0.16.0-3",
                 upstream_tag="v0.16.0",
                 upstream_commit=UPSTREAM,
+                compatibility_tag="v0.16.0",
                 native_commit=NATIVE,
                 correlation_id="llamadart-400-1",
             ),
@@ -56,6 +58,20 @@ class PublicationStateTest(unittest.TestCase):
         mismatch["body"] = "different correlation"
         with self.assertRaisesRegex(PublicationStateError, "exact inputs"):
             plan([mismatch])
+
+        compatibility_mismatch = self.matching_draft()
+        with self.assertRaisesRegex(PublicationStateError, "exact inputs"):
+            plan_publication(
+                [compatibility_mismatch],
+                approval="publish",
+                release_tag="v0.16.0-3",
+                upstream_tag="v0.16.0",
+                upstream_commit=UPSTREAM,
+                compatibility_tag="v0.15.0",
+                native_commit=NATIVE,
+                correlation_id="llamadart-400-1",
+                prerelease=True,
+            )
 
     def test_prepare_only_never_adopts_existing_draft(self) -> None:
         with self.assertRaisesRegex(PublicationStateError, "collision"):

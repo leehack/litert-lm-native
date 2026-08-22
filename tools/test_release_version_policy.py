@@ -93,6 +93,8 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
                 parse_release_tag("v0.16.0-2"),
                 ["v0.16.0"],
             )
+        with self.assertRaisesRegex(PolicyError, "base release"):
+            validate_history(parse_release_tag("v0.17.0-2"), ["v0.17.0-1"])
         validate_history(
             parse_release_tag("v0.16.0-3"),
             ["v0.16.0", "v0.16.0-native.2"],
@@ -104,6 +106,11 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
             validate_history(
                 parse_release_tag("gba8249987394-2"),
                 ["gba8249987394"],
+            )
+        with self.assertRaisesRegex(PolicyError, "base release"):
+            validate_history(
+                parse_release_tag("g123456789abc-2"),
+                ["g123456789abc-1"],
             )
         validate_history(
             parse_release_tag("gba8249987394-2"),
