@@ -138,6 +138,33 @@ jobs:
             official_upstream_assets=false
           fi
 
+          python3 tools/release_version_policy.py \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --release-tag "$RELEASE_TAG" \
+            --skip-history > release-policy.env
+
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            > existing-release-pages.json
+          jq 'add' existing-release-pages.json > existing-releases.json
+          python3 tools/publication_state.py \
+            --releases existing-releases.json \
+            --approval "$PUBLICATION_APPROVAL" \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --correlation-id "$CORRELATION_ID" \
+            --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
+            --output publication-plan.json
+
+          history_args=()
+          if [ "$(jq -r .action publication-plan.json)" = resume ]; then
+            history_args+=(--allow-existing-candidate-tag)
+          fi
           gh api --paginate \
             "repos/${GITHUB_REPOSITORY}/tags?per_page=100" \
             --jq '.[].name' > existing-tags.txt
@@ -146,7 +173,8 @@ jobs:
             --upstream-commit "$UPSTREAM_COMMIT" \
             --compatibility-tag "$COMPATIBILITY_TAG" \
             --release-tag "$RELEASE_TAG" \
-            --existing-tags-file existing-tags.txt > release-policy.env
+            --existing-tags-file existing-tags.txt \
+            "${history_args[@]}" > release-policy.env
           cat release-policy.env
           while IFS='=' read -r key value; do
             echo "$key=$value" >> "$GITHUB_OUTPUT"
@@ -181,21 +209,6 @@ jobs:
               "${consumability_args[@]}"
           fi
 
-          gh api --paginate --slurp \
-            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            > existing-release-pages.json
-          jq 'add' existing-release-pages.json > existing-releases.json
-          python3 tools/publication_state.py \
-            --releases existing-releases.json \
-            --approval "$PUBLICATION_APPROVAL" \
-            --release-tag "$RELEASE_TAG" \
-            --upstream-tag "$UPSTREAM_TAG" \
-            --upstream-commit "$UPSTREAM_COMMIT" \
-            --compatibility-tag "$COMPATIBILITY_TAG" \
-            --native-commit "$NATIVE_COMMIT" \
-            --correlation-id "$CORRELATION_ID" \
-            --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
-            --output publication-plan.json
           if [ "$PUBLICATION_APPROVAL" = "publish" ]; then
             test "$TARGET_PLATFORM" = all
             test "$TARGET_ARCH" = all
@@ -558,6 +571,25 @@ jobs:
               exit 1
             fi
           fi
+          gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            > existing-release-pages.json
+          jq 'add' existing-release-pages.json > existing-releases.json
+          python3 tools/publication_state.py \
+            --releases existing-releases.json \
+            --approval publish \
+            --release-tag "${{ inputs.release_tag }}" \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-commit "${{ inputs.upstream_commit }}" \
+            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
+            --native-commit "${{ inputs.native_commit }}" \
+            --correlation-id "${{ inputs.correlation_id }}" \
+            --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
+            --output publication-plan.json
+          history_args=()
+          if [ "$(jq -r .action publication-plan.json)" = resume ]; then
+            history_args+=(--allow-existing-candidate-tag)
+          fi
           gh api --paginate \
             "repos/${GITHUB_REPOSITORY}/tags?per_page=100" \
             --jq '.[].name' > existing-tags.txt
@@ -566,7 +598,8 @@ jobs:
             --upstream-commit "${{ inputs.upstream_commit }}" \
             --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
             --release-tag "${{ inputs.release_tag }}" \
-            --existing-tags-file existing-tags.txt
+            --existing-tags-file existing-tags.txt \
+            "${history_args[@]}"
 
       - name: Create or safely resume exact draft and replace candidate assets
         shell: bash

@@ -49,6 +49,27 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         self.assertIn("--require-smoke linux/x64", workflow)
         self.assertIn("--require-smoke windows/x64", workflow)
 
+    def test_draft_identity_is_reconciled_before_candidate_tag_is_allowed(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/native_release.yml").read_text(
+            encoding="utf-8"
+        )
+        preflight = workflow[
+            workflow.index("- name: Verify native and upstream commits") :
+            workflow.index("  runtime-matrix:")
+        ]
+        publish_recheck = workflow[
+            workflow.index("- name: Recheck exact identity and immutable history") :
+            workflow.index("- name: Create or safely resume exact draft")
+        ]
+        for section in (preflight, publish_recheck):
+            self.assertLess(
+                section.index("tools/publication_state.py"),
+                section.index("--allow-existing-candidate-tag"),
+            )
+            self.assertIn('if [ "$(jq -r .action publication-plan.json)" = resume ]', section)
+        self.assertIn("--skip-history", preflight)
+
     def test_stable_and_compact_rebuild(self) -> None:
         upstream = parse_upstream(
             upstream_tag="v0.16.1",
@@ -127,6 +148,19 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         with self.assertRaisesRegex(PolicyError, "greater than 1"):
             validate_history(
                 parse_release_tag("gba8249987394"), ["gba8249987394-1"]
+            )
+
+    def test_matching_draft_candidate_tag_can_be_ignored_after_reconciliation(self) -> None:
+        validate_history(
+            parse_release_tag("v0.16.1-2"),
+            ["v0.16.1", "v0.16.1-1", "v0.16.1-2"],
+            allow_existing_candidate=True,
+        )
+        with self.assertRaisesRegex(PolicyError, "predecessor rebuild 1"):
+            validate_history(
+                parse_release_tag("v0.16.1-2"),
+                ["v0.16.1", "v0.16.1-2"],
+                allow_existing_candidate=True,
             )
 
     def test_invalid_or_mismatched_identities_are_rejected(self) -> None:

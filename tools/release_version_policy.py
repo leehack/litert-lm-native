@@ -188,13 +188,20 @@ def validate_pair(
     return release
 
 
-def validate_history(candidate: ReleaseIdentity, existing_tags: Iterable[str]) -> None:
+def validate_history(
+    candidate: ReleaseIdentity,
+    existing_tags: Iterable[str],
+    *,
+    allow_existing_candidate: bool = False,
+) -> None:
     parsed: list[ReleaseIdentity] = []
     for raw_tag in existing_tags:
         tag = raw_tag.strip()
         if not tag:
             continue
         if tag == candidate.tag:
+            if allow_existing_candidate:
+                continue
             raise PolicyError(
                 f"release tag collision: {candidate.tag!r} already exists; tags "
                 "and releases are immutable"
@@ -279,6 +286,19 @@ def main() -> int:
     parser.add_argument("--compatibility-tag", required=True)
     parser.add_argument("--release-tag", required=True)
     parser.add_argument("--existing-tags-file", type=Path)
+    parser.add_argument(
+        "--allow-existing-candidate-tag",
+        action="store_true",
+        help=(
+            "Ignore the exact candidate tag only after publication_state.py has "
+            "verified that it belongs to the matching resumable draft."
+        ),
+    )
+    parser.add_argument(
+        "--skip-history",
+        action="store_true",
+        help="Derive identity outputs before separately reconciling publication state.",
+    )
     args = parser.parse_args()
 
     existing = (
@@ -293,7 +313,12 @@ def main() -> int:
             compatibility_tag=args.compatibility_tag,
         )
         release = validate_pair(upstream, args.release_tag)
-        validate_history(release, existing)
+        if not args.skip_history:
+            validate_history(
+                release,
+                existing,
+                allow_existing_candidate=args.allow_existing_candidate_tag,
+            )
     except PolicyError as error:
         parser.error(str(error))
 

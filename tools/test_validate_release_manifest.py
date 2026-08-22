@@ -37,6 +37,61 @@ class ValidateReleaseManifestTest(unittest.TestCase):
     def test_owner_generated_manifest_satisfies_final_contract(self) -> None:
         self.validate(deepcopy(self.valid))
 
+    def test_owner_generated_release_inventory_is_exact(self) -> None:
+        fixture_dir = Path(__file__).resolve().parent / "fixtures"
+        manifest = fixture_dir / "schema2_contract_manifest.json"
+        release = fixture_dir / "schema2_contract_release.json"
+        self.assertEqual(
+            hashlib.sha256(release.read_bytes()).hexdigest(),
+            "e2d199613270b62ad51c6b89fdb5375979822d8b5affd96e00c51afe59296002",
+        )
+        base_argv = [
+            "validate_release_manifest.py",
+            str(manifest),
+            "--upstream-tag",
+            UPSTREAM_TAG,
+            "--upstream-commit",
+            UPSTREAM_COMMIT,
+            "--compatibility-tag",
+            UPSTREAM_TAG,
+            "--native-commit",
+            NATIVE_COMMIT,
+            "--release-tag",
+            RELEASE_TAG,
+            "--require-smoke",
+            "linux/x64",
+            "--require-smoke",
+            "windows/x64",
+            "--release-metadata",
+            str(release),
+        ]
+        with patch.object(sys, "argv", base_argv):
+            self.assertEqual(main(), 0)
+
+        payload = json.loads(release.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as temp:
+            mutated = Path(temp) / "release.json"
+            mutations = {
+                "missing required assets": lambda value: value["assets"].pop(),
+                "unexpected assets": lambda value: value["assets"].append(
+                    {"name": "unexpected.bin", "digest": "sha256:" + "f" * 64}
+                ),
+                "duplicate assets": lambda value: value["assets"].append(
+                    deepcopy(value["assets"][0])
+                ),
+                "exact GitHub SHA-256": lambda value: value["assets"][0].update(
+                    {"digest": "sha256:not-a-digest"}
+                ),
+            }
+            for expected_error, mutate in mutations.items():
+                with self.subTest(expected_error=expected_error):
+                    candidate = deepcopy(payload)
+                    mutate(candidate)
+                    mutated.write_text(json.dumps(candidate), encoding="utf-8")
+                    with patch.object(sys, "argv", [*base_argv[:-1], str(mutated)]):
+                        with self.assertRaisesRegex(SystemExit, expected_error):
+                            main()
+
     def test_wrong_package_and_incomplete_platforms_fail_closed(self) -> None:
         wrong_package = deepcopy(self.valid)
         wrong_package["package"] = "lookalike"
@@ -71,6 +126,51 @@ class ValidateReleaseManifestTest(unittest.TestCase):
                 platform["artifactPaths"].remove(override["targetPath"])
         with self.assertRaisesRegex(SystemExit, "override target provenance"):
             self.validate(missing_override_target)
+
+    def test_required_runtime_path_must_keep_exact_platform_binding(self) -> None:
+        misclassified = deepcopy(self.valid)
+        required_path = "bin/macos/arm64/libLiteRtLm.dylib"
+        artifact = next(
+            item for item in misclassified["artifacts"] if item["path"] == required_path
+        )
+        artifact["runtime"] = "archive"
+        artifact["platform"] = None
+        artifact["arch"] = None
+        platform = next(
+            item
+            for item in misclassified["platforms"]
+            if item["platform"] == "macos" and item["arch"] == "arm64"
+        )
+        platform["artifactPaths"].remove(required_path)
+        with self.assertRaisesRegex(SystemExit, "invalid runtime/platform/arch binding"):
+            self.validate(misclassified)
+
+    def test_accelerator_summaries_are_allowed_linked_unions(self) -> None:
+        fabricated = deepcopy(self.valid)
+        platform = next(
+            item
+            for item in fabricated["platforms"]
+            if item["platform"] == "linux" and item["arch"] == "x64"
+        )
+        artifact = next(
+            item
+            for item in fabricated["artifacts"]
+            if item["path"] in platform["artifactPaths"]
+        )
+        artifact["accelerators"] = ["fabricated"]
+        platform["accelerators"] = ["fabricated"]
+        with self.assertRaisesRegex(SystemExit, "unique allowed values"):
+            self.validate(fabricated)
+
+        mismatched = deepcopy(self.valid)
+        platform = next(
+            item
+            for item in mismatched["platforms"]
+            if item["platform"] == "android" and item["arch"] == "arm64"
+        )
+        platform["accelerators"] = []
+        with self.assertRaisesRegex(SystemExit, "do not match linked artifacts"):
+            self.validate(mismatched)
 
     def test_bare_smoke_and_missing_source_or_expectation_fail_closed(self) -> None:
         bare = deepcopy(self.valid)

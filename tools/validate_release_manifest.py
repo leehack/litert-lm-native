@@ -49,6 +49,7 @@ REQUIRED_PLATFORM_KEYS = {
     ("macos", "x64"),
     ("windows", "x64"),
 }
+ALLOWED_ACCELERATORS = {"metal", "opencl", "webgpu"}
 
 
 def _require_exact_keys(value: dict, expected: set[str], label: str) -> None:
@@ -259,8 +260,12 @@ def validate_schema_2_payload(
         accelerators = artifact.get("accelerators")
         if not isinstance(accelerators, list) or any(
             not isinstance(item, str) or not item for item in accelerators
-        ) or len(accelerators) != len(set(accelerators)):
-            raise SystemExit(f"artifact[{index}] accelerators must be unique strings")
+        ) or len(accelerators) != len(set(accelerators)) or not set(
+            accelerators
+        ).issubset(ALLOWED_ACCELERATORS):
+            raise SystemExit(
+                f"artifact[{index}] accelerators must be unique allowed values"
+            )
         artifacts_by_path[path] = artifact
 
     for override in upstream["prebuiltOverrides"]:
@@ -308,6 +313,19 @@ def validate_schema_2_payload(
             set(accelerators)
         ):
             raise SystemExit(f"platform[{index}] accelerators must be unique")
+        linked_accelerators = sorted(
+            {
+                accelerator
+                for path in paths
+                for accelerator in artifacts_by_path[path]["accelerators"]
+            }
+        )
+        if accelerators != linked_accelerators or not set(accelerators).issubset(
+            ALLOWED_ACCELERATORS
+        ):
+            raise SystemExit(
+                f"platform[{index}] accelerators do not match linked artifacts"
+            )
     if seen_platforms != REQUIRED_PLATFORM_KEYS:
         raise SystemExit("Release manifest is missing required platform bundles")
     native_paths = {
@@ -317,6 +335,42 @@ def validate_schema_2_payload(
     }
     if covered_paths != native_paths:
         raise SystemExit("Release manifest has unbound native artifact provenance")
+
+    required_paths = required_runtime_artifacts(
+        compatibility_tag, include_official_assets=upstream_tag is not None
+    )
+    required_paths.extend(
+        Path("dist") / "spm" / release_tag / asset.format(tag=release_tag)
+        for asset in required_spm_assets(compatibility_tag)
+    )
+    platform_paths = {
+        (platform["platform"], platform["arch"]): set(platform["artifactPaths"])
+        for platform in platforms
+    }
+    for required_path in required_paths:
+        path = required_path.as_posix()
+        artifact = artifacts_by_path.get(path)
+        if artifact is None:
+            raise SystemExit(f"Release manifest is missing required runtime path {path}")
+        if required_path.parts[0] == "bin":
+            expected_platform, expected_arch = required_path.parts[1:3]
+            if (
+                artifact.get("runtime") != "native"
+                or artifact.get("platform") != expected_platform
+                or artifact.get("arch") != expected_arch
+                or path not in platform_paths[(expected_platform, expected_arch)]
+            ):
+                raise SystemExit(
+                    f"Required runtime path {path} has invalid runtime/platform/arch binding"
+                )
+        elif (
+            artifact.get("runtime") != "archive"
+            or artifact.get("platform") is not None
+            or artifact.get("arch") is not None
+        ):
+            raise SystemExit(
+                f"Required archive path {path} has invalid runtime/platform/arch binding"
+            )
 
     smokes = manifest.get("realModelSmokes")
     if not isinstance(smokes, list):
@@ -637,11 +691,29 @@ def main() -> int:
         release_metadata = json.loads(
             args.release_metadata.read_text(encoding="utf-8")
         )
-        asset_names = {
-            asset.get("name")
-            for asset in release_metadata.get("assets", [])
-            if isinstance(asset, dict)
-        }
+        release_assets = release_metadata.get("assets")
+        if not isinstance(release_assets, list) or any(
+            not isinstance(asset, dict)
+            or not isinstance(asset.get("name"), str)
+            or not asset["name"]
+            for asset in release_assets
+        ):
+            raise SystemExit("Release metadata asset inventory is invalid")
+        asset_names = [asset["name"] for asset in release_assets]
+        if len(asset_names) != len(set(asset_names)):
+            raise SystemExit("Release metadata has duplicate assets")
+        if schema_version == 2:
+            for index, asset in enumerate(release_assets):
+                digest = asset.get("digest")
+                if (
+                    not isinstance(digest, str)
+                    or not digest.startswith("sha256:")
+                    or SHA256_RE.fullmatch(digest.removeprefix("sha256:")) is None
+                ):
+                    raise SystemExit(
+                        f"release asset[{index}] must have an exact GitHub SHA-256 digest"
+                    )
+        asset_name_set = set(asset_names)
         spm_assets = sorted(
             Path(path).name
             for path in paths
@@ -668,12 +740,12 @@ def main() -> int:
             )
         required_assets = sorted(set(required_assets))
         missing_assets = [
-            asset for asset in required_assets if asset not in asset_names
+            asset for asset in required_assets if asset not in asset_name_set
         ]
         if missing_assets:
             formatted = "\n".join(f"- {asset}" for asset in missing_assets)
             raise SystemExit(f"Release is missing required assets:\n{formatted}")
-        unexpected_assets = sorted(asset_names - set(required_assets))
+        unexpected_assets = sorted(asset_name_set - set(required_assets))
         if unexpected_assets:
             formatted = "\n".join(f"- {asset}" for asset in unexpected_assets)
             raise SystemExit(f"Release has unexpected assets:\n{formatted}")

@@ -101,19 +101,27 @@ The web package should expose:
 
 ## Artifact Manifest
 
-Each artifact entry records:
+Schema 2 records release-wide identity and compatibility data at the top level:
 
-- runtime: `native` or `web`
-- platform and architecture
-- native release tag
-- upstream LiteRT-LM tag
-- exact upstream and native commits
-- manifest schema, ABI versions, and capabilities
-- file name and SHA-256
-- explicit platform/architecture inventory
-- pinned real-model smoke evidence
-- library names required by loaders
-- accelerator support metadata
-- minimum OS/toolchain notes when known
+- `release`: native release tag, channel, kind, rebuild ordinal, and GitHub
+  prerelease classification
+- `upstream` and `native`: repositories, exact commits, upstream tag or
+  development identity, compatibility baseline, and any prebuilt overrides
+- `abi` and `capabilities`: the complete ABI and capability contract for the
+  release
+- `platforms`: exactly nine platform/architecture bundles; each entry names its
+  release asset, linked `artifactPaths`, and the accelerator union of those
+  linked artifacts
+- `realModelSmokes`: pinned model, tokenizer, audio, library, source URL,
+  expectation, and transcript evidence, separate from artifact entries
+
+Each `artifacts` entry records only the file-level contract:
+
+- runtime family: `native`, `archive`, or `web`
+- platform and architecture (null for release-wide archives)
+- repository-relative path and file name
+- file SHA-256
+- upstream tag, exact upstream commit, and native release tag provenance
+- accelerator support metadata using the schema's allowed values
 
 Downstream packages should not infer platform support from filenames alone.

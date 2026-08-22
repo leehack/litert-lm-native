@@ -159,9 +159,45 @@ def generate_manifest() -> dict:
             ) = original
 
 
+def generate_release_metadata(manifest: dict, manifest_digest: str) -> dict:
+    asset_names = {
+        "manifest.json",
+        "SHA256SUMS",
+        "release-result.json",
+        f"litert-lm-native-prebuilts-{RELEASE_TAG}.tar.gz",
+        f"litert-lm-native-official-assets-{RELEASE_TAG}.tar.gz",
+        *(platform["releaseAsset"] for platform in manifest["platforms"]),
+        *(
+            Path(artifact["path"]).name
+            for artifact in manifest["artifacts"]
+            if artifact["path"].startswith(f"dist/spm/{RELEASE_TAG}/")
+            and artifact["path"].endswith(".zip")
+        ),
+    }
+    return {
+        "tag_name": RELEASE_TAG,
+        "target_commitish": NATIVE_COMMIT,
+        "draft": False,
+        "prerelease": True,
+        "assets": [
+            {
+                "name": name,
+                "digest": "sha256:"
+                + (
+                    manifest_digest
+                    if name == "manifest.json"
+                    else _digest(f"fixture:{name}".encode())
+                ),
+            }
+            for name in sorted(asset_names)
+        ],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--release-metadata-output", type=Path)
     args = parser.parse_args()
     manifest = generate_manifest()
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -169,6 +205,19 @@ def main() -> int:
         json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     print(f"Wrote {args.output} ({_digest(args.output.read_bytes())})")
+    if args.release_metadata_output is not None:
+        release_metadata = generate_release_metadata(
+            manifest, _digest(args.output.read_bytes())
+        )
+        args.release_metadata_output.parent.mkdir(parents=True, exist_ok=True)
+        args.release_metadata_output.write_text(
+            json.dumps(release_metadata, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(
+            f"Wrote {args.release_metadata_output} "
+            f"({_digest(args.release_metadata_output.read_bytes())})"
+        )
     return 0
 
 
