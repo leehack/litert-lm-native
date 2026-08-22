@@ -134,6 +134,8 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
         self.assertIn("Create or safely resume exact draft", workflow)
         self.assertIn("releases/assets/$asset_id", workflow)
         self.assertIn("jq -jr .notes", workflow)
+        self.assertNotIn("--slurp \\\n            \"repos/${GITHUB_REPOSITORY}/releases?per_page=100\" \\\n            --jq", workflow)
+        self.assertIn("jq 'add' existing-release-pages.json", workflow)
         self.assertIn("--draft", create_release)
         self.assertIn("gh release edit", create_release)
         self.assertIn("--draft=false", create_release)

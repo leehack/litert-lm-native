@@ -183,7 +183,8 @@ jobs:
 
           gh api --paginate --slurp \
             "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq 'add' > existing-releases.json
+            > existing-release-pages.json
+          jq 'add' existing-release-pages.json > existing-releases.json
           python3 tools/publication_state.py \
             --releases existing-releases.json \
             --approval "$PUBLICATION_APPROVAL" \
@@ -574,7 +575,8 @@ jobs:
           set -euo pipefail
           gh api --paginate --slurp \
             "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq 'add' > existing-releases.json
+            > existing-release-pages.json
+          jq 'add' existing-release-pages.json > existing-releases.json
           python3 tools/publication_state.py \
             --releases existing-releases.json \
             --approval publish \
@@ -602,7 +604,8 @@ jobs:
 
           gh api --paginate --slurp \
             "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            --jq 'add' > existing-releases.json
+            > existing-release-pages.json
+          jq 'add' existing-release-pages.json > existing-releases.json
           python3 tools/publication_state.py \
             --releases existing-releases.json \
             --approval publish \
