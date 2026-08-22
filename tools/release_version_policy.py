@@ -209,6 +209,11 @@ def validate_history(candidate: ReleaseIdentity, existing_tags: Iterable[str]) -
     if candidate.channel == "stable":
         stable = [item for item in parsed if item.channel == "stable"]
         if not stable:
+            if candidate.rebuild > 0:
+                raise PolicyError(
+                    f"orphan stable rebuild: {candidate.tag!r} has no aligned "
+                    "base release"
+                )
             return
         latest_core = max(item.core for item in stable)
         assert isinstance(candidate.core, tuple)

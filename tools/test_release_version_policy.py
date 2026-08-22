@@ -87,6 +87,8 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
 
     def test_rebuild_requires_aligned_immediate_predecessor(self) -> None:
         with self.assertRaisesRegex(PolicyError, "orphan stable rebuild"):
+            validate_history(parse_release_tag("v0.17.0-1"), [])
+        with self.assertRaisesRegex(PolicyError, "orphan stable rebuild"):
             validate_history(parse_release_tag("v0.17.0-1"), ["v0.16.0"])
         with self.assertRaisesRegex(PolicyError, "predecessor rebuild 1"):
             validate_history(
