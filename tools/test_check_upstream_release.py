@@ -21,7 +21,7 @@ class CheckUpstreamReleaseTest(unittest.TestCase):
             {"tag": "v0.16.0", "commit": "same-commit"},
         )
 
-        self.assertFalse(decision["shouldDispatch"])
+        self.assertFalse(decision["shouldPrepare"])
         self.assertEqual(decision["reason"], "same_upstream_commit")
         self.assertEqual(
             decision["missingAssets"], sorted(OFFICIAL_APPLE_RUNTIME_ARCHIVES)
@@ -33,7 +33,7 @@ class CheckUpstreamReleaseTest(unittest.TestCase):
             {"tag": "v0.16.0", "commit": "old-commit"},
         )
 
-        self.assertFalse(decision["shouldDispatch"])
+        self.assertFalse(decision["shouldPrepare"])
         self.assertEqual(decision["reason"], "missing_required_official_assets")
         self.assertEqual(
             decision["missingAssets"], ["CLiteRTLM_mac.xcframework.zip"]
@@ -45,9 +45,13 @@ class CheckUpstreamReleaseTest(unittest.TestCase):
             {"tag": "v0.16.0", "commit": "old-commit"},
         )
 
-        self.assertTrue(decision["shouldDispatch"])
+        self.assertTrue(decision["shouldPrepare"])
         self.assertEqual(decision["reason"], "ready")
         self.assertEqual(decision["missingAssets"], [])
+        self.assertEqual(decision["preparation"]["releaseTag"], "v0.17.0")
+        self.assertEqual(
+            decision["preparation"]["publicationApproval"], "prepare-only"
+        )
 
 
 if __name__ == "__main__":

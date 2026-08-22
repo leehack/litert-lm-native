@@ -27,12 +27,31 @@ def validate_manifest() -> dict:
     if not MANIFEST_PATH.is_file():
         fail(f"Missing {MANIFEST_PATH}")
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    if manifest.get("schemaVersion") != 1:
-        fail("manifest.json schemaVersion must be 1")
+    schema_version = manifest.get("schemaVersion")
+    if schema_version not in (1, 2):
+        fail("manifest.json schemaVersion must be 1 or 2")
     if manifest.get("package") != "litert-lm-native":
         fail("manifest.json package must be litert-lm-native")
     if not isinstance(manifest.get("artifacts"), list):
         fail("manifest.json artifacts must be a list")
+    if schema_version == 2:
+        for section in (
+            "release",
+            "upstream",
+            "native",
+            "abi",
+            "capabilities",
+            "platforms",
+            "realModelSmokes",
+        ):
+            if section not in manifest:
+                fail(f"manifest.json schema 2 missing {section}")
+        for label, commit in (
+            ("upstream", manifest["upstream"].get("commit")),
+            ("native", manifest["native"].get("commit")),
+        ):
+            if not isinstance(commit, str) or len(commit) != 40:
+                fail(f"manifest.json {label} commit must be a full SHA")
 
     seen = set()
     for index, artifact in enumerate(manifest["artifacts"]):
@@ -45,6 +64,8 @@ def validate_manifest() -> dict:
         seen.add(artifact["path"])
         if not path.is_file():
             fail(f"artifact does not exist: {artifact['path']}")
+        if not isinstance(artifact["sha256"], str) or len(artifact["sha256"]) != 64:
+            fail(f"artifact[{index}] sha256 must be a 64-hex digest")
         actual = sha256_file(path)
         if actual != artifact["sha256"]:
             fail(f"checksum mismatch for {artifact['path']}")

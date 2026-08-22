@@ -3,20 +3,39 @@ name: Native Build & Release
 on:
   workflow_dispatch:
     inputs:
-      upstream_tag:
-        description: "google-ai-edge/LiteRT-LM tag to package"
+      release_tag:
+        description: "Exact native tag: vX.Y.Z, vX.Y.Z-N, g<12hex>, or g<12hex>-N"
         required: true
         type: string
-      release_tag:
-        description: "Native release tag to publish; defaults to upstream_tag"
+      upstream_tag:
+        description: "Exact stable upstream vX.Y.Z tag; empty for development"
         required: false
         default: ""
         type: string
-      prerelease:
-        description: "Publish as a prerelease"
-        required: false
-        default: false
-        type: boolean
+      upstream_commit:
+        description: "Exact 40-hex google-ai-edge/LiteRT-LM source commit"
+        required: true
+        type: string
+      upstream_compatibility_tag:
+        description: "Stable vX.Y.Z ABI/capability baseline; equals upstream_tag for stable"
+        required: true
+        type: string
+      native_commit:
+        description: "Exact 40-hex litert-lm-native commit; dispatch --ref must resolve here"
+        required: true
+        type: string
+      correlation_id:
+        description: "Caller audit identifier: letters, digits, dot, underscore, or hyphen"
+        required: true
+        type: string
+      publication_approval:
+        description: "Prepare artifacts only, or explicitly publish after all gates"
+        required: true
+        default: prepare-only
+        type: choice
+        options:
+          - prepare-only
+          - publish
       target_platform:
         description: "Source-built runtime platform to build, or all"
         required: false
@@ -28,26 +47,125 @@ on:
         default: all
         type: string
       windows_bazel_jobs:
-        description: "Windows Bazel concurrency; 3 is the tested default, with lower values available for troubleshooting"
+        description: "Windows Bazel concurrency; 3 is the tested default"
         required: false
         default: "3"
         type: choice
-        options:
-          - "1"
-          - "2"
-          - "3"
+        options: ["1", "2", "3"]
       run_asr_smoke:
-        description: "Run the pinned Moonshine real-model smoke on host targets"
+        description: "Run pinned Moonshine real-model smokes and record evidence"
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: litert-lm-native-${{ inputs.release_tag }}
+  cancel-in-progress: false
 
 jobs:
+  preflight:
+    name: Validate exact release identity
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.policy.outputs.channel }}
+      release_kind: ${{ steps.policy.outputs.release_kind }}
+      github_prerelease: ${{ steps.policy.outputs.github_prerelease }}
+      upstream_ref: ${{ steps.policy.outputs.upstream_ref }}
+      official_upstream_assets: ${{ steps.policy.outputs.official_upstream_assets }}
+      correlation_id: ${{ inputs.correlation_id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.native_commit }}
+
+      - name: Verify native and upstream commits
+        id: policy
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+          UPSTREAM_COMMIT: ${{ inputs.upstream_commit }}
+          COMPATIBILITY_TAG: ${{ inputs.upstream_compatibility_tag }}
+          NATIVE_COMMIT: ${{ inputs.native_commit }}
+          CORRELATION_ID: ${{ inputs.correlation_id }}
+          PUBLICATION_APPROVAL: ${{ inputs.publication_approval }}
+          TARGET_PLATFORM: ${{ inputs.target_platform }}
+          TARGET_ARCH: ${{ inputs.target_arch }}
+          RUN_ASR_SMOKE: ${{ inputs.run_asr_smoke }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$NATIVE_COMMIT"
+          test "$GITHUB_SHA" = "$NATIVE_COMMIT"
+          if [[ ! "$CORRELATION_ID" =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then
+            echo "::error::Invalid correlation identifier"
+            exit 1
+          fi
+
+          resolved_commit="$(
+            gh api "repos/google-ai-edge/LiteRT-LM/commits/$UPSTREAM_COMMIT" \
+              --jq .sha
+          )"
+          test "$resolved_commit" = "$UPSTREAM_COMMIT"
+          if [ -n "$UPSTREAM_TAG" ]; then
+            release_flags="$(
+              gh api "repos/google-ai-edge/LiteRT-LM/releases/tags/$UPSTREAM_TAG" \
+                --jq '[.draft, .prerelease] | @tsv'
+            )"
+            test "$release_flags" = $'false\tfalse'
+            tag_commit="$(
+              gh api "repos/google-ai-edge/LiteRT-LM/commits/$UPSTREAM_TAG" \
+                --jq .sha
+            )"
+            if [ "$tag_commit" != "$UPSTREAM_COMMIT" ]; then
+              echo "::error::Upstream tag resolves to $tag_commit, not $UPSTREAM_COMMIT"
+              exit 1
+            fi
+            official_upstream_assets=true
+          else
+            compatibility_status="$(
+              gh api \
+                "repos/google-ai-edge/LiteRT-LM/compare/${COMPATIBILITY_TAG}...${UPSTREAM_COMMIT}" \
+                --jq .status
+            )"
+            if [ "$compatibility_status" != ahead ] && [ "$compatibility_status" != identical ]; then
+              echo "::error::Development commit is not based on $COMPATIBILITY_TAG"
+              exit 1
+            fi
+            official_upstream_assets=false
+          fi
+
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/tags?per_page=100" \
+            --jq '.[].name' > existing-tags.txt
+          python3 tools/release_version_policy.py \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --release-tag "$RELEASE_TAG" \
+            --existing-tags-file existing-tags.txt > release-policy.env
+          cat release-policy.env
+          while IFS='=' read -r key value; do
+            echo "$key=$value" >> "$GITHUB_OUTPUT"
+          done < release-policy.env
+          echo "official_upstream_assets=$official_upstream_assets" >> "$GITHUB_OUTPUT"
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release $RELEASE_TAG already exists and is immutable"
+            exit 1
+          fi
+          if [ "$PUBLICATION_APPROVAL" = "publish" ]; then
+            test "$TARGET_PLATFORM" = all
+            test "$TARGET_ARCH" = all
+            test "$RUN_ASR_SMOKE" = true
+          fi
+
   runtime-matrix:
     name: Prepare runtime matrix
+    needs: preflight
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -78,26 +196,21 @@ jobs:
           ]
           if not selected:
               raise SystemExit(f"No runtime targets matched {platform}/{arch}")
-          output_path = os.environ["GITHUB_OUTPUT"]
-          with open(output_path, "a", encoding="utf-8") as output:
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(f"matrix={json.dumps({'include': selected})}\n")
 
   build-upstream-runtime:
     name: Build upstream runtime (${{ matrix.platform }}-${{ matrix.arch }})
-    needs: runtime-matrix
+    needs: [preflight, runtime-matrix]
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.runtime-matrix.outputs.matrix) }}
     steps:
-      - name: Checkout repository
-        shell: bash
-        run: |
-          git init .
-          git remote add origin "https://github.com/${{ github.repository }}.git"
-          git fetch --depth=1 origin "${{ github.sha }}"
-          git checkout --detach FETCH_HEAD
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.native_commit }}
 
       - name: Set up Node.js for Bazelisk fallback
         uses: actions/setup-node@v4
@@ -122,18 +235,17 @@ jobs:
             ~/.cache/bazelisk
             ~/Library/Caches/bazelisk
             .bazel-output-root
-          key: bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.upstream_tag }}-${{ hashFiles('tools/build_upstream_runtime.py') }}
-          restore-keys: |
-            bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.upstream_tag }}-
+          key: bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.upstream_commit }}-${{ hashFiles('tools/build_upstream_runtime.py') }}
 
-      - name: Build upstream LiteRT-LM runtime
+      - name: Build exact upstream LiteRT-LM runtime
         shell: bash
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           BAZEL_OUTPUT_USER_ROOT: ${{ matrix.bazel_output_root }}
         run: |
           python3 tools/build_upstream_runtime.py \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-tag "${{ inputs.upstream_compatibility_tag }}" \
+            --upstream-ref "${{ inputs.upstream_commit }}" \
             --platform "${{ matrix.platform }}" \
             --arch "${{ matrix.arch }}" \
             --jobs "${{ matrix.jobs }}"
@@ -143,20 +255,34 @@ jobs:
           inputs.run_asr_smoke &&
           ((matrix.platform == 'linux' && matrix.arch == 'x64') ||
            (matrix.platform == 'windows' && matrix.arch == 'x64') ||
-           (matrix.platform == 'macos' && matrix.arch == 'arm64'))
+           (matrix.platform == 'macos' && matrix.arch == 'arm64' && runner.arch == 'ARM64'))
         run: python3 tools/fetch_litert_lm_asr_smoke_assets.py --output-dir asr-smoke-assets
 
-      - name: Run Linux ASR real-model smoke
-        if: inputs.run_asr_smoke && matrix.platform == 'linux' && matrix.arch == 'x64'
-        env:
-          LD_LIBRARY_PATH: ${{ github.workspace }}/bin/linux/x64
+      - name: Run Unix ASR real-model smoke
+        if: >-
+          inputs.run_asr_smoke &&
+          ((matrix.platform == 'linux' && matrix.arch == 'x64') ||
+           (matrix.platform == 'macos' && matrix.arch == 'arm64' && runner.arch == 'ARM64'))
+        shell: bash
         run: |
+          if [ "${{ matrix.platform }}" = linux ]; then
+            export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/bin/linux/x64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            library="bin/linux/x64/libLiteRtLm.so"
+          else
+            export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/bin/macos/arm64${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+            library="bin/macos/arm64/libLiteRtLm.dylib"
+          fi
           python3 tools/litert_lm_asr_smoke.py \
-            --library bin/linux/x64/libLiteRtLm.so \
+            --library "$library" \
             --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite \
             --tokenizer asr-smoke-assets/moonshine_tokenizer.json \
             --audio asr-smoke-assets/jfk.wav \
-            --expect country
+            --expect country \
+            --evidence-json "release-evidence/${{ matrix.platform }}-${{ matrix.arch }}.json" \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --upstream-commit "${{ inputs.upstream_commit }}" \
+            --native-commit "${{ inputs.native_commit }}"
 
       - name: Run Windows ASR real-model smoke
         if: inputs.run_asr_smoke && matrix.platform == 'windows' && matrix.arch == 'x64'
@@ -168,180 +294,319 @@ jobs:
             --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite `
             --tokenizer asr-smoke-assets/moonshine_tokenizer.json `
             --audio asr-smoke-assets/jfk.wav `
-            --expect country
-
-      - name: Run macOS arm64 ASR real-model smoke
-        if: >-
-          inputs.run_asr_smoke && matrix.platform == 'macos' &&
-          matrix.arch == 'arm64' && runner.arch == 'ARM64'
-        env:
-          DYLD_LIBRARY_PATH: ${{ github.workspace }}/bin/macos/arm64
-        run: |
-          python3 tools/litert_lm_asr_smoke.py \
-            --library bin/macos/arm64/libLiteRtLm.dylib \
-            --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite \
-            --tokenizer asr-smoke-assets/moonshine_tokenizer.json \
-            --audio asr-smoke-assets/jfk.wav \
-            --expect country
+            --expect country `
+            --evidence-json release-evidence/windows-x64.json `
+            --platform windows `
+            --arch x64 `
+            --upstream-commit "${{ inputs.upstream_commit }}" `
+            --native-commit "${{ inputs.native_commit }}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: upstream-runtime-${{ matrix.platform }}-${{ matrix.arch }}
-          path: bin
+          name: runtime-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            bin
+            release-evidence
+          if-no-files-found: error
 
   package:
+    name: Package immutable release candidate
     if: inputs.target_platform == 'all' && inputs.target_arch == 'all'
-    needs:
-      - build-upstream-runtime
+    needs: [preflight, build-upstream-runtime]
     runs-on: macos-latest
     steps:
-      - name: Checkout repository
-        shell: bash
-        run: |
-          git init .
-          git remote add origin "https://github.com/${{ github.repository }}.git"
-          git fetch --depth=1 origin "${{ github.sha }}"
-          git checkout --detach FETCH_HEAD
-
-      - name: Resolve native release tag
-        id: release
-        shell: bash
-        run: |
-          release_tag="${{ inputs.release_tag }}"
-          if [ -z "$release_tag" ]; then
-            release_tag="${{ inputs.upstream_tag }}"
-          fi
-          echo "tag=${release_tag}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.native_commit }}
 
       - name: Package upstream prebuilt libraries
         run: |
           python3 tools/package_upstream_prebuilts.py \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-tag "${{ inputs.upstream_compatibility_tag }}" \
+            --upstream-ref "${{ inputs.upstream_commit }}" \
             --clean \
             --skip-overrides
 
-      - name: Download build artifacts
-        env:
-          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
-        run: |
-          gh run download "${{ github.run_id }}" \
-            --repo "${{ github.repository }}" \
-            --pattern "upstream-runtime-*" \
-            --dir runtime-bin
+      - name: Download exact build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: runtime-*
+          path: staged-runtime
+          merge-multiple: true
 
-      - name: Add upstream runtime libraries to package
-        run: |
-          cp -R runtime-bin/*/* bin/
+      - name: Merge source-built runtimes
+        shell: bash
+        run: cp -R staged-runtime/bin/* bin/
 
       - name: Apply pinned prebuilt overrides
         run: |
           python3 tools/package_upstream_prebuilts.py \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-tag "${{ inputs.upstream_compatibility_tag }}" \
             --overrides-only
 
       - name: Package official upstream release assets
+        if: inputs.upstream_tag != ''
         env:
-          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 tools/package_official_release_assets.py \
             --upstream-tag "${{ inputs.upstream_tag }}" \
             --clean
 
-      - name: Package official iOS runtime
+      - name: Package Apple runtimes
         run: |
           python3 tools/package_ios_runtime.py \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-tag "${{ inputs.upstream_compatibility_tag }}" \
             --clean
-
-      - name: Package official macOS runtime
-        run: |
           python3 tools/package_macos_runtime.py \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-tag "${{ inputs.upstream_compatibility_tag }}" \
             --clean
-
-      - name: Package Apple SPM XCFrameworks
-        run: |
           python3 tools/package_apple_xcframeworks.py \
-            --release-tag "${{ steps.release.outputs.tag }}" \
+            --release-tag "${{ inputs.release_tag }}" \
             --clean
 
-      - name: Generate manifest and checksums
+      - name: Generate and validate provenance manifest
+        shell: bash
         run: |
-          python3 tools/validate_runtime_artifacts.py --upstream-tag "${{ inputs.upstream_tag }}"
+          runtime_args=(--upstream-tag "${{ inputs.upstream_compatibility_tag }}")
+          manifest_args=(
+            --upstream-commit "${{ inputs.upstream_commit }}"
+            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}"
+            --release-tag "${{ inputs.release_tag }}"
+            --native-commit "${{ inputs.native_commit }}"
+            --evidence-dir staged-runtime/release-evidence
+          )
+          if [ -n "${{ inputs.upstream_tag }}" ]; then
+            manifest_args+=(--upstream-tag "${{ inputs.upstream_tag }}")
+            manifest_args+=(--official-upstream-assets)
+          else
+            runtime_args+=(--allow-missing-official-assets)
+          fi
+          python3 tools/validate_runtime_artifacts.py "${runtime_args[@]}"
           python3 tools/validate_runtime_dependencies.py
-          python3 tools/package_release.py \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
-            --release-tag "${{ steps.release.outputs.tag }}"
+          python3 tools/package_release.py "${manifest_args[@]}"
           python3 tools/validate_artifacts.py
 
+          validate_args=(
+            manifest.json
+            --upstream-tag "${{ inputs.upstream_tag }}"
+            --upstream-commit "${{ inputs.upstream_commit }}"
+            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}"
+            --native-commit "${{ inputs.native_commit }}"
+            --release-tag "${{ inputs.release_tag }}"
+          )
+          if [ "${{ inputs.publication_approval }}" = publish ]; then
+            validate_args+=(--require-smoke linux/x64 --require-smoke windows/x64)
+          fi
+          python3 tools/validate_release_manifest.py "${validate_args[@]}"
+
       - name: Create release archives
+        shell: bash
         run: |
           mkdir -p release
-          tar -czf "release/litert-lm-native-prebuilts-${{ steps.release.outputs.tag }}.tar.gz" \
+          tar -czf "release/litert-lm-native-prebuilts-${{ inputs.release_tag }}.tar.gz" \
             bin manifest.json SHA256SUMS
           while IFS= read -r runtime_dir; do
             platform="$(basename "$(dirname "$runtime_dir")")"
             arch="$(basename "$runtime_dir")"
-            tar -czf "release/litert-lm-native-runtime-${platform}-${arch}-${{ steps.release.outputs.tag }}.tar.gz" \
+            tar -czf "release/litert-lm-native-runtime-${platform}-${arch}-${{ inputs.release_tag }}.tar.gz" \
               -C bin "${platform}/${arch}"
           done < <(find bin -mindepth 2 -maxdepth 2 -type d | sort)
-          if [ -d dist ]; then
-            tar -czf "release/litert-lm-native-official-assets-${{ steps.release.outputs.tag }}.tar.gz" \
-              dist
+          if [ -d dist/official ]; then
+            tar -czf "release/litert-lm-native-official-assets-${{ inputs.release_tag }}.tar.gz" dist
           fi
-          if [ -d "dist/spm/${{ steps.release.outputs.tag }}" ]; then
-            cp dist/spm/${{ steps.release.outputs.tag }}/*.zip release/
-          fi
+          cp "dist/spm/${{ inputs.release_tag }}"/*.zip release/
 
-      - name: Publish GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
+      - name: Write machine-readable preparation result
         run: |
-          args=()
-          if [ "${{ inputs.prerelease }}" = "true" ]; then
-            args+=(--prerelease)
-          fi
-          notes="Packaged LiteRT-LM upstream ${{ inputs.upstream_tag }} runtime libraries, upstream prebuilts, Apple SPM XCFrameworks, and official release assets as ${{ steps.release.outputs.tag }}."
-          if gh release view "${{ steps.release.outputs.tag }}" \
-            --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "::error::Release ${{ steps.release.outputs.tag }} already exists. Choose a new immutable release_tag."
-            exit 1
-          fi
-          gh release create "${{ steps.release.outputs.tag }}" \
-            --repo "${{ github.repository }}" \
-            --target "${{ github.sha }}" \
-            --title "LiteRT-LM ${{ steps.release.outputs.tag }}" \
-            --notes "$notes" \
-            "${args[@]}" \
-            release/* \
-            manifest.json \
+          python3 tools/release_result.py \
+            --manifest manifest.json \
+            --correlation-id "${{ inputs.correlation_id }}" \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --approval "${{ inputs.publication_approval }}" \
+            --outcome prepared \
+            --release-tag "${{ inputs.release_tag }}" \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-commit "${{ inputs.upstream_commit }}" \
+            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
+            --native-commit "${{ inputs.native_commit }}" \
+            --candidate-artifact \
+              "release-candidate-${{ inputs.release_tag }}-${{ inputs.correlation_id }}" \
+            --output release-result.json
+
+      - name: Upload prepared release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-${{ inputs.release_tag }}-${{ inputs.correlation_id }}
+          path: |
+            release
+            manifest.json
             SHA256SUMS
+            release-result.json
+          if-no-files-found: error
+          retention-days: 14
 
-      - name: Validate published GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
+      - name: Summarize preparation boundary
+        shell: bash
         run: |
-          rm -rf published-release-check
+          {
+            echo "## LiteRT-LM native release candidate"
+            echo
+            echo "- Release tag: \`${{ inputs.release_tag }}\`"
+            echo "- Upstream tag: \`${{ inputs.upstream_tag || '(development)' }}\`"
+            echo "- Upstream commit: \`${{ inputs.upstream_commit }}\`"
+            echo "- Native commit: \`${{ inputs.native_commit }}\`"
+            echo "- Correlation ID: \`${{ inputs.correlation_id }}\`"
+            echo "- Workflow run: \`${{ github.run_id }}\` attempt \`${{ github.run_attempt }}\`"
+            echo "- Machine result: \`release-result.json\`"
+            echo "- Approval: \`${{ inputs.publication_approval }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish approved immutable release
+    if: inputs.publication_approval == 'publish'
+    needs: [preflight, package]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.native_commit }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-candidate-${{ inputs.release_tag }}-${{ inputs.correlation_id }}
+          path: candidate
+
+      - name: Recheck exact identity and immutable history
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ inputs.native_commit }}"
+          resolved_commit="$(
+            gh api "repos/google-ai-edge/LiteRT-LM/commits/${{ inputs.upstream_commit }}" \
+              --jq .sha
+          )"
+          test "$resolved_commit" = "${{ inputs.upstream_commit }}"
+          if [ -n "${{ inputs.upstream_tag }}" ]; then
+            release_flags="$(
+              gh api \
+                "repos/google-ai-edge/LiteRT-LM/releases/tags/${{ inputs.upstream_tag }}" \
+                --jq '[.draft, .prerelease] | @tsv'
+            )"
+            test "$release_flags" = $'false\tfalse'
+            tag_commit="$(
+              gh api "repos/google-ai-edge/LiteRT-LM/commits/${{ inputs.upstream_tag }}" \
+                --jq .sha
+            )"
+            test "$tag_commit" = "${{ inputs.upstream_commit }}"
+          else
+            compatibility_status="$(
+              gh api \
+                "repos/google-ai-edge/LiteRT-LM/compare/${{ inputs.upstream_compatibility_tag }}...${{ inputs.upstream_commit }}" \
+                --jq .status
+            )"
+            if [ "$compatibility_status" != ahead ] && [ "$compatibility_status" != identical ]; then
+              exit 1
+            fi
+          fi
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/tags?per_page=100" \
+            --jq '.[].name' > existing-tags.txt
+          python3 tools/release_version_policy.py \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-commit "${{ inputs.upstream_commit }}" \
+            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
+            --release-tag "${{ inputs.release_tag }}" \
+            --existing-tags-file existing-tags.txt
+
+      - name: Create draft release with candidate assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease_args=()
+          if [ "${{ needs.preflight.outputs.github_prerelease }}" = true ]; then
+            prerelease_args+=(--prerelease)
+          fi
+          notes="Release ${{ inputs.release_tag }}; upstream tag ${{ inputs.upstream_tag || '(development)' }}; upstream commit ${{ inputs.upstream_commit }}; native commit ${{ inputs.native_commit }}; correlation ${{ inputs.correlation_id }}."
+          gh release create "${{ inputs.release_tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "${{ inputs.native_commit }}" \
+            --title "LiteRT-LM ${{ inputs.release_tag }}" \
+            --notes "$notes" \
+            --draft \
+            "${prerelease_args[@]}" \
+            candidate/release/* \
+            candidate/manifest.json \
+            candidate/SHA256SUMS \
+            candidate/release-result.json
+
+      - name: Validate draft and promote it
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
           mkdir -p published-release-check
-          curl -L -f -sS \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.release.outputs.tag }}" \
-            -o published-release-check/release.json
-          manifest_url="$(python3 - <<'PY'
+          release_id="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq '.[] | select(.tag_name == "${{ inputs.release_tag }}") | .id'
+          )"
+          test -n "$release_id"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
+            > published-release-check/release.json
+          manifest_url="$(
+            python3 - <<'PY'
           import json
           release = json.load(open('published-release-check/release.json', encoding='utf-8'))
-          for asset in release.get('assets', []):
-            if asset.get('name') == 'manifest.json':
-              print(asset['browser_download_url'])
-              break
+          print(next(asset['url'] for asset in release['assets'] if asset['name'] == 'manifest.json'))
           PY
           )"
-          test -n "$manifest_url"
-          curl -L -f -sS "$manifest_url" -o published-release-check/manifest.json
+          gh api "$manifest_url" \
+            -H 'Accept: application/octet-stream' \
+            > published-release-check/manifest.json
           python3 tools/validate_release_manifest.py \
             published-release-check/manifest.json \
             --upstream-tag "${{ inputs.upstream_tag }}" \
-            --release-tag "${{ steps.release.outputs.tag }}" \
-            --release-metadata published-release-check/release.json
+            --upstream-commit "${{ inputs.upstream_commit }}" \
+            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
+            --native-commit "${{ inputs.native_commit }}" \
+            --release-tag "${{ inputs.release_tag }}" \
+            --release-metadata published-release-check/release.json \
+            --require-smoke linux/x64 \
+            --require-smoke windows/x64
+          python3 tools/release_result.py \
+            --manifest published-release-check/manifest.json \
+            --correlation-id "${{ inputs.correlation_id }}" \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --approval publish \
+            --outcome validated-for-publication \
+            --release-tag "${{ inputs.release_tag }}" \
+            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-commit "${{ inputs.upstream_commit }}" \
+            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
+            --native-commit "${{ inputs.native_commit }}" \
+            --candidate-artifact \
+              "release-candidate-${{ inputs.release_tag }}-${{ inputs.correlation_id }}" \
+            --release-metadata published-release-check/release.json \
+            --output published-release-check/release-result.json
+          gh release upload "${{ inputs.release_tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            published-release-check/release-result.json
+          gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
+            --jq '.assets[] | select(.name == "release-result.json") | .digest' \
+            | grep -Eq '^sha256:[0-9a-f]{64}$'
+          gh release edit "${{ inputs.release_tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false

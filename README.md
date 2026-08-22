@@ -105,7 +105,8 @@ python3 tools/validate_artifacts.py
 
 - `Validate`: validates package metadata and checks Python/web tooling on
   pushes and pull requests.
-- `Native Build & Release`: manually packages a selected upstream LiteRT-LM tag.
+- `Native Build & Release`: prepares or explicitly publishes an exact upstream
+  LiteRT-LM tag/commit and exact native commit.
   It builds upstream C runtime libraries with embedded LiteRtLmBridge symbols for
   Android arm64/x64, iOS arm64/arm64-sim, Linux x64/arm64, macOS arm64/x64, and
   Windows x64, copies upstream `prebuilt/` companion libraries for Android,
@@ -113,18 +114,16 @@ python3 tools/validate_artifacts.py
   upstream publishes them, falls back to the source-built Apple runtimes when
   those archives are missing, packages Apple SPM XCFramework zips from the same
   runtime payloads, includes the official upstream release assets, then
-  publishes a GitHub release with `manifest.json` and `SHA256SUMS`. The workflow
-  accepts a separate `release_tag`; use it when repackaging the same upstream
-  tag without mutating an existing native release.
-- `Auto Upstream Release`: runs daily and dispatches `Native Build & Release`
-  when `google-ai-edge/LiteRT-LM` has a latest release tag that this repo has
-  not published yet, resolves both tags to source commits, and verifies required
-  official C runtime assets before dispatch. Same-commit metadata releases and
-  releases missing required runtime assets are reported and retried on the next
-  daily run without starting the full platform build. Existing releases are
-  treated as immutable; if validation rules change and an existing release no
-  longer matches, the scheduled workflow reports it but does not overwrite the
-  tag automatically.
+  writes a schema 2 `manifest.json` plus `SHA256SUMS`, and uploads a prepared
+  candidate by default. Publication requires the explicit `publish` input,
+  exact-input revalidation, required real-model evidence, draft validation, and
+  draft promotion. Existing releases are never edited or overwritten.
+- `Detect Upstream Release`: runs daily with read-only permissions. It detects
+  and records a consumable stable candidate as `preparation.json`; it never
+  dispatches the build and never publishes.
+
+See [`docs/release_protocol.md`](docs/release_protocol.md) for the common stable,
+development, rebuild, provenance, rollback, and orchestration contract.
 
 For upstream `v0.15.0`, packaging applies two checksum-pinned Android arm64/x64
 corrections. `libLiteRtTopKOpenClSampler.so` comes from upstream commit
@@ -136,42 +135,56 @@ binary produced `VK_ERROR_DEVICE_LOST` on a Mali-G715 during generation, while
 the exact v0.14 binary completed the same workload. The release manifest
 records the exact override source commits, paths, and checksums, and packaging
 rejects sampler libraries that do not expose the full seven-symbol plugin
-contract. Upstream `v0.16.0` keeps the same checksum-pinned Dawn rollback: its
-tagged Android arm64 binary reproduced `VK_ERROR_DEVICE_LOST` on a Pixel 9 Pro,
+contract. Upstream `v0.16.0` and same-commit metadata release `v0.16.1` keep the
+same checksum-pinned Dawn rollback: the tagged Android arm64 binary reproduced
+`VK_ERROR_DEVICE_LOST` on a Pixel 9 Pro,
 while the rollback completed the same Gemma 4 GPU workload and exact-answer
 gate. The v0.16 sampler binaries do not require the v0.15 sampler override.
 
 ## Native Version Management
 
 The published native release tag is the version contract consumed by downstream
-package hooks and Swift Package manifests. For the first package of an upstream
-LiteRT-LM tag, the native release tag normally matches the upstream tag. If a
-packaging fix is needed for the same upstream sources, publish a new native
-release tag such as `v0.13.1-native.1` instead of overwriting `v0.13.1`.
+package hooks and Swift Package manifests. Stable releases exactly mirror an
+upstream `vMAJOR.MINOR.PATCH`; stable rebuilds append compact `-N`.
+Development builds use `g<first-12-of-full-upstream-SHA>` and development
+rebuilds append the same compact `-N`. Historical `-native.N` releases remain
+immutable and consumable but are never emitted again.
 
 When moving to a new LiteRT-LM tag:
 
-1. Run `Native Build & Release` for `upstream_tag`, or let `Auto Upstream
-   Release` dispatch it for the latest upstream release.
-2. Verify the release contains runtime archives, official upstream assets,
-   Apple SPM XCFramework zips, `manifest.json`, and `SHA256SUMS`.
-3. Update downstream `llamadart` hook pins, SPM URLs, and SPM checksums
+1. Let `Detect Upstream Release` prepare exact inputs, or resolve the exact
+   upstream tag/commit and native commit manually.
+2. Run `Native Build & Release` with `publication_approval=prepare-only` and
+   inspect the candidate manifest, `release-result.json`, and evidence.
+3. After separate publication approval, rerun the exact inputs with
+   `publication_approval=publish`.
+4. Verify the release contains runtime archives, official upstream assets,
+   Apple SPM XCFramework zips, `manifest.json`, `release-result.json`, and
+   `SHA256SUMS`.
+5. Update downstream `llamadart` hook pins, SPM URLs, and SPM checksums
    together so native-assets and SPM consumers use the same bridge-enabled
    runtime build.
 
-To publish a corrected package for existing upstream sources without breaking
-downstream checksum pins, dispatch the workflow with both tags:
+To prepare a corrected package for existing upstream sources without breaking
+downstream checksum pins, dispatch the workflow with all exact identities:
 
 ```bash
 gh workflow run native_release.yml \
   --repo leehack/litert-lm-native \
   --ref main \
-  -f upstream_tag=v0.13.1 \
-  -f release_tag=v0.13.1-native.1 \
-  -f prerelease=false \
+  -f release_tag=v0.16.0-3 \
+  -f upstream_tag=v0.16.0 \
+  -f upstream_commit=924e79c91542761242244e4f1651851f822e4cbb \
+  -f upstream_compatibility_tag=v0.16.0 \
+  -f native_commit=<exact-litert-lm-native-commit> \
+  -f correlation_id=<caller-audit-id> \
+  -f publication_approval=prepare-only \
   -f target_platform=all \
   -f target_arch=all
 ```
+
+After reviewing the candidate and obtaining separate publication approval,
+rerun those exact inputs with `publication_approval=publish`.
 
 The release workflow uses upstream's public C API (`c/engine.h`) as the
 production FFI boundary. Downstream loaders should bind directly to the runtime

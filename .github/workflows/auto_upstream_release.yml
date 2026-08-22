@@ -1,4 +1,4 @@
-name: Auto Upstream Release
+name: Detect Upstream Release
 
 on:
   schedule:
@@ -6,130 +6,59 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 jobs:
-  check:
+  prepare:
+    name: Detect and prepare exact release inputs
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        shell: bash
-        run: |
-          git init .
-          git remote add origin "https://github.com/${{ github.repository }}.git"
-          git fetch --depth=1 origin "${{ github.sha }}"
-          git checkout --detach FETCH_HEAD
+      - uses: actions/checkout@v6
 
-      - name: Resolve latest upstream release
-        id: upstream
+      - name: Resolve latest stable upstream release
         env:
-          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
-        run: |
-          python3 tools/fetch_upstream.py --latest --metadata-only > upstream.json
-          tag="$(python3 - <<'PY'
-          import json
-          print(json.load(open('upstream.json'))['tag'])
-          PY
-          )"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          cat upstream.json
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/fetch_upstream.py --latest --metadata-only > upstream.json
 
-      - name: Check existing release
-        id: existing
+      - name: Evaluate consumability without dispatching
+        id: candidate
         env:
-          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
-        run: |
-          rm -rf release-check
-          mkdir -p release-check
-          status="$(curl -L -sS \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -o release-check/release.json \
-            -w "%{http_code}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.upstream.outputs.tag }}")"
-          if [ "$status" = "200" ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check release completeness
-        id: complete
-        if: steps.existing.outputs.exists == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
-        run: |
-          manifest_url="$(python3 - <<'PY'
-          import json
-          release = json.load(open('release-check/release.json', encoding='utf-8'))
-          for asset in release.get('assets', []):
-            if asset.get('name') == 'manifest.json':
-              print(asset['browser_download_url'])
-              break
-          PY
-          )"
-          if [ -n "$manifest_url" ] && curl -L -f -sS "$manifest_url" -o release-check/manifest.json; then
-            if python3 tools/validate_release_manifest.py \
-              release-check/manifest.json \
-              --upstream-tag "${{ steps.upstream.outputs.tag }}" \
-              --release-metadata release-check/release.json; then
-              echo "complete=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "complete=false" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "complete=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check upstream release compatibility
-        id: compatibility
-        if: steps.existing.outputs.exists == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 tools/check_upstream_release.py \
             --candidate upstream.json \
             --native-repository "${{ github.repository }}" \
-            > compatibility.json
-          should_dispatch="$(python3 - <<'PY'
-          import json
-          print(str(json.load(open('compatibility.json'))['shouldDispatch']).lower())
-          PY
-          )"
-          echo "should_dispatch=${should_dispatch}" >> "$GITHUB_OUTPUT"
-          cat compatibility.json
+            > preparation.json
+          cat preparation.json
+          should_prepare="$(python3 -c 'import json; print(str(json.load(open("preparation.json"))["shouldPrepare"]).lower())')"
+          echo "should_prepare=$should_prepare" >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch native release
-        if: steps.existing.outputs.exists == 'false' && steps.compatibility.outputs.should_dispatch == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.LITERT_LM_RELEASE_TOKEN || github.token }}
-        run: |
-          gh workflow run native_release.yml \
-            --repo "${{ github.repository }}" \
-            -f upstream_tag="${{ steps.upstream.outputs.tag }}"
+      - name: Upload preparation record
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-release-preparation-${{ github.run_id }}
+          path: |
+            upstream.json
+            preparation.json
+          retention-days: 30
 
-      - name: Skip incompatible upstream release
-        if: steps.existing.outputs.exists == 'false' && steps.compatibility.outputs.should_dispatch == 'false'
+      - name: Summarize preparation-only result
+        shell: bash
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json
-          result = json.load(open('compatibility.json'))
-          print("## Upstream release skipped")
+          result = json.load(open("preparation.json", encoding="utf-8"))
+          print("## LiteRT-LM upstream detection")
           print()
-          print(result['message'])
+          print(result["message"])
           print()
           print(f"Reason: `{result['reason']}`")
-          print("The scheduled updater will evaluate this release again on its next run.")
+          print(f"Preparation available: `{str(result['shouldPrepare']).lower()}`")
+          print()
+          print("This scheduled workflow never dispatches a build and never publishes.")
+          if result["shouldPrepare"]:
+              preparation = result["preparation"]
+              print("A maintainer or central llamadart orchestration may use the exact inputs:")
+              for key, value in preparation.items():
+                  print(f"- `{key}`: `{value}`")
           PY
-
-      - name: Existing release is incomplete
-        if: steps.existing.outputs.exists == 'true' && steps.complete.outputs.complete == 'false'
-        run: |
-          echo "Release ${{ steps.upstream.outputs.tag }} exists but does not match current validation."
-          echo "Skipping automatic rebuild to avoid mutating an existing release tag."
-
-      - name: No-op when release is complete
-        if: steps.existing.outputs.exists == 'true' && steps.complete.outputs.complete == 'true'
-        run: echo "Release ${{ steps.upstream.outputs.tag }} already exists and is complete."

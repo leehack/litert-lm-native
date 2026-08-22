@@ -110,9 +110,9 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         initial_package = workflow.index("- name: Package upstream prebuilt libraries")
-        runtime_merge = workflow.index("- name: Add upstream runtime libraries")
+        runtime_merge = workflow.index("- name: Merge source-built runtimes")
         final_overrides = workflow.index("- name: Apply pinned prebuilt overrides")
-        manifest = workflow.index("- name: Generate manifest and checksums")
+        manifest = workflow.index("- name: Generate and validate provenance manifest")
 
         self.assertLess(initial_package, runtime_merge)
         self.assertLess(runtime_merge, final_overrides)
@@ -129,11 +129,17 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         create_release = workflow[workflow.index('gh release create "'):]
-        self.assertIn('--target "${{ github.sha }}"', create_release)
-        self.assertIn("Choose a new immutable release_tag", workflow)
-        self.assertNotIn("gh release edit", workflow)
-        self.assertNotIn("gh release upload", workflow)
-        self.assertNotIn("--clobber", workflow)
+        self.assertIn('--target "${{ inputs.native_commit }}"', create_release)
+        self.assertIn("already exists and is immutable", workflow)
+        self.assertIn("--draft", create_release)
+        self.assertIn("gh release edit", create_release)
+        self.assertIn("--draft=false", create_release)
+        self.assertIn("gh release upload", create_release)
+        self.assertIn("--clobber", create_release)
+        self.assertLess(
+            create_release.index("gh release upload"),
+            create_release.index("gh release edit"),
+        )
 
 
 if __name__ == "__main__":

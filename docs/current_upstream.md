@@ -1,6 +1,6 @@
 # Current Upstream Snapshot
 
-As of `2026-08-19`, the latest upstream release resolved by
+As of `2026-08-22`, the latest upstream release resolved by
 `tools/fetch_upstream.py --latest --metadata-only` is:
 
 - Repository: `google-ai-edge/LiteRT-LM`
@@ -15,8 +15,8 @@ Tags `v0.16.1` and `v0.16.0` both resolve to upstream commit
 `924e79c91542761242244e4f1651851f822e4cbb`. The newer release does not publish
 the required `CLiteRTLM.xcframework.zip` or `CLiteRTLM_mac.xcframework.zip`
 archives, so it is not a new consumable C runtime release. The scheduled updater
-skips this same-commit release before dispatching the platform build and checks
-it again on the next daily run. The latest consumable native package remains
+reports this same-commit release without dispatching the platform build and
+checks it again on the next daily run. The latest consumable native package remains
 `v0.16.0-native.2`.
 
 LiteRT-LM 0.16 source includes `omni/asr` and `omni/tts`, but the released

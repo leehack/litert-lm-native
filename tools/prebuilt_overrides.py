@@ -81,6 +81,10 @@ PREBUILT_OVERRIDES: dict[str, tuple[PrebuiltOverride, ...]] = {
         *ANDROID_DAWN_ROLLBACKS,
     ),
     "v0.16.0": ANDROID_DAWN_ROLLBACKS,
+    # v0.16.1 is a metadata-only release of the exact v0.16.0 source commit.
+    # Development builds using it as their compatibility baseline keep the
+    # validated Dawn correction until new device evidence retires it.
+    "v0.16.1": ANDROID_DAWN_ROLLBACKS,
 }
 
 

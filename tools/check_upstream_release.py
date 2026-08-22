@@ -55,7 +55,7 @@ def evaluate_release(
             candidate_commit=candidate_commit,
             baseline_tag=baseline_tag,
             baseline_commit=baseline_commit,
-            should_dispatch=False,
+            should_prepare=False,
             reason="same_upstream_commit",
             message=(
                 f"Skip {candidate_tag}: it resolves to the same upstream commit as "
@@ -71,7 +71,7 @@ def evaluate_release(
             candidate_commit=candidate_commit,
             baseline_tag=baseline_tag,
             baseline_commit=baseline_commit,
-            should_dispatch=False,
+            should_prepare=False,
             reason="missing_required_official_assets",
             message=(
                 f"Skip {candidate_tag}: required official C runtime artifacts are "
@@ -86,11 +86,12 @@ def evaluate_release(
         candidate_commit=candidate_commit,
         baseline_tag=baseline_tag,
         baseline_commit=baseline_commit,
-        should_dispatch=True,
+        should_prepare=True,
         reason="ready",
         message=(
-            f"Dispatch {candidate_tag}: it is newer than native baseline "
-            f"{baseline_tag} and publishes all required official runtime artifacts."
+            f"Prepare {candidate_tag}: it is newer than native baseline "
+            f"{baseline_tag} and publishes all required official runtime artifacts. "
+            "Publication still requires an explicit exact-input dispatch."
         ),
         missing_assets=[],
         baseline_release_tag=baseline_release_tag,
@@ -146,7 +147,7 @@ def _decision(
     candidate_commit: str,
     baseline_tag: str,
     baseline_commit: str,
-    should_dispatch: bool,
+    should_prepare: bool,
     reason: str,
     message: str,
     missing_assets: list[str],
@@ -156,12 +157,19 @@ def _decision(
     if baseline_release_tag is not None:
         baseline["releaseTag"] = baseline_release_tag
     return {
-        "shouldDispatch": should_dispatch,
+        "shouldPrepare": should_prepare,
         "reason": reason,
         "message": message,
         "candidate": {"tag": candidate_tag, "commit": candidate_commit},
         "baseline": baseline,
         "missingAssets": missing_assets,
+        "preparation": {
+            "releaseTag": candidate_tag,
+            "upstreamTag": candidate_tag,
+            "upstreamCommit": candidate_commit,
+            "upstreamCompatibilityTag": candidate_tag,
+            "publicationApproval": "prepare-only",
+        },
     }
 
 

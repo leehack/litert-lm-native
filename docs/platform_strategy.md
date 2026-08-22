@@ -28,10 +28,11 @@ The release automation publishes these runtime artifact groups:
   wrappers, macOS wrappers, and required companion frameworks used by the
   native-assets payloads
 
-Native release tags are immutable consumer contracts. Use a separate native
-release tag when repackaging the same upstream source tag, for example
-`upstream_tag=v0.13.1` with `release_tag=v0.13.1-native.1`, so downstream
-packages with pinned checksums keep resolving the original artifacts.
+Native release tags are immutable consumer contracts. New rebuilds preserve the
+exact upstream or development prefix and append compact `-N`; legacy
+`vMAJOR.MINOR.PATCH-native.N` tags remain read-only. See
+[`release_protocol.md`](release_protocol.md) for collision, rollback, rebuild,
+development identity, and approval rules.
 
 The upstream C runtime is the production FFI target for downstream packages.
 LiteRtLmBridge is limited to narrow FFI helpers around that runtime surface. It
@@ -106,7 +107,11 @@ Each artifact entry records:
 - platform and architecture
 - native release tag
 - upstream LiteRT-LM tag
+- exact upstream and native commits
+- manifest schema, ABI versions, and capabilities
 - file name and SHA-256
+- explicit platform/architecture inventory
+- pinned real-model smoke evidence
 - library names required by loaders
 - accelerator support metadata
 - minimum OS/toolchain notes when known
