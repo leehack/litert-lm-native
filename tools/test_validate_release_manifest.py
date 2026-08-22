@@ -59,6 +59,19 @@ class ValidateReleaseManifestTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "provenance mismatch"):
             self.validate(wrong_provenance)
 
+        missing_override_target = deepcopy(self.valid)
+        override = missing_override_target["upstream"]["prebuiltOverrides"][0]
+        missing_override_target["artifacts"] = [
+            artifact
+            for artifact in missing_override_target["artifacts"]
+            if artifact["path"] != override["targetPath"]
+        ]
+        for platform in missing_override_target["platforms"]:
+            if override["targetPath"] in platform["artifactPaths"]:
+                platform["artifactPaths"].remove(override["targetPath"])
+        with self.assertRaisesRegex(SystemExit, "override target provenance"):
+            self.validate(missing_override_target)
+
     def test_bare_smoke_and_missing_source_or_expectation_fail_closed(self) -> None:
         bare = deepcopy(self.valid)
         bare["realModelSmokes"] = [

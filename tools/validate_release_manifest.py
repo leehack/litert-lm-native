@@ -263,6 +263,17 @@ def validate_schema_2_payload(
             raise SystemExit(f"artifact[{index}] accelerators must be unique strings")
         artifacts_by_path[path] = artifact
 
+    for override in upstream["prebuiltOverrides"]:
+        target = artifacts_by_path.get(override["targetPath"])
+        if (
+            target is None
+            or target.get("runtime") != "native"
+            or target.get("sha256") != override["sha256"]
+        ):
+            raise SystemExit(
+                "Release manifest prebuilt override target provenance is invalid"
+            )
+
     seen_platforms: set[tuple[str, str]] = set()
     covered_paths: set[str] = set()
     for index, platform in enumerate(platforms):

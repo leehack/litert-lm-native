@@ -11,6 +11,7 @@ import tempfile
 
 import package_release
 from fetch_litert_lm_asr_smoke_assets import ASSETS
+from prebuilt_overrides import prebuilt_override_manifest
 from validate_release_manifest import required_spm_assets
 from validate_runtime_artifacts import required_runtime_artifacts
 
@@ -110,7 +111,7 @@ def generate_manifest() -> dict:
             package_release.WEB_DIST_DIR = root / "web" / "dist"
             package_release.DIST_DIR = root / "dist"
             package_release.SHA256SUMS_PATH = root / "SHA256SUMS"
-            return package_release.build_manifest(
+            manifest = package_release.build_manifest(
                 upstream_tag=UPSTREAM_TAG,
                 upstream_commit=UPSTREAM_COMMIT,
                 compatibility_tag=UPSTREAM_TAG,
@@ -119,6 +120,35 @@ def generate_manifest() -> dict:
                 evidence_dir=evidence_dir,
                 official_upstream_assets=True,
             )
+            for override in prebuilt_override_manifest(UPSTREAM_TAG):
+                target = Path(override["targetPath"])
+                platform, arch = target.parts[1:3]
+                manifest["artifacts"].append(
+                    {
+                        "runtime": "native",
+                        "platform": platform,
+                        "arch": arch,
+                        "path": override["targetPath"],
+                        "fileName": target.name,
+                        "sha256": override["sha256"],
+                        "upstreamTag": UPSTREAM_TAG,
+                        "upstreamCommit": UPSTREAM_COMMIT,
+                        "releaseTag": RELEASE_TAG,
+                        "accelerators": ["webgpu"],
+                    }
+                )
+                platform_entry = next(
+                    item
+                    for item in manifest["platforms"]
+                    if item["platform"] == platform and item["arch"] == arch
+                )
+                platform_entry["artifactPaths"].append(override["targetPath"])
+                platform_entry["artifactPaths"].sort()
+                platform_entry["accelerators"] = sorted(
+                    set(platform_entry["accelerators"]) | {"webgpu"}
+                )
+            manifest["artifacts"].sort(key=lambda item: item["path"])
+            return manifest
         finally:
             (
                 package_release.REPO_ROOT,
