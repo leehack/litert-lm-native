@@ -129,7 +129,7 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         create_release = workflow[workflow.index('gh release create "'):]
-        self.assertIn('--target "${{ inputs.native_commit }}"', create_release)
+        self.assertIn('--target "$NATIVE_COMMIT"', create_release)
         self.assertIn("tools/publication_state.py", workflow)
         self.assertIn("Create or safely resume exact draft", workflow)
         self.assertIn("releases/assets/$asset_id", workflow)

@@ -61,6 +61,19 @@ on:
 permissions:
   contents: read
 
+env:
+  RELEASE_TAG: ${{ inputs.release_tag }}
+  UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+  UPSTREAM_COMMIT: ${{ inputs.upstream_commit }}
+  COMPATIBILITY_TAG: ${{ inputs.upstream_compatibility_tag }}
+  NATIVE_COMMIT: ${{ inputs.native_commit }}
+  CORRELATION_ID: ${{ inputs.correlation_id }}
+  PUBLICATION_APPROVAL: ${{ inputs.publication_approval }}
+  TARGET_PLATFORM: ${{ inputs.target_platform }}
+  TARGET_ARCH: ${{ inputs.target_arch }}
+  WINDOWS_BAZEL_JOBS: ${{ inputs.windows_bazel_jobs }}
+  RUN_ASR_SMOKE: ${{ inputs.run_asr_smoke }}
+
 concurrency:
   group: litert-lm-native-${{ inputs.release_tag }}
   cancel-in-progress: false
@@ -80,6 +93,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.native_commit }}
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Verify native and upstream commits
         id: policy
@@ -100,6 +115,10 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$NATIVE_COMMIT"
           test "$GITHUB_SHA" = "$NATIVE_COMMIT"
+          if ! git merge-base --is-ancestor "$NATIVE_COMMIT" origin/main; then
+            echo "::error::Native commit must be merged into main before release preparation"
+            exit 1
+          fi
           if [[ ! "$CORRELATION_ID" =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then
             echo "::error::Invalid correlation identifier"
             exit 1
@@ -227,7 +246,7 @@ jobs:
         run: |
           import json
           import os
-          windows_bazel_jobs = "${{ inputs.windows_bazel_jobs }}"
+          windows_bazel_jobs = os.environ["WINDOWS_BAZEL_JOBS"]
           targets = [
               {"os": "ubuntu-latest", "platform": "linux", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
               {"os": "ubuntu-24.04-arm", "platform": "linux", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 90},
@@ -239,8 +258,8 @@ jobs:
               {"os": "macos-latest", "platform": "macos", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 120},
               {"os": "macos-latest", "platform": "macos", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 120},
           ]
-          platform = "${{ inputs.target_platform }}"
-          arch = "${{ inputs.target_arch }}"
+          platform = os.environ["TARGET_PLATFORM"]
+          arch = os.environ["TARGET_ARCH"]
           selected = [
               target for target in targets
               if (platform == "all" or target["platform"] == platform)
@@ -263,6 +282,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.native_commit }}
+          persist-credentials: false
 
       - name: Set up Node.js for Bazelisk fallback
         uses: actions/setup-node@v4
@@ -296,8 +316,8 @@ jobs:
           BAZEL_OUTPUT_USER_ROOT: ${{ matrix.bazel_output_root }}
         run: |
           python3 tools/build_upstream_runtime.py \
-            --upstream-tag "${{ inputs.upstream_compatibility_tag }}" \
-            --upstream-ref "${{ inputs.upstream_commit }}" \
+            --upstream-tag "$COMPATIBILITY_TAG" \
+            --upstream-ref "$UPSTREAM_COMMIT" \
             --platform "${{ matrix.platform }}" \
             --arch "${{ matrix.arch }}" \
             --jobs "${{ matrix.jobs }}"
@@ -333,9 +353,9 @@ jobs:
             --evidence-json "release-evidence/${{ matrix.platform }}-${{ matrix.arch }}.json" \
             --platform "${{ matrix.platform }}" \
             --arch "${{ matrix.arch }}" \
-            --upstream-commit "${{ inputs.upstream_commit }}" \
-            --native-commit "${{ inputs.native_commit }}" \
-            --release-tag "${{ inputs.release_tag }}"
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --native-commit "$NATIVE_COMMIT" \
+            --release-tag "$RELEASE_TAG"
 
       - name: Run Windows ASR real-model smoke
         if: inputs.run_asr_smoke && matrix.platform == 'windows' && matrix.arch == 'x64'
@@ -351,9 +371,9 @@ jobs:
             --evidence-json release-evidence/windows-x64.json `
             --platform windows `
             --arch x64 `
-            --upstream-commit "${{ inputs.upstream_commit }}" `
-            --native-commit "${{ inputs.native_commit }}" `
-            --release-tag "${{ inputs.release_tag }}"
+            --upstream-commit "$env:UPSTREAM_COMMIT" `
+            --native-commit "$env:NATIVE_COMMIT" `
+            --release-tag "$env:RELEASE_TAG"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -372,12 +392,13 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.native_commit }}
+          persist-credentials: false
 
       - name: Package upstream prebuilt libraries
         run: |
           python3 tools/package_upstream_prebuilts.py \
-            --upstream-tag "${{ inputs.upstream_compatibility_tag }}" \
-            --upstream-ref "${{ inputs.upstream_commit }}" \
+            --upstream-tag "$COMPATIBILITY_TAG" \
+            --upstream-ref "$UPSTREAM_COMMIT" \
             --clean \
             --skip-overrides
 
@@ -395,7 +416,7 @@ jobs:
       - name: Apply pinned prebuilt overrides
         run: |
           python3 tools/package_upstream_prebuilts.py \
-            --upstream-tag "${{ inputs.upstream_compatibility_tag }}" \
+            --upstream-tag "$COMPATIBILITY_TAG" \
             --overrides-only
 
       - name: Package official upstream release assets
@@ -404,34 +425,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 tools/package_official_release_assets.py \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
+            --upstream-tag "$UPSTREAM_TAG" \
             --clean
 
       - name: Package Apple runtimes
         run: |
           python3 tools/package_ios_runtime.py \
-            --upstream-tag "${{ inputs.upstream_compatibility_tag }}" \
+            --upstream-tag "$COMPATIBILITY_TAG" \
             --clean
           python3 tools/package_macos_runtime.py \
-            --upstream-tag "${{ inputs.upstream_compatibility_tag }}" \
+            --upstream-tag "$COMPATIBILITY_TAG" \
             --clean
           python3 tools/package_apple_xcframeworks.py \
-            --release-tag "${{ inputs.release_tag }}" \
+            --release-tag "$RELEASE_TAG" \
             --clean
 
       - name: Generate and validate provenance manifest
         shell: bash
         run: |
-          runtime_args=(--upstream-tag "${{ inputs.upstream_compatibility_tag }}")
+          runtime_args=(--upstream-tag "$COMPATIBILITY_TAG")
           manifest_args=(
-            --upstream-commit "${{ inputs.upstream_commit }}"
-            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}"
-            --release-tag "${{ inputs.release_tag }}"
-            --native-commit "${{ inputs.native_commit }}"
+            --upstream-commit "$UPSTREAM_COMMIT"
+            --compatibility-tag "$COMPATIBILITY_TAG"
+            --release-tag "$RELEASE_TAG"
+            --native-commit "$NATIVE_COMMIT"
             --evidence-dir staged-runtime/release-evidence
           )
-          if [ -n "${{ inputs.upstream_tag }}" ]; then
-            manifest_args+=(--upstream-tag "${{ inputs.upstream_tag }}")
+          if [ -n "$UPSTREAM_TAG" ]; then
+            manifest_args+=(--upstream-tag "$UPSTREAM_TAG")
             manifest_args+=(--official-upstream-assets)
           else
             runtime_args+=(--allow-missing-official-assets)
@@ -443,13 +464,13 @@ jobs:
 
           validate_args=(
             manifest.json
-            --upstream-tag "${{ inputs.upstream_tag }}"
-            --upstream-commit "${{ inputs.upstream_commit }}"
-            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}"
-            --native-commit "${{ inputs.native_commit }}"
-            --release-tag "${{ inputs.release_tag }}"
+            --upstream-tag "$UPSTREAM_TAG"
+            --upstream-commit "$UPSTREAM_COMMIT"
+            --compatibility-tag "$COMPATIBILITY_TAG"
+            --native-commit "$NATIVE_COMMIT"
+            --release-tag "$RELEASE_TAG"
           )
-          if [ "${{ inputs.publication_approval }}" = publish ]; then
+          if [ "$PUBLICATION_APPROVAL" = publish ]; then
             validate_args+=(--require-smoke linux/x64 --require-smoke windows/x64)
           fi
           python3 tools/validate_release_manifest.py "${validate_args[@]}"
@@ -458,37 +479,37 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          tar -czf "release/litert-lm-native-prebuilts-${{ inputs.release_tag }}.tar.gz" \
+          tar -czf "release/litert-lm-native-prebuilts-${RELEASE_TAG}.tar.gz" \
             bin manifest.json SHA256SUMS
           while IFS= read -r runtime_dir; do
             platform="$(basename "$(dirname "$runtime_dir")")"
             arch="$(basename "$runtime_dir")"
-            tar -czf "release/litert-lm-native-runtime-${platform}-${arch}-${{ inputs.release_tag }}.tar.gz" \
+            tar -czf "release/litert-lm-native-runtime-${platform}-${arch}-${RELEASE_TAG}.tar.gz" \
               -C bin "${platform}/${arch}"
           done < <(find bin -mindepth 2 -maxdepth 2 -type d | sort)
           if [ -d dist/official ]; then
-            tar -czf "release/litert-lm-native-official-assets-${{ inputs.release_tag }}.tar.gz" dist
+            tar -czf "release/litert-lm-native-official-assets-${RELEASE_TAG}.tar.gz" dist
           fi
-          cp "dist/spm/${{ inputs.release_tag }}"/*.zip release/
+          cp "dist/spm/${RELEASE_TAG}"/*.zip release/
 
       - name: Write machine-readable preparation result
         run: |
           python3 tools/release_result.py \
             --manifest manifest.json \
-            --correlation-id "${{ inputs.correlation_id }}" \
+            --correlation-id "$CORRELATION_ID" \
             --repository "$GITHUB_REPOSITORY" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --approval "${{ inputs.publication_approval }}" \
+            --approval "$PUBLICATION_APPROVAL" \
             --outcome prepared \
-            --release-tag "${{ inputs.release_tag }}" \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
-            --upstream-commit "${{ inputs.upstream_commit }}" \
-            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
-            --native-commit "${{ inputs.native_commit }}" \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
             --candidate-artifact \
-              "release-candidate-${{ inputs.release_tag }}-${{ inputs.correlation_id }}" \
+              "release-candidate-${RELEASE_TAG}-${CORRELATION_ID}" \
             --output release-result.json
 
       - name: Upload prepared release candidate
@@ -509,14 +530,14 @@ jobs:
           {
             echo "## LiteRT-LM native release candidate"
             echo
-            echo "- Release tag: \`${{ inputs.release_tag }}\`"
-            echo "- Upstream tag: \`${{ inputs.upstream_tag || '(development)' }}\`"
-            echo "- Upstream commit: \`${{ inputs.upstream_commit }}\`"
-            echo "- Native commit: \`${{ inputs.native_commit }}\`"
-            echo "- Correlation ID: \`${{ inputs.correlation_id }}\`"
+            echo "- Release tag: \`$RELEASE_TAG\`"
+            echo "- Upstream tag: \`${UPSTREAM_TAG:-'(development)'}\`"
+            echo "- Upstream commit: \`$UPSTREAM_COMMIT\`"
+            echo "- Native commit: \`$NATIVE_COMMIT\`"
+            echo "- Correlation ID: \`$CORRELATION_ID\`"
             echo "- Workflow run: \`${{ github.run_id }}\` attempt \`${{ github.run_attempt }}\`"
             echo "- Machine result: \`release-result.json\`"
-            echo "- Approval: \`${{ inputs.publication_approval }}\`"
+            echo "- Approval: \`$PUBLICATION_APPROVAL\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
@@ -531,6 +552,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.native_commit }}
+          fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/download-artifact@v4
         with:
@@ -543,28 +566,32 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "${{ inputs.native_commit }}"
+          test "$(git rev-parse HEAD)" = "$NATIVE_COMMIT"
+          if ! git merge-base --is-ancestor "$NATIVE_COMMIT" origin/main; then
+            echo "::error::Native commit is no longer reachable from main"
+            exit 1
+          fi
           resolved_commit="$(
-            gh api "repos/google-ai-edge/LiteRT-LM/commits/${{ inputs.upstream_commit }}" \
+            gh api "repos/google-ai-edge/LiteRT-LM/commits/$UPSTREAM_COMMIT" \
               --jq .sha
           )"
-          test "$resolved_commit" = "${{ inputs.upstream_commit }}"
-          if [ -n "${{ inputs.upstream_tag }}" ]; then
+          test "$resolved_commit" = "$UPSTREAM_COMMIT"
+          if [ -n "$UPSTREAM_TAG" ]; then
             release_flags="$(
               gh api \
-                "repos/google-ai-edge/LiteRT-LM/releases/tags/${{ inputs.upstream_tag }}" \
+                "repos/google-ai-edge/LiteRT-LM/releases/tags/$UPSTREAM_TAG" \
                 --jq '[.draft, .prerelease] | @tsv'
             )"
             test "$release_flags" = $'false\tfalse'
             tag_commit="$(
-              gh api "repos/google-ai-edge/LiteRT-LM/commits/${{ inputs.upstream_tag }}" \
+              gh api "repos/google-ai-edge/LiteRT-LM/commits/$UPSTREAM_TAG" \
                 --jq .sha
             )"
-            test "$tag_commit" = "${{ inputs.upstream_commit }}"
+            test "$tag_commit" = "$UPSTREAM_COMMIT"
           else
             compatibility_status="$(
               gh api \
-                "repos/google-ai-edge/LiteRT-LM/compare/${{ inputs.upstream_compatibility_tag }}...${{ inputs.upstream_commit }}" \
+                "repos/google-ai-edge/LiteRT-LM/compare/${COMPATIBILITY_TAG}...${UPSTREAM_COMMIT}" \
                 --jq .status
             )"
             if [ "$compatibility_status" != ahead ] && [ "$compatibility_status" != identical ]; then
@@ -578,12 +605,12 @@ jobs:
           python3 tools/publication_state.py \
             --releases existing-releases.json \
             --approval publish \
-            --release-tag "${{ inputs.release_tag }}" \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
-            --upstream-commit "${{ inputs.upstream_commit }}" \
-            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
-            --native-commit "${{ inputs.native_commit }}" \
-            --correlation-id "${{ inputs.correlation_id }}" \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --correlation-id "$CORRELATION_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --output publication-plan.json
           history_args=()
@@ -594,10 +621,10 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/tags?per_page=100" \
             --jq '.[].name' > existing-tags.txt
           python3 tools/release_version_policy.py \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
-            --upstream-commit "${{ inputs.upstream_commit }}" \
-            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
-            --release-tag "${{ inputs.release_tag }}" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --release-tag "$RELEASE_TAG" \
             --existing-tags-file existing-tags.txt \
             "${history_args[@]}"
 
@@ -614,12 +641,12 @@ jobs:
           python3 tools/publication_state.py \
             --releases existing-releases.json \
             --approval publish \
-            --release-tag "${{ inputs.release_tag }}" \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
-            --upstream-commit "${{ inputs.upstream_commit }}" \
-            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
-            --native-commit "${{ inputs.native_commit }}" \
-            --correlation-id "${{ inputs.correlation_id }}" \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --correlation-id "$CORRELATION_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --output publication-plan.json
           prerelease_args=()
@@ -628,10 +655,10 @@ jobs:
           fi
           if [ "$(jq -r .action publication-plan.json)" = create ]; then
             jq -jr .notes publication-plan.json > release-notes.txt
-            gh release create "${{ inputs.release_tag }}" \
+            gh release create "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
-              --target "${{ inputs.native_commit }}" \
-              --title "LiteRT-LM ${{ inputs.release_tag }}" \
+              --target "$NATIVE_COMMIT" \
+              --title "LiteRT-LM $RELEASE_TAG" \
               --notes-file release-notes.txt \
               --draft \
               "${prerelease_args[@]}"
@@ -644,12 +671,12 @@ jobs:
           python3 tools/publication_state.py \
             --releases existing-releases.json \
             --approval publish \
-            --release-tag "${{ inputs.release_tag }}" \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
-            --upstream-commit "${{ inputs.upstream_commit }}" \
-            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
-            --native-commit "${{ inputs.native_commit }}" \
-            --correlation-id "${{ inputs.correlation_id }}" \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --correlation-id "$CORRELATION_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --output publication-plan.json
           release_id="$(jq -r .releaseId publication-plan.json)"
@@ -659,7 +686,7 @@ jobs:
             gh api --method DELETE \
               "repos/${GITHUB_REPOSITORY}/releases/assets/$asset_id"
           done < <(jq -r '.assets[].id' draft-release.json)
-          gh release upload "${{ inputs.release_tag }}" \
+          gh release upload "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             candidate/release/* \
             candidate/manifest.json \
@@ -674,7 +701,7 @@ jobs:
           mkdir -p published-release-check
           release_id="$(
             gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-              --jq '.[] | select(.tag_name == "${{ inputs.release_tag }}") | .id'
+              --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | .id"
           )"
           test -n "$release_id"
           gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
@@ -691,39 +718,39 @@ jobs:
             > published-release-check/manifest.json
           python3 tools/validate_release_manifest.py \
             published-release-check/manifest.json \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
-            --upstream-commit "${{ inputs.upstream_commit }}" \
-            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
-            --native-commit "${{ inputs.native_commit }}" \
-            --release-tag "${{ inputs.release_tag }}" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --release-tag "$RELEASE_TAG" \
             --release-metadata published-release-check/release.json \
             --require-smoke linux/x64 \
             --require-smoke windows/x64
           python3 tools/release_result.py \
             --manifest published-release-check/manifest.json \
-            --correlation-id "${{ inputs.correlation_id }}" \
+            --correlation-id "$CORRELATION_ID" \
             --repository "$GITHUB_REPOSITORY" \
             --run-id "$GITHUB_RUN_ID" \
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --approval publish \
             --outcome validated-for-publication \
-            --release-tag "${{ inputs.release_tag }}" \
-            --upstream-tag "${{ inputs.upstream_tag }}" \
-            --upstream-commit "${{ inputs.upstream_commit }}" \
-            --compatibility-tag "${{ inputs.upstream_compatibility_tag }}" \
-            --native-commit "${{ inputs.native_commit }}" \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
             --candidate-artifact \
-              "release-candidate-${{ inputs.release_tag }}-${{ inputs.correlation_id }}" \
+              "release-candidate-${RELEASE_TAG}-${CORRELATION_ID}" \
             --release-metadata published-release-check/release.json \
             --output published-release-check/release-result.json
-          gh release upload "${{ inputs.release_tag }}" \
+          gh release upload "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber \
             published-release-check/release-result.json
           gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
             --jq '.assets[] | select(.name == "release-result.json") | .digest' \
             | grep -Eq '^sha256:[0-9a-f]{64}$'
-          gh release edit "${{ inputs.release_tag }}" \
+          gh release edit "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false

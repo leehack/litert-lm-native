@@ -48,6 +48,29 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         self.assertIn("--draft", workflow)
         self.assertIn("--require-smoke linux/x64", workflow)
         self.assertIn("--require-smoke windows/x64", workflow)
+        self.assertGreaterEqual(workflow.count("persist-credentials: false"), 4)
+        self.assertEqual(
+            workflow.count('git merge-base --is-ancestor "$NATIVE_COMMIT" origin/main'),
+            2,
+        )
+
+        lines = workflow.splitlines()
+        run_blocks: list[str] = []
+        for index, line in enumerate(lines):
+            stripped = line.lstrip()
+            if not stripped.startswith("run:"):
+                continue
+            indent = len(line) - len(stripped)
+            block = [stripped.removeprefix("run:")]
+            for following in lines[index + 1 :]:
+                following_stripped = following.lstrip()
+                following_indent = len(following) - len(following_stripped)
+                if following_stripped and following_indent <= indent:
+                    break
+                block.append(following)
+            run_blocks.append("\n".join(block))
+        self.assertTrue(run_blocks)
+        self.assertNotIn("${{ inputs.", "\n".join(run_blocks))
 
     def test_pr_qualification_is_exact_head_prepare_only(self) -> None:
         root = Path(__file__).resolve().parents[1]

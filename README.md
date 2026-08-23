@@ -171,6 +171,9 @@ When moving to a new LiteRT-LM tag:
    together so native-assets and SPM consumers use the same bridge-enabled
    runtime build.
 
+The exact `native_commit` must already be reachable from `main`; release
+preparation and the final publication recheck both enforce that provenance.
+
 Release-tooling pull requests automatically run a read-only exact-input
 qualification. It builds all nine targets and requires the pinned ASR
 real-model smoke on Linux x64, Windows x64, and macOS arm64. It uploads the

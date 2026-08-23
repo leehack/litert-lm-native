@@ -38,7 +38,8 @@ the development commit has that stable tag.
 - `publication_approval`: `prepare-only` or `publish`
 
 The workflow checks that a stable tag resolves to the requested commit and that
-the dispatched repository ref resolves to `native_commit`. It rejects tag or
+the dispatched repository ref resolves to a `native_commit` already reachable
+from `main`. It rejects tag or
 release collisions, stable rollback, orphan rebuilds without the aligned base
 and immediate lower same-line predecessor, reuse or decrease of a rebuild number,
 legacy output forms, partial publication matrices, and publication without the
