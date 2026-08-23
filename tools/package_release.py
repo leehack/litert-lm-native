@@ -219,6 +219,12 @@ def build_manifest(
         compatibility_tag=compatibility_tag,
     )
     release_identity = validate_pair(upstream, release_tag)
+    expected_official_assets = upstream.channel == "stable"
+    if official_upstream_assets != expected_official_assets:
+        raise ValueError(
+            "official_upstream_assets must be true for stable releases and false "
+            "for development releases"
+        )
 
     entries: list[dict] = []
     sums: list[str] = []

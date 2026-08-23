@@ -18,6 +18,26 @@ NATIVE_COMMIT = "451ba0ce7c366972b4dc0e58f08ffe590958f943"
 
 
 class PackageReleaseTest(unittest.TestCase):
+    def test_official_assets_must_match_stable_or_development_identity(self) -> None:
+        contradictions = (
+            ("v0.16.0", "v0.16.0-3", False),
+            (None, f"g{UPSTREAM_COMMIT[:12]}", True),
+        )
+        for upstream_tag, release_tag, official_assets in contradictions:
+            with self.subTest(upstream_tag=upstream_tag):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "must be true for stable releases and false for development",
+                ):
+                    package_release.build_manifest(
+                        upstream_tag=upstream_tag,
+                        upstream_commit=UPSTREAM_COMMIT,
+                        compatibility_tag="v0.16.0",
+                        release_tag=release_tag,
+                        native_commit=NATIVE_COMMIT,
+                        official_upstream_assets=official_assets,
+                    )
+
     def test_current_native_commit_reports_git_failures_cleanly(self) -> None:
         failures = (
             OSError("git is unavailable"),
