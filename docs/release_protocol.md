@@ -54,6 +54,11 @@ official iOS and macOS C-runtime XCFramework archives. This makes upstream
 
 `prepare-only` builds and uploads a 14-day release candidate but cannot write a
 GitHub release. `publish` is an explicit manual boundary. The publish job
+is unreachable unless the repository's `litert-release-publication`
+environment exists and has at least one required reviewer. The workflow checks
+that rule before waiting for approval and again immediately after approval,
+before its first write-capable step. Merging this workflow does not configure
+the environment; a repository administrator must do that separately. The job
 rechecks provenance and history, creates a draft release, validates its assets
 and downloaded manifest, and promotes the draft only after validation passes.
 Draft state is deterministic: a retry may resume only a still-draft release

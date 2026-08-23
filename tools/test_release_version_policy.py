@@ -53,6 +53,12 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
             workflow.count('git merge-base --is-ancestor "$NATIVE_COMMIT" origin/main'),
             2,
         )
+        self.assertEqual(workflow.count("litert-release-publication"), 5)
+        self.assertEqual(workflow.count('type == "required_reviewers"'), 2)
+        self.assertLess(
+            workflow.index("Revalidate protected environment after reviewer approval"),
+            workflow.index("- uses: actions/checkout@v6", workflow.index("  publish:")),
+        )
 
         lines = workflow.splitlines()
         run_blocks: list[str] = []

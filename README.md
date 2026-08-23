@@ -201,6 +201,11 @@ gh workflow run native_release.yml \
 After reviewing the candidate and obtaining separate publication approval,
 rerun those exact inputs with `publication_approval=publish`.
 
+Publication also requires the repository administrator to configure the
+`litert-release-publication` environment with at least one required reviewer.
+The workflow verifies that protection before and after the reviewer wait and
+fails closed while the environment is absent or unprotected.
+
 The release workflow uses upstream's public C API (`c/engine.h`) as the
 production FFI boundary. Downstream loaders should bind directly to the runtime
 library for the selected platform. Source-built native runtimes are assembled
