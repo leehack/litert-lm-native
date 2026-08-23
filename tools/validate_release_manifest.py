@@ -395,6 +395,27 @@ def validate_schema_2_payload(
     if covered_paths != native_paths:
         raise SystemExit("Release manifest has unbound native artifact provenance")
 
+    expected_spm_paths = {
+        (
+            Path("dist")
+            / "spm"
+            / release_tag
+            / asset.format(tag=release_tag)
+        ).as_posix()
+        for asset in required_spm_assets(compatibility_tag)
+    }
+    actual_spm_paths = {
+        path
+        for path in artifacts_by_path
+        if Path(path).parts[:2] == ("dist", "spm")
+    }
+    if actual_spm_paths != expected_spm_paths:
+        raise SystemExit(
+            "Release manifest SPM artifact inventory mismatch; "
+            f"missing={sorted(expected_spm_paths - actual_spm_paths)}, "
+            f"unexpected={sorted(actual_spm_paths - expected_spm_paths)}"
+        )
+
     required_paths = required_runtime_artifacts(
         compatibility_tag, include_official_assets=upstream_tag is not None
     )
@@ -805,12 +826,16 @@ def main() -> int:
                         f"release asset[{index}] must have an exact GitHub SHA-256 digest"
                     )
         asset_name_set = set(asset_names)
-        spm_assets = sorted(
-            Path(path).name
-            for path in paths
-            if isinstance(path, str)
-            and path.startswith(f"dist/spm/{args.release_tag}/")
-            and path.endswith(".zip")
+        legacy_spm_assets = (
+            sorted(
+                Path(path).name
+                for path in paths
+                if isinstance(path, str)
+                and path.startswith(f"dist/spm/{args.release_tag}/")
+                and path.endswith(".zip")
+            )
+            if schema_version == 1
+            else []
         )
         required_assets = [
             "manifest.json",
@@ -821,7 +846,7 @@ def main() -> int:
                 for pattern in REQUIRED_RUNTIME_ARCHIVES
             ],
             *[pattern.format(tag=args.release_tag) for pattern in required_spm],
-            *spm_assets,
+            *legacy_spm_assets,
         ]
         if schema_version == 2:
             required_assets.append("release-result.json")

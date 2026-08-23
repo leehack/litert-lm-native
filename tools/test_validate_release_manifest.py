@@ -307,6 +307,61 @@ class ValidateReleaseManifestTest(unittest.TestCase):
                         with self.assertRaisesRegex(SystemExit, expected_error):
                             main()
 
+    def test_manifest_cannot_expand_the_allowed_spm_release_inventory(self) -> None:
+        manifest = deepcopy(self.valid)
+        source = next(
+            artifact
+            for artifact in manifest["artifacts"]
+            if artifact["path"].startswith(f"dist/spm/{RELEASE_TAG}/")
+        )
+        extra = deepcopy(source)
+        extra["path"] = f"dist/spm/{RELEASE_TAG}/unexpected-extra.zip"
+        extra["fileName"] = "unexpected-extra.zip"
+        manifest["artifacts"].append(extra)
+
+        fixture = (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "schema2_contract_release.json"
+        )
+        release = json.loads(fixture.read_text(encoding="utf-8"))
+        release["assets"].append(
+            {
+                "name": "unexpected-extra.zip",
+                "digest": "sha256:" + "f" * 64,
+            }
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest_path = root / "manifest.json"
+            release_path = root / "release.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            release_path.write_text(json.dumps(release), encoding="utf-8")
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "validate_release_manifest.py",
+                    str(manifest_path),
+                    "--upstream-tag",
+                    UPSTREAM_TAG,
+                    "--upstream-commit",
+                    UPSTREAM_COMMIT,
+                    "--compatibility-tag",
+                    UPSTREAM_TAG,
+                    "--native-commit",
+                    NATIVE_COMMIT,
+                    "--release-tag",
+                    RELEASE_TAG,
+                    "--release-metadata",
+                    str(release_path),
+                ],
+            ):
+                with self.assertRaisesRegex(
+                    SystemExit, "SPM artifact inventory mismatch"
+                ):
+                    main()
+
     def test_cli_rejects_malformed_manifest_and_release_metadata_cleanly(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
