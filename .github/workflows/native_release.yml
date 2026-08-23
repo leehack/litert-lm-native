@@ -1,6 +1,57 @@
 name: Native Build & Release
 
 on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: "Exact native tag: vX.Y.Z, vX.Y.Z-N, g<12hex>, or g<12hex>-N"
+        required: true
+        type: string
+      upstream_tag:
+        description: "Exact stable upstream vX.Y.Z tag; empty for development"
+        required: false
+        default: ""
+        type: string
+      upstream_commit:
+        description: "Exact 40-hex google-ai-edge/LiteRT-LM source commit"
+        required: true
+        type: string
+      upstream_compatibility_tag:
+        description: "Stable vX.Y.Z ABI/capability baseline; equals upstream_tag for stable"
+        required: true
+        type: string
+      native_commit:
+        description: "Exact 40-hex litert-lm-native commit containing the workflow"
+        required: true
+        type: string
+      correlation_id:
+        description: "Caller audit identifier: letters, digits, dot, underscore, or hyphen"
+        required: true
+        type: string
+      publication_approval:
+        description: "Prepare artifacts only, or explicitly publish after all gates"
+        required: true
+        type: string
+      target_platform:
+        description: "Source-built runtime platform to build, or all"
+        required: false
+        default: all
+        type: string
+      target_arch:
+        description: "Runtime arch to build, or all"
+        required: false
+        default: all
+        type: string
+      windows_bazel_jobs:
+        description: "Windows Bazel concurrency; 3 is the tested default"
+        required: false
+        default: "3"
+        type: string
+      run_asr_smoke:
+        description: "Run pinned Moonshine real-model smokes and record evidence"
+        required: false
+        default: true
+        type: boolean
   workflow_dispatch:
     inputs:
       release_tag:
@@ -99,7 +150,22 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$NATIVE_COMMIT"
-          test "$GITHUB_SHA" = "$NATIVE_COMMIT"
+          case "$GITHUB_EVENT_NAME" in
+            workflow_dispatch)
+              test "$GITHUB_SHA" = "$NATIVE_COMMIT"
+              ;;
+            pull_request)
+              test "$(jq -r .pull_request.head.sha "$GITHUB_EVENT_PATH")" = "$NATIVE_COMMIT"
+              test "$PUBLICATION_APPROVAL" = prepare-only
+              test "$TARGET_PLATFORM" = all
+              test "$TARGET_ARCH" = all
+              test "$RUN_ASR_SMOKE" = true
+              ;;
+            *)
+              echo "::error::Unsupported release workflow event: $GITHUB_EVENT_NAME"
+              exit 1
+              ;;
+          esac
           if [[ ! "$CORRELATION_ID" =~ ^[A-Za-z0-9._-]{1,64}$ ]]; then
             echo "::error::Invalid correlation identifier"
             exit 1
@@ -451,6 +517,13 @@ jobs:
           )
           if [ "${{ inputs.publication_approval }}" = publish ]; then
             validate_args+=(--require-smoke linux/x64 --require-smoke windows/x64)
+          fi
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            validate_args+=(
+              --require-smoke linux/x64
+              --require-smoke windows/x64
+              --require-smoke macos/arm64
+            )
           fi
           python3 tools/validate_release_manifest.py "${validate_args[@]}"
 

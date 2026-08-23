@@ -1,0 +1,32 @@
+name: PR Release Qualification
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/auto_upstream_release.yml"
+      - ".github/workflows/native_release.yml"
+      - ".github/workflows/pr_release_qualification.yml"
+      - "tools/**"
+      - "docs/release_protocol.md"
+      - "docs/platform_strategy.md"
+      - "README.md"
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    name: Exact-input nine-platform candidate
+    uses: ./.github/workflows/native_release.yml
+    with:
+      release_tag: v0.16.0-3
+      upstream_tag: v0.16.0
+      upstream_commit: 924e79c91542761242244e4f1651851f822e4cbb
+      upstream_compatibility_tag: v0.16.0
+      native_commit: ${{ github.event.pull_request.head.sha }}
+      correlation_id: pr-${{ github.event.pull_request.number }}-${{ github.run_id }}
+      publication_approval: prepare-only
+      target_platform: all
+      target_arch: all
+      windows_bazel_jobs: "3"
+      run_asr_smoke: true
