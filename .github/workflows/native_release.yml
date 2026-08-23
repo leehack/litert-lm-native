@@ -246,7 +246,13 @@ jobs:
           with open("upstream-candidate.json", "w", encoding="utf-8") as output:
               json.dump(candidate, output)
           PY
-            consumability_args=(--require-ready)
+            consumability_args=()
+            # Exact published recovery is authorized by publication_state and
+            # revalidates the immutable release before any write. Do not let
+            # discovery's same-commit no-op block that terminal recovery path.
+            if [ "$publication_action" != verify-published ]; then
+              consumability_args+=(--require-ready)
+            fi
             if grep -qx 'release_kind=rebuild' release-policy.env; then
               consumability_args+=(--allow-same-commit)
             fi

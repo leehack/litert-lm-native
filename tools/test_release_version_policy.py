@@ -199,6 +199,23 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         ]
         self.assertIn("!= verify-published", asset_mutation)
 
+        preflight = workflow[
+            workflow.index("- name: Verify native and upstream commits") :
+            workflow.index("  runtime-matrix:")
+        ]
+        published_recovery_gate = (
+            'if [ "$publication_action" != verify-published ]; then'
+        )
+        self.assertIn("consumability_args=()", preflight)
+        self.assertIn(published_recovery_gate, preflight)
+        self.assertIn("consumability_args+=(--require-ready)", preflight)
+        self.assertLess(
+            preflight.index(
+                'publication_action="$(jq -r .action publication-plan.json)"'
+            ),
+            preflight.index(published_recovery_gate),
+        )
+
     def test_stable_and_compact_rebuild(self) -> None:
         upstream = parse_upstream(
             upstream_tag="v0.16.1",

@@ -50,6 +50,17 @@ class CheckUpstreamReleaseTest(unittest.TestCase):
             decision["missingAssets"], sorted(OFFICIAL_APPLE_RUNTIME_ARCHIVES)
         )
 
+    def test_exact_published_stable_is_not_a_new_preparation(self) -> None:
+        decision = evaluate_release(
+            metadata("v0.17.0", COMMIT, OFFICIAL_APPLE_RUNTIME_ARCHIVES),
+            {"tag": "v0.17.0", "commit": COMMIT, "releaseTag": "v0.17.0"},
+            release_tag="v0.17.0",
+        )
+
+        self.assertFalse(decision["shouldPrepare"])
+        self.assertEqual(decision["reason"], "same_upstream_commit")
+        self.assertIsNone(decision["preparation"])
+
     def test_skips_new_commit_missing_required_official_assets(self) -> None:
         decision = evaluate_release(
             metadata("v0.17.0", "new-commit", ("CLiteRTLM.xcframework.zip",)),
