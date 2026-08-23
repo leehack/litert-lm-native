@@ -641,7 +641,14 @@ def main() -> int:
     args = parser.parse_args()
     upstream_tag = args.upstream_tag or None
 
-    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    try:
+        manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise SystemExit(
+            f"Release manifest must be valid UTF-8 JSON: {error}"
+        ) from error
+    if not isinstance(manifest, dict):
+        raise SystemExit("Release manifest must be a JSON object")
     schema_version = manifest.get("schemaVersion")
     if schema_version == 2:
         compatibility_tag, official_assets = validate_schema_2_identity(
@@ -708,9 +715,16 @@ def main() -> int:
     )
 
     if args.release_metadata is not None:
-        release_metadata = json.loads(
-            args.release_metadata.read_text(encoding="utf-8")
-        )
+        try:
+            release_metadata = json.loads(
+                args.release_metadata.read_text(encoding="utf-8")
+            )
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise SystemExit(
+                f"Release metadata must be valid UTF-8 JSON: {error}"
+            ) from error
+        if not isinstance(release_metadata, dict):
+            raise SystemExit("Release metadata must be a JSON object")
         release_assets = release_metadata.get("assets")
         if not isinstance(release_assets, list) or any(
             not isinstance(asset, dict)

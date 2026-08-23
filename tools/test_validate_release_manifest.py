@@ -109,6 +109,44 @@ class ValidateReleaseManifestTest(unittest.TestCase):
                         with self.assertRaisesRegex(SystemExit, expected_error):
                             main()
 
+    def test_cli_rejects_malformed_manifest_and_release_metadata_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest = root / "manifest.json"
+            release = root / "release.json"
+            manifest.write_text("not-json", encoding="utf-8")
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "validate_release_manifest.py",
+                    str(manifest),
+                    "--release-tag",
+                    RELEASE_TAG,
+                ],
+            ):
+                with self.assertRaisesRegex(SystemExit, "valid UTF-8 JSON"):
+                    main()
+
+            manifest.write_text(json.dumps(self.valid), encoding="utf-8")
+            release.write_text("[]", encoding="utf-8")
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "validate_release_manifest.py",
+                    str(manifest),
+                    "--upstream-tag",
+                    UPSTREAM_TAG,
+                    "--release-tag",
+                    RELEASE_TAG,
+                    "--release-metadata",
+                    str(release),
+                ],
+            ):
+                with self.assertRaisesRegex(SystemExit, "metadata must be a JSON object"):
+                    main()
+
     def test_wrong_package_and_incomplete_platforms_fail_closed(self) -> None:
         wrong_package = deepcopy(self.valid)
         wrong_package["package"] = "lookalike"

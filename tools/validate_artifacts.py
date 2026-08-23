@@ -29,7 +29,12 @@ def sha256_file(path: Path) -> str:
 def validate_manifest() -> dict:
     if not MANIFEST_PATH.is_file():
         fail(f"Missing {MANIFEST_PATH}")
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    try:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        fail(f"manifest.json must be valid UTF-8 JSON: {error}")
+    if not isinstance(manifest, dict):
+        fail("manifest.json must be a JSON object")
     schema_version = manifest.get("schemaVersion")
     if schema_version not in (1, 2):
         fail("manifest.json schemaVersion must be 1 or 2")
@@ -61,6 +66,8 @@ def validate_manifest() -> dict:
 
     seen = set()
     for index, artifact in enumerate(manifest["artifacts"]):
+        if not isinstance(artifact, dict):
+            fail(f"artifact[{index}] must be an object")
         for key in ("runtime", "platform", "path", "fileName", "sha256"):
             if key not in artifact:
                 fail(f"artifact[{index}] missing {key}")

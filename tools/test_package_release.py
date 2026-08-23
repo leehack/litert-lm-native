@@ -15,6 +15,31 @@ NATIVE_COMMIT = "451ba0ce7c366972b4dc0e58f08ffe590958f943"
 
 
 class PackageReleaseTest(unittest.TestCase):
+    def test_manifest_and_artifact_shapes_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest = root / "manifest.json"
+            with (
+                patch.object(validate_artifacts, "REPO_ROOT", root),
+                patch.object(validate_artifacts, "MANIFEST_PATH", manifest),
+            ):
+                manifest.write_text("[]", encoding="utf-8")
+                with self.assertRaisesRegex(SystemExit, "JSON object"):
+                    validate_artifacts.validate_manifest()
+
+                manifest.write_text(
+                    json.dumps(
+                        {
+                            "schemaVersion": 1,
+                            "package": "litert-lm-native",
+                            "artifacts": [None],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(SystemExit, r"artifact\[0\] must be an object"):
+                    validate_artifacts.validate_manifest()
+
     def test_schema_2_commit_rejects_non_hex_before_artifact_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
