@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -123,6 +125,12 @@ PREBUILT_TARGETS = {
 }
 LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 
+
+def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
+    ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
+    return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
+
+
 def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
     printable = " ".join(command)
     print(f"+ {printable}", flush=True)
@@ -135,8 +143,8 @@ def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> Non
 def download_upstream(
     upstream_ref: str, compatibility_tag: str, work_dir: Path
 ) -> Path:
-    archive_path = work_dir / f"LiteRT-LM-{upstream_ref}.tar.gz"
-    url = UPSTREAM_ARCHIVE_URL.format(ref=upstream_ref)
+    archive_path = source_archive_path(work_dir, upstream_ref)
+    url = UPSTREAM_ARCHIVE_URL.format(ref=quote(upstream_ref, safe=""))
     print(f"Downloading {url}", flush=True)
     download_to_path(
         url,

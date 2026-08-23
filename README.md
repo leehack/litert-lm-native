@@ -125,7 +125,9 @@ python3 tools/validate_artifacts.py
   exact-input revalidation, required real-model evidence, draft validation, and
   draft promotion. Existing releases are never edited or overwritten; an exact
   retry after a lost promotion response verifies the immutable published
-  transaction and exits without mutation.
+  transaction and exits without mutation. Draft recovery is restricted to a
+  rerun of the original workflow run, so a new dispatch cannot replace another
+  run's partial assets.
 - `Detect Upstream Release`: runs daily with read-only permissions. It detects
   and records a consumable stable candidate as `preparation.json`; it never
   dispatches the build and never publishes.

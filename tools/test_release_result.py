@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from publication_state import release_notes
-from release_result import build_result, validate_published_result
+from release_result import build_result, load_json_object, main, validate_published_result
 
 
 UPSTREAM = "924e79c91542761242244e4f1651851f822e4cbb"
@@ -57,6 +60,7 @@ class ReleaseResultTest(unittest.TestCase):
                     compatibility_tag="v0.16.0",
                     native_commit=NATIVE,
                     correlation_id="llamadart-42-1",
+                    workflow_run_id=42,
                 ),
                 "draft": True,
                 "prerelease": True,
@@ -108,6 +112,7 @@ class ReleaseResultTest(unittest.TestCase):
                         compatibility_tag="v0.16.0",
                         native_commit=NATIVE,
                         correlation_id="valid",
+                        workflow_run_id=42,
                     ),
                     "draft": True,
                     "prerelease": True,
@@ -147,6 +152,7 @@ class ReleaseResultTest(unittest.TestCase):
                 compatibility_tag="v0.16.0",
                 native_commit=NATIVE,
                 correlation_id="valid",
+                workflow_run_id=42,
             ),
             "draft": True,
             "prerelease": True,
@@ -217,6 +223,63 @@ class ReleaseResultTest(unittest.TestCase):
                 candidate_artifact="candidate",
                 release_metadata=metadata,
             )
+
+    def test_release_json_errors_are_clean_and_actionable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            malformed = root / "malformed.json"
+            malformed.write_text("{", encoding="utf-8")
+            non_utf8 = root / "non-utf8.json"
+            non_utf8.write_bytes(b"\xff")
+            missing = root / "missing.json"
+            for path in (malformed, non_utf8, missing):
+                with self.subTest(path=path.name):
+                    with self.assertRaisesRegex(
+                        ValueError, "release manifest must be valid UTF-8 JSON"
+                    ):
+                        load_json_object(path, label="release manifest")
+
+            output = root / "result.json"
+            with patch(
+                "sys.argv",
+                [
+                    "release_result.py",
+                    "--manifest",
+                    str(malformed),
+                    "--correlation-id",
+                    "valid",
+                    "--repository",
+                    "leehack/litert-lm-native",
+                    "--run-id",
+                    "42",
+                    "--run-attempt",
+                    "1",
+                    "--run-url",
+                    "https://github.com/leehack/litert-lm-native/actions/runs/42",
+                    "--approval",
+                    "publish",
+                    "--outcome",
+                    "validated-for-publication",
+                    "--release-tag",
+                    "v0.16.0-3",
+                    "--upstream-tag",
+                    "v0.16.0",
+                    "--upstream-commit",
+                    UPSTREAM,
+                    "--compatibility-tag",
+                    "v0.16.0",
+                    "--native-commit",
+                    NATIVE,
+                    "--candidate-artifact",
+                    "candidate",
+                    "--output",
+                    str(output),
+                ],
+            ):
+                with self.assertRaisesRegex(
+                    SystemExit, "release manifest must be valid UTF-8 JSON"
+                ):
+                    main()
 
 if __name__ == "__main__":
     unittest.main()

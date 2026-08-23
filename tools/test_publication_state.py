@@ -31,6 +31,7 @@ def plan(releases: list[dict], approval: str = "publish") -> dict:
         compatibility_tag="v0.16.0",
         native_commit=NATIVE,
         correlation_id="llamadart-400-1",
+        workflow_run_id=42,
         prerelease=True,
     )
 
@@ -51,6 +52,7 @@ class PublicationStateTest(unittest.TestCase):
                 compatibility_tag="v0.16.0",
                 native_commit=NATIVE,
                 correlation_id="llamadart-400-1",
+                workflow_run_id=42,
             ),
         }
 
@@ -74,6 +76,7 @@ class PublicationStateTest(unittest.TestCase):
             compatibility_tag="v0.16.0",
             native_commit=NATIVE,
             correlation_id="llamadart-400-1",
+            workflow_run_id=42,
             prerelease=True,
             allow_published_exact=True,
         )
@@ -90,6 +93,7 @@ class PublicationStateTest(unittest.TestCase):
                 compatibility_tag="v0.16.0",
                 native_commit=NATIVE,
                 correlation_id="llamadart-400-1",
+                workflow_run_id=42,
                 prerelease=True,
                 allow_published_exact=True,
             )
@@ -110,12 +114,32 @@ class PublicationStateTest(unittest.TestCase):
                 compatibility_tag="v0.15.0",
                 native_commit=NATIVE,
                 correlation_id="llamadart-400-1",
+                workflow_run_id=42,
                 prerelease=True,
             )
 
     def test_prepare_only_never_adopts_existing_draft(self) -> None:
         with self.assertRaisesRegex(PublicationStateError, "collision"):
             plan([self.matching_draft()], approval="prepare-only")
+
+    def test_different_workflow_run_cannot_take_over_draft_assets(self) -> None:
+        for assets in ([], [{"name": "runtime.tar.gz", "state": "uploaded"}]):
+            with self.subTest(asset_count=len(assets)):
+                draft = self.matching_draft()
+                draft["assets"] = assets
+                with self.assertRaisesRegex(PublicationStateError, "exact inputs"):
+                    plan_publication(
+                        [draft],
+                        approval="publish",
+                        release_tag="v0.16.0-3",
+                        upstream_tag="v0.16.0",
+                        upstream_commit=UPSTREAM,
+                        compatibility_tag="v0.16.0",
+                        native_commit=NATIVE,
+                        correlation_id="llamadart-400-1",
+                        workflow_run_id=43,
+                        prerelease=True,
+                    )
 
     def test_malformed_release_entry_fails_cleanly(self) -> None:
         with self.assertRaisesRegex(PublicationStateError, "entries must be objects"):
@@ -145,6 +169,8 @@ class PublicationStateTest(unittest.TestCase):
                     NATIVE,
                     "--correlation-id",
                     "llamadart-400-1",
+                    "--workflow-run-id",
+                    "42",
                     "--prerelease",
                     "true",
                     "--output",

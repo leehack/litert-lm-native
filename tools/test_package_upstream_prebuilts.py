@@ -9,6 +9,18 @@ import package_upstream_prebuilts
 
 
 class PackageUpstreamPrebuiltsTest(unittest.TestCase):
+    def test_source_archive_filename_never_contains_the_raw_ref_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = package_upstream_prebuilts.source_archive_path(
+                root, "refs/tags/x/../../escape"
+            )
+
+            self.assertEqual(archive.parent, root)
+            self.assertNotIn("refs", archive.name)
+            self.assertNotIn("..", archive.name)
+            self.assertRegex(archive.name, r"^LiteRT-LM-[0-9a-f]{64}\.tar\.gz$")
+
     def test_materializes_pointer_before_copying_prebuilt(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

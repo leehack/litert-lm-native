@@ -181,6 +181,7 @@ jobs:
             --compatibility-tag "$COMPATIBILITY_TAG" \
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
             --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
             "${publication_args[@]}" \
             --output publication-plan.json
@@ -205,6 +206,7 @@ jobs:
               --compatibility-tag "$COMPATIBILITY_TAG" \
               --native-commit "$NATIVE_COMMIT" \
               --correlation-id "$CORRELATION_ID" \
+              --workflow-run-id "$GITHUB_RUN_ID" \
               --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
               --tag-ref candidate-tag-ref.json \
               "${publication_args[@]}" \
@@ -251,6 +253,7 @@ jobs:
             python3 tools/check_upstream_release.py \
               --candidate upstream-candidate.json \
               --native-repository "$GITHUB_REPOSITORY" \
+              --release-tag "$RELEASE_TAG" \
               "${consumability_args[@]}"
           fi
 
@@ -685,6 +688,7 @@ jobs:
             --compatibility-tag "$COMPATIBILITY_TAG" \
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --allow-published-exact \
             --output publication-plan.json
@@ -705,6 +709,7 @@ jobs:
               --compatibility-tag "$COMPATIBILITY_TAG" \
               --native-commit "$NATIVE_COMMIT" \
               --correlation-id "$CORRELATION_ID" \
+              --workflow-run-id "$GITHUB_RUN_ID" \
               --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
               --tag-ref candidate-tag-ref.json \
               --allow-published-exact \
@@ -740,6 +745,7 @@ jobs:
             --compatibility-tag "$COMPATIBILITY_TAG" \
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --allow-published-exact \
             --output publication-plan.json
@@ -771,6 +777,7 @@ jobs:
             --compatibility-tag "$COMPATIBILITY_TAG" \
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --allow-published-exact \
             --output publication-plan.json
@@ -789,6 +796,7 @@ jobs:
             --compatibility-tag "$COMPATIBILITY_TAG" \
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --tag-ref candidate-tag-ref.json \
             --allow-published-exact \
@@ -849,6 +857,7 @@ jobs:
             --compatibility-tag "$COMPATIBILITY_TAG" \
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --tag-ref published-release-check/tag-ref.json \
             --candidate-dir candidate \
@@ -931,6 +940,7 @@ jobs:
             --compatibility-tag "$COMPATIBILITY_TAG" \
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --tag-ref published-release-check/final-tag-ref.json \
             --candidate-dir candidate \

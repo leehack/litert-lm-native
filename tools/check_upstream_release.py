@@ -10,6 +10,7 @@ from urllib.parse import quote
 from download_utils import fetch_json as fetch_json_with_retries
 from fetch_upstream import GITHUB_API as UPSTREAM_GITHUB_API
 from fetch_upstream import request_headers
+from release_version_policy import parse_upstream, validate_pair
 from validate_runtime_artifacts import OFFICIAL_APPLE_RUNTIME_ARCHIVES
 
 
@@ -35,6 +36,7 @@ def evaluate_release(
     baseline: dict[str, Any],
     *,
     allow_same_commit: bool = False,
+    release_tag: str | None = None,
 ) -> dict[str, Any]:
     candidate_tag = _required_string(candidate, "tag", "candidate metadata")
     candidate_commit = _required_string(candidate, "commit", "candidate metadata")
@@ -52,6 +54,35 @@ def evaluate_release(
     }
     missing_assets = sorted(set(required_official_assets()) - candidate_assets)
 
+    preparation_release_tag = candidate_tag
+    same_commit_rebuild = candidate_commit == baseline_commit and allow_same_commit
+    if same_commit_rebuild:
+        if release_tag is None:
+            return _decision(
+                candidate_tag=candidate_tag,
+                candidate_commit=candidate_commit,
+                baseline_tag=baseline_tag,
+                baseline_commit=baseline_commit,
+                should_prepare=False,
+                reason="exact_rebuild_tag_required",
+                message=(
+                    f"Skip {candidate_tag}: a same-commit rebuild requires an exact "
+                    "non-colliding native rebuild tag."
+                ),
+                missing_assets=missing_assets,
+                baseline_release_tag=baseline_release_tag,
+                preparation_release_tag=None,
+            )
+        upstream = parse_upstream(
+            upstream_tag=candidate_tag,
+            upstream_commit=candidate_commit,
+            compatibility_tag=candidate_tag,
+        )
+        identity = validate_pair(upstream, release_tag)
+        if identity.kind != "rebuild":
+            raise ValueError("same-commit preparation requires a native rebuild tag")
+        preparation_release_tag = release_tag
+
     if candidate_commit == baseline_commit and not allow_same_commit:
         return _decision(
             candidate_tag=candidate_tag,
@@ -66,6 +97,7 @@ def evaluate_release(
             ),
             missing_assets=missing_assets,
             baseline_release_tag=baseline_release_tag,
+            preparation_release_tag=None,
         )
 
     if missing_assets:
@@ -82,6 +114,7 @@ def evaluate_release(
             ),
             missing_assets=missing_assets,
             baseline_release_tag=baseline_release_tag,
+            preparation_release_tag=None,
         )
 
     return _decision(
@@ -92,12 +125,14 @@ def evaluate_release(
         should_prepare=True,
         reason="ready",
         message=(
-            f"Prepare {candidate_tag}: it is newer than native baseline "
-            f"{baseline_tag} and publishes all required official runtime artifacts. "
+            f"Prepare {preparation_release_tag}: upstream {candidate_tag} is "
+            f"compatible with native baseline {baseline_tag} and publishes all "
+            "required official runtime artifacts. "
             "Publication still requires an explicit exact-input dispatch."
         ),
         missing_assets=[],
         baseline_release_tag=baseline_release_tag,
+        preparation_release_tag=preparation_release_tag,
     )
 
 
@@ -155,25 +190,29 @@ def _decision(
     message: str,
     missing_assets: list[str],
     baseline_release_tag: str | None,
+    preparation_release_tag: str | None,
 ) -> dict[str, Any]:
     baseline = {"tag": baseline_tag, "commit": baseline_commit}
     if baseline_release_tag is not None:
         baseline["releaseTag"] = baseline_release_tag
-    return {
+    decision = {
         "shouldPrepare": should_prepare,
         "reason": reason,
         "message": message,
         "candidate": {"tag": candidate_tag, "commit": candidate_commit},
         "baseline": baseline,
         "missingAssets": missing_assets,
-        "preparation": {
-            "releaseTag": candidate_tag,
+        "preparation": None,
+    }
+    if should_prepare and preparation_release_tag is not None:
+        decision["preparation"] = {
+            "releaseTag": preparation_release_tag,
             "upstreamTag": candidate_tag,
             "upstreamCommit": candidate_commit,
             "upstreamCompatibilityTag": candidate_tag,
             "publicationApproval": "prepare-only",
-        },
-    }
+        }
+    return decision
 
 
 def main() -> int:
@@ -191,23 +230,37 @@ def main() -> int:
         help="Allow an explicitly ordered rebuild of an existing upstream line.",
     )
     parser.add_argument(
+        "--release-tag",
+        help="Exact native rebuild tag required with --allow-same-commit.",
+    )
+    parser.add_argument(
         "--require-ready",
         action="store_true",
         help="Exit nonzero unless the candidate is consumable for preparation.",
     )
     args = parser.parse_args()
 
-    candidate_metadata = json.loads(args.candidate.read_text(encoding="utf-8"))
-    if not isinstance(candidate_metadata, dict):
-        raise RuntimeError("Candidate metadata must be a JSON object")
+    try:
+        candidate_metadata = json.loads(args.candidate.read_text(encoding="utf-8"))
+        if not isinstance(candidate_metadata, dict):
+            raise RuntimeError("Candidate metadata must be a JSON object")
 
-    candidate = prepare_candidate(candidate_metadata)
-    baseline = load_native_baseline(args.native_repository)
-    decision = evaluate_release(
-        candidate,
-        baseline,
-        allow_same_commit=args.allow_same_commit,
-    )
+        candidate = prepare_candidate(candidate_metadata)
+        baseline = load_native_baseline(args.native_repository)
+        decision = evaluate_release(
+            candidate,
+            baseline,
+            allow_same_commit=args.allow_same_commit,
+            release_tag=args.release_tag,
+        )
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        RuntimeError,
+        ValueError,
+    ) as error:
+        raise SystemExit(str(error)) from error
     print(json.dumps(decision, indent=2, sort_keys=True))
     if args.require_ready and not decision["shouldPrepare"]:
         raise SystemExit(decision["message"])

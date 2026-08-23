@@ -259,6 +259,45 @@ class PackageReleaseTest(unittest.TestCase):
                     release_tag="v0.16.0-3",
                 )
 
+    def test_smoke_evidence_json_errors_are_clean_and_actionable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            evidence_dir = Path(temp)
+            malformed = evidence_dir / "malformed.json"
+            malformed.write_text("{", encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "smoke evidence must be valid UTF-8 JSON"
+            ):
+                package_release.load_smoke_evidence(
+                    evidence_dir,
+                    upstream_commit=UPSTREAM_COMMIT,
+                    native_commit=NATIVE_COMMIT,
+                    release_tag="v0.16.0-3",
+                )
+
+            malformed.unlink()
+            non_utf8 = evidence_dir / "non-utf8.json"
+            non_utf8.write_bytes(b"\xff")
+            with self.assertRaisesRegex(
+                ValueError, "smoke evidence must be valid UTF-8 JSON"
+            ):
+                package_release.load_smoke_evidence(
+                    evidence_dir,
+                    upstream_commit=UPSTREAM_COMMIT,
+                    native_commit=NATIVE_COMMIT,
+                    release_tag="v0.16.0-3",
+                )
+
+            with patch.object(Path, "read_text", side_effect=OSError("unavailable")):
+                with self.assertRaisesRegex(
+                    ValueError, "smoke evidence must be valid UTF-8 JSON"
+                ):
+                    package_release.load_smoke_evidence(
+                        evidence_dir,
+                        upstream_commit=UPSTREAM_COMMIT,
+                        native_commit=NATIVE_COMMIT,
+                        release_tag="v0.16.0-3",
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

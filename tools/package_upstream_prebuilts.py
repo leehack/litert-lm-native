@@ -7,6 +7,7 @@ import shutil
 import tarfile
 import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -40,11 +41,16 @@ LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 def download_source(upstream_ref: str, output: Path) -> None:
     print(f"Downloading upstream source archive for {upstream_ref}", flush=True)
     download_to_path(
-        UPSTREAM_SOURCE_URL.format(ref=upstream_ref),
+        UPSTREAM_SOURCE_URL.format(ref=quote(upstream_ref, safe="")),
         output,
         headers={"User-Agent": "litert-lm-native-prebuilt-packager"},
         label=f"LiteRT-LM {upstream_ref} source archive",
     )
+
+
+def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
+    ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
+    return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
 
 
 def extract_source(archive: Path, output_dir: Path) -> Path:
@@ -186,7 +192,7 @@ def main() -> int:
             with tempfile.TemporaryDirectory(prefix="litert-lm-native-") as temp:
                 temp_dir = Path(temp)
                 upstream_ref = args.upstream_ref or args.upstream_tag
-                archive = temp_dir / f"LiteRT-LM-{upstream_ref}.tar.gz"
+                archive = source_archive_path(temp_dir, upstream_ref)
                 download_source(upstream_ref, archive)
                 source_root = extract_source(archive, temp_dir / "src")
                 copied = copy_prebuilts(

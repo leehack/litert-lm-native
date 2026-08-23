@@ -102,7 +102,12 @@ def load_smoke_evidence(
     evidence: list[dict] = []
     identities: set[tuple[str, str, str]] = set()
     for path in sorted(evidence_dir.rglob("*.json")):
-        item = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            item = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise ValueError(
+                f"smoke evidence must be valid UTF-8 JSON: {path}: {error}"
+            ) from error
         if not isinstance(item, dict):
             raise ValueError(f"smoke evidence must be an object: {path}")
         if item.get("result") != "pass":

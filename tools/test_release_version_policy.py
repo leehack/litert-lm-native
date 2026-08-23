@@ -146,6 +146,10 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertGreaterEqual(workflow.count("--allow-published-exact"), 7)
+        self.assertEqual(
+            workflow.count("--workflow-run-id"),
+            workflow.count("python3 tools/publication_state.py"),
+        )
         self.assertIn("tools/validate_release_result.py", workflow)
         self.assertIn("Exact published transaction already exists", workflow)
         asset_mutation = workflow[
@@ -229,6 +233,11 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
     def test_collision_and_rollback_are_rejected(self) -> None:
         with self.assertRaisesRegex(PolicyError, "collision"):
             validate_history(parse_release_tag("v0.16.1"), ["v0.16.1"])
+        with self.assertRaisesRegex(PolicyError, "collision"):
+            validate_history(
+                parse_release_tag("v0.16.0-3"),
+                ["v0.16.0", "v0.16.0-3"],
+            )
         with self.assertRaisesRegex(PolicyError, "rollback"):
             validate_history(parse_release_tag("v0.15.1"), ["v0.16.0"])
         with self.assertRaisesRegex(PolicyError, "greater than 1"):

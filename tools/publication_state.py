@@ -25,12 +25,15 @@ def release_notes(
     compatibility_tag: str,
     native_commit: str,
     correlation_id: str,
+    workflow_run_id: int,
 ) -> str:
+    if not isinstance(workflow_run_id, int) or workflow_run_id <= 0:
+        raise PublicationStateError("workflow run ID must be a positive integer")
     return (
         f"Release {release_tag}; upstream tag {upstream_tag or '(development)'}; "
         f"upstream commit {upstream_commit}; compatibility tag {compatibility_tag}; "
         f"native commit {native_commit}; "
-        f"correlation {correlation_id}."
+        f"correlation {correlation_id}; workflow run {workflow_run_id}."
     )
 
 
@@ -44,6 +47,7 @@ def plan_publication(
     compatibility_tag: str,
     native_commit: str,
     correlation_id: str,
+    workflow_run_id: int,
     prerelease: bool,
     allow_published_exact: bool = False,
 ) -> dict:
@@ -57,6 +61,7 @@ def plan_publication(
         compatibility_tag=compatibility_tag,
         native_commit=native_commit,
         correlation_id=correlation_id,
+        workflow_run_id=workflow_run_id,
     )
     matches = [item for item in releases if item.get("tag_name") == release_tag]
     if len(matches) > 1:
@@ -214,6 +219,7 @@ def main() -> int:
     parser.add_argument("--compatibility-tag", required=True)
     parser.add_argument("--native-commit", required=True)
     parser.add_argument("--correlation-id", required=True)
+    parser.add_argument("--workflow-run-id", type=int, required=True)
     parser.add_argument("--prerelease", choices=("true", "false"), required=True)
     parser.add_argument("--tag-ref", type=Path)
     parser.add_argument("--candidate-dir", type=Path)
@@ -237,6 +243,7 @@ def main() -> int:
             compatibility_tag=args.compatibility_tag,
             native_commit=args.native_commit,
             correlation_id=args.correlation_id,
+            workflow_run_id=args.workflow_run_id,
             prerelease=args.prerelease == "true",
             allow_published_exact=args.allow_published_exact,
         )

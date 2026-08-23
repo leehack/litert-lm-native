@@ -16,6 +16,16 @@ CORRELATION_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
+def load_json_object(path: Path, *, label: str) -> dict:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"{label} must be valid UTF-8 JSON: {error}") from error
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return value
+
+
 def build_result(
     *,
     manifest: dict,
@@ -104,6 +114,7 @@ def build_result(
                 compatibility_tag=compatibility_tag,
                 native_commit=native_commit,
                 correlation_id=correlation_id,
+                workflow_run_id=run_id,
             ),
             "draft": True,
             "prerelease": manifest.get("release", {}).get("githubPrerelease"),
@@ -220,29 +231,32 @@ def main() -> int:
     parser.add_argument("--release-metadata", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
-    release_metadata = (
-        json.loads(args.release_metadata.read_text(encoding="utf-8"))
-        if args.release_metadata
-        else None
-    )
-    result = build_result(
-        manifest=manifest,
-        correlation_id=args.correlation_id,
-        repository=args.repository,
-        run_id=args.run_id,
-        run_attempt=args.run_attempt,
-        run_url=args.run_url,
-        approval=args.approval,
-        outcome=args.outcome,
-        release_tag=args.release_tag,
-        upstream_tag=args.upstream_tag or None,
-        upstream_commit=args.upstream_commit,
-        compatibility_tag=args.compatibility_tag,
-        native_commit=args.native_commit,
-        candidate_artifact=args.candidate_artifact,
-        release_metadata=release_metadata,
-    )
+    try:
+        manifest = load_json_object(args.manifest, label="release manifest")
+        release_metadata = (
+            load_json_object(args.release_metadata, label="release metadata")
+            if args.release_metadata
+            else None
+        )
+        result = build_result(
+            manifest=manifest,
+            correlation_id=args.correlation_id,
+            repository=args.repository,
+            run_id=args.run_id,
+            run_attempt=args.run_attempt,
+            run_url=args.run_url,
+            approval=args.approval,
+            outcome=args.outcome,
+            release_tag=args.release_tag,
+            upstream_tag=args.upstream_tag or None,
+            upstream_commit=args.upstream_commit,
+            compatibility_tag=args.compatibility_tag,
+            native_commit=args.native_commit,
+            candidate_artifact=args.candidate_artifact,
+            release_metadata=release_metadata,
+        )
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     args.output.write_text(
         json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

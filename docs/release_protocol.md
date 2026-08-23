@@ -65,8 +65,11 @@ rechecks provenance and history, creates a draft release, validates its assets
 and downloaded manifest, and promotes the draft only after validation passes.
 Draft state is deterministic: a retry may resume only a still-draft release
 whose target commit, title, prerelease class, exact-input notes, and correlation
-identity all match, and whose lightweight candidate tag still targets the exact
-native commit. A matching retry removes partial draft assets and uploads the
+identity all match. The notes also bind the original GitHub workflow run ID, so
+only a failed-job rerun of that exact run may replace partial assets; a new
+dispatch cannot take over the draft even if its caller reuses the correlation
+ID. The lightweight candidate tag must still target the exact native commit. A
+matching retry removes partial draft assets and uploads the
 candidate again. If draft promotion succeeded remotely but the client lost the
 response, an exact retry revalidates the published release, tag target, complete
 asset bytes, manifest, and stored transaction result, then exits without a
