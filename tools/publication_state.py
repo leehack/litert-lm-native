@@ -154,6 +154,12 @@ def validate_candidate_assets(
         "SHA256SUMS": candidate_dir / "SHA256SUMS",
         "release-result.json": release_result or candidate_dir / "release-result.json",
     }
+    if candidate_dir.is_symlink():
+        raise PublicationStateError("candidate directory must not be a symlink")
+    if not candidate_dir.is_dir():
+        raise PublicationStateError("candidate directory is missing")
+    if release_dir.is_symlink():
+        raise PublicationStateError("candidate release directory must not be a symlink")
     if not release_dir.is_dir():
         raise PublicationStateError("candidate release directory is missing")
     expected_files = dict(required_top_level)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import subprocess
 import sys
@@ -182,33 +183,51 @@ class PackageReleaseTest(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "lowercase 40-hex SHA"):
                     validate_artifacts.validate_manifest()
 
-    def test_schema_2_provenance_sections_must_be_objects(self) -> None:
+    def test_schema_2_section_types_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             manifest = root / "manifest.json"
-            manifest.write_text(
-                json.dumps(
-                    {
-                        "schemaVersion": 2,
-                        "package": "litert-lm-native",
-                        "release": {},
-                        "upstream": None,
-                        "native": {"commit": NATIVE_COMMIT},
-                        "abi": {},
-                        "capabilities": {},
-                        "platforms": [],
-                        "realModelSmokes": [],
-                        "artifacts": [],
-                    }
-                ),
-                encoding="utf-8",
-            )
+            valid = {
+                "schemaVersion": 2,
+                "package": "litert-lm-native",
+                "release": {},
+                "upstream": {"commit": UPSTREAM_COMMIT},
+                "native": {"commit": NATIVE_COMMIT},
+                "abi": {},
+                "capabilities": {},
+                "platforms": [],
+                "realModelSmokes": [],
+                "artifacts": [],
+            }
             with (
                 patch.object(validate_artifacts, "REPO_ROOT", root),
                 patch.object(validate_artifacts, "MANIFEST_PATH", manifest),
             ):
-                with self.assertRaisesRegex(SystemExit, "upstream must be an object"):
-                    validate_artifacts.validate_manifest()
+                for section in (
+                    "release",
+                    "upstream",
+                    "native",
+                    "abi",
+                    "capabilities",
+                ):
+                    with self.subTest(section=section):
+                        malformed = deepcopy(valid)
+                        malformed[section] = []
+                        manifest.write_text(json.dumps(malformed), encoding="utf-8")
+                        with self.assertRaisesRegex(
+                            SystemExit, f"{section} must be an object"
+                        ):
+                            validate_artifacts.validate_manifest()
+
+                for section in ("platforms", "realModelSmokes"):
+                    with self.subTest(section=section):
+                        malformed = deepcopy(valid)
+                        malformed[section] = {}
+                        manifest.write_text(json.dumps(malformed), encoding="utf-8")
+                        with self.assertRaisesRegex(
+                            SystemExit, f"{section} must be a list"
+                        ):
+                            validate_artifacts.validate_manifest()
 
     def test_generic_gpu_accelerator_is_schema_compatible(self) -> None:
         self.assertEqual(

@@ -228,6 +228,29 @@ class PublicationStateTest(unittest.TestCase):
             with self.assertRaisesRegex(PublicationStateError, "digest mismatch"):
                 validate_candidate_assets(metadata, candidate_dir=candidate)
 
+    def test_candidate_and_release_directory_symlinks_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "candidate"
+            candidate.mkdir()
+            outside = root / "outside"
+            outside.mkdir()
+            (candidate / "release").symlink_to(outside, target_is_directory=True)
+
+            with self.assertRaisesRegex(
+                PublicationStateError,
+                "candidate release directory must not be a symlink",
+            ):
+                validate_candidate_assets({}, candidate_dir=candidate)
+
+            candidate_link = root / "candidate-link"
+            candidate_link.symlink_to(candidate, target_is_directory=True)
+            with self.assertRaisesRegex(
+                PublicationStateError,
+                "candidate directory must not be a symlink",
+            ):
+                validate_candidate_assets({}, candidate_dir=candidate_link)
+
 
 if __name__ == "__main__":
     unittest.main()

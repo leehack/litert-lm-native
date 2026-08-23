@@ -54,9 +54,12 @@ def validate_manifest() -> dict:
         ):
             if section not in manifest:
                 fail(f"manifest.json schema 2 missing {section}")
-        for section in ("upstream", "native"):
+        for section in ("release", "upstream", "native", "abi", "capabilities"):
             if not isinstance(manifest[section], dict):
                 fail(f"manifest.json schema 2 {section} must be an object")
+        for section in ("platforms", "realModelSmokes"):
+            if not isinstance(manifest[section], list):
+                fail(f"manifest.json schema 2 {section} must be a list")
         for label, commit in (
             ("upstream", manifest["upstream"].get("commit")),
             ("native", manifest["native"].get("commit")),
