@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from release_version_policy import (
     PolicyError,
     development_tag_for,
+    main as release_policy_main,
     parse_release_tag,
     parse_upstream,
     validate_history,
@@ -17,6 +21,32 @@ COMMIT = "ba82499873945908bf8bcfc96e955d0677eb1fa1"
 
 
 class ReleaseVersionPolicyTest(unittest.TestCase):
+    def test_existing_tags_file_read_errors_are_clean(self) -> None:
+        argv = [
+            "release_version_policy.py",
+            "--upstream-tag",
+            "v0.17.0",
+            "--upstream-commit",
+            COMMIT,
+            "--compatibility-tag",
+            "v0.17.0",
+            "--release-tag",
+            "v0.17.0",
+            "--existing-tags-file",
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            invalid = root / "invalid.txt"
+            invalid.write_bytes(b"\xff")
+            for path in (root / "missing.txt", invalid):
+                with self.subTest(path=path.name), patch.object(
+                    sys, "argv", [*argv, str(path)]
+                ):
+                    with self.assertRaisesRegex(
+                        SystemExit, "must be readable UTF-8 text"
+                    ):
+                        release_policy_main()
+
     def test_scheduled_workflow_is_detection_only(self) -> None:
         root = Path(__file__).resolve().parents[1]
         workflow = (root / ".github/workflows/auto_upstream_release.yml").read_text(

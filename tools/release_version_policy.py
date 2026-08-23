@@ -301,11 +301,16 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    existing = (
-        []
-        if args.existing_tags_file is None
-        else args.existing_tags_file.read_text(encoding="utf-8").splitlines()
-    )
+    try:
+        existing = (
+            []
+            if args.existing_tags_file is None
+            else args.existing_tags_file.read_text(encoding="utf-8").splitlines()
+        )
+    except (OSError, UnicodeError) as error:
+        raise SystemExit(
+            f"Existing tags file must be readable UTF-8 text: {error}"
+        ) from error
     try:
         upstream = parse_upstream(
             upstream_tag=args.upstream_tag,

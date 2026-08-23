@@ -87,6 +87,31 @@ class CheckUpstreamReleaseTest(unittest.TestCase):
             decision["preparation"]["publicationApproval"], "prepare-only"
         )
 
+    def test_rejects_older_or_moved_upstream_tags(self) -> None:
+        rollback = evaluate_release(
+            metadata("v0.15.9", "older-commit", OFFICIAL_APPLE_RUNTIME_ARCHIVES),
+            {"tag": "v0.16.0", "commit": "baseline-commit"},
+        )
+        self.assertFalse(rollback["shouldPrepare"])
+        self.assertEqual(rollback["reason"], "upstream_rollback")
+        self.assertIsNone(rollback["preparation"])
+
+        moved = evaluate_release(
+            metadata("v0.16.0", "moved-commit", OFFICIAL_APPLE_RUNTIME_ARCHIVES),
+            {"tag": "v0.16.0", "commit": "baseline-commit"},
+        )
+        self.assertFalse(moved["shouldPrepare"])
+        self.assertEqual(moved["reason"], "upstream_tag_moved")
+        self.assertIsNone(moved["preparation"])
+
+        with self.assertRaisesRegex(ValueError, "must be exact stable"):
+            evaluate_release(
+                metadata(
+                    "v0.16.0-1", "candidate-commit", OFFICIAL_APPLE_RUNTIME_ARCHIVES
+                ),
+                {"tag": "v0.16.0", "commit": "baseline-commit"},
+            )
+
     def test_explicit_rebuild_may_reuse_commit_but_still_requires_assets(self) -> None:
         decision = evaluate_release(
             metadata("v0.16.0", COMMIT, OFFICIAL_APPLE_RUNTIME_ARCHIVES),

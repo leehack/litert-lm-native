@@ -10,7 +10,7 @@ from urllib.parse import quote
 from download_utils import fetch_json as fetch_json_with_retries
 from fetch_upstream import GITHUB_API as UPSTREAM_GITHUB_API
 from fetch_upstream import request_headers
-from release_version_policy import parse_upstream, validate_pair
+from release_version_policy import parse_release_tag, parse_upstream, validate_pair
 from validate_runtime_artifacts import OFFICIAL_APPLE_RUNTIME_ARCHIVES
 
 
@@ -31,6 +31,19 @@ def required_official_assets() -> tuple[str, ...]:
     return OFFICIAL_APPLE_RUNTIME_ARCHIVES
 
 
+def _stable_version(tag: str, label: str) -> tuple[int, ...]:
+    try:
+        identity = parse_release_tag(tag)
+    except ValueError as error:
+        raise ValueError(
+            f"{label} tag must be exact stable vMAJOR.MINOR.PATCH"
+        ) from error
+    if identity.channel != "stable" or identity.kind != "upstream":
+        raise ValueError(f"{label} tag must be exact stable vMAJOR.MINOR.PATCH")
+    assert isinstance(identity.core, tuple)
+    return identity.core
+
+
 def evaluate_release(
     candidate: dict[str, Any],
     baseline: dict[str, Any],
@@ -42,6 +55,8 @@ def evaluate_release(
     candidate_commit = _required_string(candidate, "commit", "candidate metadata")
     baseline_tag = _required_string(baseline, "tag", "native baseline")
     baseline_commit = _required_string(baseline, "commit", "native baseline")
+    candidate_version = _stable_version(candidate_tag, "candidate")
+    baseline_version = _stable_version(baseline_tag, "native baseline")
     baseline_release_tag = baseline.get("releaseTag")
     if not isinstance(baseline_release_tag, str) or not baseline_release_tag:
         baseline_release_tag = None
@@ -53,6 +68,39 @@ def evaluate_release(
         if isinstance(asset, dict) and isinstance(asset.get("name"), str)
     }
     missing_assets = sorted(set(required_official_assets()) - candidate_assets)
+
+    if candidate_version < baseline_version:
+        return _decision(
+            candidate_tag=candidate_tag,
+            candidate_commit=candidate_commit,
+            baseline_tag=baseline_tag,
+            baseline_commit=baseline_commit,
+            should_prepare=False,
+            reason="upstream_rollback",
+            message=(
+                f"Skip {candidate_tag}: it precedes native baseline upstream "
+                f"{baseline_tag}."
+            ),
+            missing_assets=missing_assets,
+            baseline_release_tag=baseline_release_tag,
+            preparation_release_tag=None,
+        )
+    if candidate_version == baseline_version and candidate_commit != baseline_commit:
+        return _decision(
+            candidate_tag=candidate_tag,
+            candidate_commit=candidate_commit,
+            baseline_tag=baseline_tag,
+            baseline_commit=baseline_commit,
+            should_prepare=False,
+            reason="upstream_tag_moved",
+            message=(
+                f"Skip {candidate_tag}: its commit differs from the immutable "
+                "native baseline for that upstream tag."
+            ),
+            missing_assets=missing_assets,
+            baseline_release_tag=baseline_release_tag,
+            preparation_release_tag=None,
+        )
 
     preparation_release_tag = candidate_tag
     same_commit_rebuild = candidate_commit == baseline_commit and allow_same_commit
