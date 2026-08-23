@@ -85,9 +85,19 @@ def artifact_accelerators(path: Path) -> list[str]:
 
 
 def current_native_commit() -> str:
-    return subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True
-    ).strip()
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPO_ROOT,
+            stderr=subprocess.PIPE,
+            text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        detail = getattr(error, "stderr", None) or str(error)
+        raise ValueError(
+            "could not determine the native commit with "
+            f"git rev-parse HEAD: {str(detail).strip()}"
+        ) from error
 
 
 def load_smoke_evidence(
@@ -305,18 +315,22 @@ def main() -> int:
     parser.add_argument("--official-upstream-assets", action="store_true")
     args = parser.parse_args()
 
-    manifest = build_manifest(
-        upstream_tag=args.upstream_tag or None,
-        upstream_commit=args.upstream_commit,
-        compatibility_tag=args.compatibility_tag,
-        release_tag=args.release_tag,
-        native_commit=args.native_commit or current_native_commit(),
-        evidence_dir=args.evidence_dir,
-        official_upstream_assets=args.official_upstream_assets,
-    )
-    MANIFEST_PATH.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    try:
+        manifest = build_manifest(
+            upstream_tag=args.upstream_tag or None,
+            upstream_commit=args.upstream_commit,
+            compatibility_tag=args.compatibility_tag,
+            release_tag=args.release_tag,
+            native_commit=args.native_commit or current_native_commit(),
+            evidence_dir=args.evidence_dir,
+            official_upstream_assets=args.official_upstream_assets,
+        )
+        MANIFEST_PATH.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"Release manifest generation failed: {error}") from error
     print(f"Wrote {MANIFEST_PATH}")
     print(f"Wrote {SHA256SUMS_PATH}")
     print(f"Artifacts: {len(manifest['artifacts'])}")

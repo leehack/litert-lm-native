@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +10,7 @@ from unittest.mock import patch
 
 import package_release
 import validate_artifacts
+from release_version_policy import PolicyError
 
 
 UPSTREAM_COMMIT = "924e79c91542761242244e4f1651851f822e4cbb"
@@ -15,6 +18,62 @@ NATIVE_COMMIT = "451ba0ce7c366972b4dc0e58f08ffe590958f943"
 
 
 class PackageReleaseTest(unittest.TestCase):
+    def test_current_native_commit_reports_git_failures_cleanly(self) -> None:
+        failures = (
+            OSError("git is unavailable"),
+            subprocess.CalledProcessError(
+                128,
+                ["git", "rev-parse", "HEAD"],
+                stderr="fatal: not a git repository",
+            ),
+        )
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                with patch.object(
+                    package_release.subprocess,
+                    "check_output",
+                    side_effect=failure,
+                ):
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "could not determine the native commit",
+                    ):
+                        package_release.current_native_commit()
+
+    def test_main_reports_policy_and_evidence_failures_cleanly(self) -> None:
+        arguments = [
+            "package_release.py",
+            "--upstream-tag",
+            "v0.16.0",
+            "--upstream-commit",
+            UPSTREAM_COMMIT,
+            "--compatibility-tag",
+            "v0.16.0",
+            "--release-tag",
+            "v0.16.0-3",
+            "--native-commit",
+            NATIVE_COMMIT,
+        ]
+        failures = (
+            PolicyError("release identity mismatch"),
+            ValueError("smoke evidence mismatch"),
+        )
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                with (
+                    patch.object(sys, "argv", arguments),
+                    patch.object(
+                        package_release,
+                        "build_manifest",
+                        side_effect=failure,
+                    ),
+                ):
+                    with self.assertRaisesRegex(
+                        SystemExit,
+                        f"Release manifest generation failed: {failure}",
+                    ):
+                        package_release.main()
+
     def test_manifest_and_artifact_shapes_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

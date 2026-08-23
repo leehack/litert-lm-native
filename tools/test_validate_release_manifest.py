@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import validate_runtime_artifacts
 from generate_schema2_contract_fixture import (
     NATIVE_COMMIT,
     RELEASE_TAG,
@@ -59,6 +60,82 @@ class ValidateReleaseManifestTest(unittest.TestCase):
                 required_runtime_artifacts(tag, include_official_assets=False)
             )
         )
+
+    def test_raw_apple_build_tree_fails_post_package_runtime_contract(self) -> None:
+        post_package_paths = {
+            Path("bin/ios/arm64/LiteRtLm.framework/LiteRtLm"),
+            Path("bin/ios/arm64/CLiteRTLM.framework/CLiteRTLM"),
+            Path("bin/ios/arm64-sim/LiteRtLm.framework/LiteRtLm"),
+            Path("bin/ios/arm64-sim/CLiteRTLM.framework/CLiteRTLM"),
+            Path("bin/macos/arm64/libCLiteRTLM_mac.dylib"),
+            Path("bin/macos/x64/libCLiteRTLM_mac.dylib"),
+            *validate_runtime_artifacts.V0_16_IOS_GPU_ARTIFACTS,
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for relative in required_runtime_artifacts(
+                "v0.16.0", include_official_assets=False
+            ):
+                if relative in post_package_paths:
+                    continue
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"runtime")
+            for arch in ("arm64", "arm64-sim"):
+                for name in (
+                    "libLiteRtLm.dylib",
+                    "libLiteRtMetalAccelerator.dylib",
+                    "libLiteRtTopKMetalSampler.dylib",
+                ):
+                    path = root / "bin" / "ios" / arch / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b"raw-build-output")
+
+            with (
+                patch.object(validate_runtime_artifacts, "REPO_ROOT", root),
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "validate_runtime_artifacts.py",
+                        "--upstream-tag",
+                        "v0.16.0",
+                        "--allow-missing-official-assets",
+                    ],
+                ),
+            ):
+                with self.assertRaises(SystemExit) as failure:
+                    validate_runtime_artifacts.main()
+
+        message = str(failure.exception)
+        for relative in post_package_paths:
+            self.assertIn(relative.as_posix(), message)
+
+    def test_complete_packaged_tree_satisfies_runtime_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            required = required_runtime_artifacts(
+                "v0.16.0", include_official_assets=False
+            )
+            for relative in required:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"runtime")
+
+            with (
+                patch.object(validate_runtime_artifacts, "REPO_ROOT", root),
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "validate_runtime_artifacts.py",
+                        "--upstream-tag",
+                        "v0.16.0",
+                        "--allow-missing-official-assets",
+                    ],
+                ),
+            ):
+                self.assertEqual(validate_runtime_artifacts.main(), 0)
 
     def test_schema_2_payload_requires_exact_schema_version(self) -> None:
         wrong_version = deepcopy(self.valid)

@@ -121,6 +121,7 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         verify = workflow[workflow.index("  verify:") :]
 
         self.assertIn("runs-on: macos-latest", verify)
+        self.assertNotIn("runs-on: ubuntu-latest", verify)
         self.assertIn('--upstream-ref "$QUALIFICATION_UPSTREAM_COMMIT"', verify)
         self.assertIn("--skip-overrides", verify)
         self.assertIn("--overrides-only", verify)
@@ -128,6 +129,7 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
             "tools/package_upstream_prebuilts.py",
             "actions/download-artifact@v4",
             "cp -R staged/bin/* bin/",
+            "--overrides-only",
             "tools/package_ios_runtime.py",
             "tools/package_macos_runtime.py",
             "tools/validate_runtime_artifacts.py",
@@ -135,6 +137,13 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         offsets = [verify.index(step) for step in ordered_steps]
         self.assertEqual(offsets, sorted(offsets))
         self.assertNotIn("cp -R staged/bin .", verify)
+        self.assertEqual(verify.count("tools/package_upstream_prebuilts.py"), 2)
+        self.assertEqual(verify.count("--upstream-ref"), 1)
+        self.assertEqual(verify.count("--skip-overrides"), 1)
+        self.assertEqual(verify.count("--overrides-only"), 1)
+        self.assertEqual(verify.count("tools/package_ios_runtime.py"), 1)
+        self.assertEqual(verify.count("tools/package_macos_runtime.py"), 1)
+        self.assertEqual(verify.count("tools/validate_runtime_artifacts.py"), 1)
 
     def test_runtime_validator_describes_official_asset_override(self) -> None:
         root = Path(__file__).resolve().parents[1]
