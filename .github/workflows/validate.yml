@@ -18,7 +18,13 @@ jobs:
           git checkout --detach FETCH_HEAD
       - name: Validate release metadata
         run: |
-          python3 tools/package_release.py --upstream-tag v0.12.0
+          python3 tools/package_release.py \
+            --upstream-tag v0.12.0 \
+            --upstream-commit ffed38adbc33509480b5340e5173638bc20a68ff \
+            --compatibility-tag v0.12.0 \
+            --release-tag v0.12.0 \
+            --native-commit "${{ github.sha }}" \
+            --official-upstream-assets
           python3 tools/validate_artifacts.py
           python3 tools/validate_runtime_dependencies.py
       - name: Validate Python tooling
@@ -32,6 +38,11 @@ jobs:
             tools/prebuilt_overrides.py \
             tools/fetch_upstream.py \
             tools/check_upstream_release.py \
+            tools/release_version_policy.py \
+            tools/release_result.py \
+            tools/publication_state.py \
+            tools/validate_release_result.py \
+            tools/generate_schema2_contract_fixture.py \
             tools/build_upstream_runtime.py \
             tools/package_release.py \
             tools/validate_artifacts.py \
@@ -48,12 +59,22 @@ jobs:
             tools/test_package_upstream_prebuilts.py \
             tools/test_build_upstream_runtime.py \
             tools/test_litert_lm_bridge.py \
+            tools/test_litert_lm_asr_smoke.py \
             tools/test_fetch_litert_lm_asr_smoke_assets.py \
             tools/test_litert_lm_symbols.py \
             tools/test_prebuilt_overrides.py \
             tools/test_check_upstream_release.py \
+            tools/test_release_version_policy.py \
+            tools/test_release_result.py \
+            tools/test_publication_state.py \
+            tools/test_validate_release_manifest.py \
+            tools/test_package_release.py \
             tools/test_runtime_dependency_utils.py \
             tools/test_git_lfs_utils.py
           python3 -m unittest discover -s tools -p 'test_*.py'
+          python3 tools/generate_schema2_contract_fixture.py \
+            --output /tmp/schema2_contract_manifest.json
+          cmp tools/fixtures/schema2_contract_manifest.json \
+            /tmp/schema2_contract_manifest.json
       - name: Web scaffold self-test
         run: node web/src/index.js --self-test

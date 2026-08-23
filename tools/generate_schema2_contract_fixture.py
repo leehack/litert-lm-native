@@ -1,0 +1,225 @@
+#!/usr/bin/env python3
+"""Generate the canonical owner-produced LiteRT-LM schema-2 contract fixture."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import tempfile
+
+import package_release
+from fetch_litert_lm_asr_smoke_assets import ASSETS
+from prebuilt_overrides import prebuilt_override_manifest
+from validate_release_manifest import required_spm_assets
+from validate_runtime_artifacts import required_runtime_artifacts
+
+
+UPSTREAM_COMMIT = "924e79c91542761242244e4f1651851f822e4cbb"
+NATIVE_COMMIT = "451ba0ce7c366972b4dc0e58f08ffe590958f943"
+UPSTREAM_TAG = "v0.16.0"
+RELEASE_TAG = "v0.16.0-3"
+
+
+def _digest(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _smoke(platform: str, arch: str) -> dict:
+    assets = {asset.filename: asset for asset in ASSETS}
+    library_path = {
+        ("linux", "x64"): Path("bin/linux/x64/libLiteRtLm.so"),
+        ("windows", "x64"): Path("bin/windows/x64/LiteRtLm.dll"),
+    }[(platform, arch)]
+    return {
+        "id": "litert_lm_asr_moonshine",
+        "result": "pass",
+        "platform": platform,
+        "arch": arch,
+        "backend": "cpu",
+        "upstreamCommit": UPSTREAM_COMMIT,
+        "nativeCommit": NATIVE_COMMIT,
+        "abiVersion": 1,
+        "library": {
+            "fileName": library_path.name,
+            "sha256": _digest(f"fixture:{library_path.as_posix()}".encode()),
+        },
+        "model": {
+            "fileName": "moonshine_tiny_5s_i8.tflite",
+            "sha256": assets["moonshine_tiny_5s_i8.tflite"].sha256,
+        },
+        "tokenizer": {
+            "fileName": "moonshine_tokenizer.json",
+            "sha256": assets["moonshine_tokenizer.json"].sha256,
+        },
+        "fixture": {
+            "fileName": "jfk.wav",
+            "sha256": assets["jfk.wav"].sha256,
+            "sampleRateHz": 16000,
+            "sampleCount": 176000,
+        },
+        "source": {
+            "runtimeReleaseAsset": (
+                f"litert-lm-native-runtime-{platform}-{arch}-{RELEASE_TAG}.tar.gz"
+            ),
+            "model": assets["moonshine_tiny_5s_i8.tflite"].url,
+            "tokenizer": assets["moonshine_tokenizer.json"].url,
+            "fixture": assets["jfk.wav"].url,
+        },
+        "expectation": {
+            "type": "case-insensitive-substring",
+            "value": "country",
+        },
+        "transcript": "ask not what your country can do for you",
+    }
+
+
+def generate_manifest() -> dict:
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        for relative in required_runtime_artifacts(
+            UPSTREAM_TAG, include_official_assets=True
+        ):
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"fixture:{relative.as_posix()}".encode())
+        for asset in required_spm_assets(UPSTREAM_TAG):
+            path = root / "dist" / "spm" / RELEASE_TAG / asset.format(
+                tag=RELEASE_TAG
+            )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"fixture:{path.name}".encode())
+
+        evidence_dir = root / "evidence"
+        evidence_dir.mkdir()
+        for platform, arch in (("linux", "x64"), ("windows", "x64")):
+            (evidence_dir / f"{platform}-{arch}.json").write_text(
+                json.dumps(_smoke(platform, arch)), encoding="utf-8"
+            )
+
+        original = (
+            package_release.REPO_ROOT,
+            package_release.BIN_DIR,
+            package_release.WEB_DIST_DIR,
+            package_release.DIST_DIR,
+            package_release.SHA256SUMS_PATH,
+        )
+        try:
+            package_release.REPO_ROOT = root
+            package_release.BIN_DIR = root / "bin"
+            package_release.WEB_DIST_DIR = root / "web" / "dist"
+            package_release.DIST_DIR = root / "dist"
+            package_release.SHA256SUMS_PATH = root / "SHA256SUMS"
+            manifest = package_release.build_manifest(
+                upstream_tag=UPSTREAM_TAG,
+                upstream_commit=UPSTREAM_COMMIT,
+                compatibility_tag=UPSTREAM_TAG,
+                release_tag=RELEASE_TAG,
+                native_commit=NATIVE_COMMIT,
+                evidence_dir=evidence_dir,
+                official_upstream_assets=True,
+            )
+            for override in prebuilt_override_manifest(UPSTREAM_TAG):
+                target = Path(override["targetPath"])
+                platform, arch = target.parts[1:3]
+                manifest["artifacts"].append(
+                    {
+                        "runtime": "native",
+                        "platform": platform,
+                        "arch": arch,
+                        "path": override["targetPath"],
+                        "fileName": target.name,
+                        "sha256": override["sha256"],
+                        "upstreamTag": UPSTREAM_TAG,
+                        "upstreamCommit": UPSTREAM_COMMIT,
+                        "releaseTag": RELEASE_TAG,
+                        "accelerators": ["webgpu"],
+                    }
+                )
+                platform_entry = next(
+                    item
+                    for item in manifest["platforms"]
+                    if item["platform"] == platform and item["arch"] == arch
+                )
+                platform_entry["artifactPaths"].append(override["targetPath"])
+                platform_entry["artifactPaths"].sort()
+                platform_entry["accelerators"] = sorted(
+                    set(platform_entry["accelerators"]) | {"webgpu"}
+                )
+            manifest["artifacts"].sort(key=lambda item: item["path"])
+            return manifest
+        finally:
+            (
+                package_release.REPO_ROOT,
+                package_release.BIN_DIR,
+                package_release.WEB_DIST_DIR,
+                package_release.DIST_DIR,
+                package_release.SHA256SUMS_PATH,
+            ) = original
+
+
+def generate_release_metadata(manifest: dict, manifest_digest: str) -> dict:
+    asset_names = {
+        "manifest.json",
+        "SHA256SUMS",
+        "release-result.json",
+        f"litert-lm-native-prebuilts-{RELEASE_TAG}.tar.gz",
+        f"litert-lm-native-official-assets-{RELEASE_TAG}.tar.gz",
+        *(platform["releaseAsset"] for platform in manifest["platforms"]),
+        *(
+            Path(artifact["path"]).name
+            for artifact in manifest["artifacts"]
+            if artifact["path"].startswith(f"dist/spm/{RELEASE_TAG}/")
+            and artifact["path"].endswith(".zip")
+        ),
+    }
+    return {
+        "tag_name": RELEASE_TAG,
+        "target_commitish": NATIVE_COMMIT,
+        "draft": False,
+        "prerelease": True,
+        "assets": [
+            {
+                "name": name,
+                "digest": "sha256:"
+                + (
+                    manifest_digest
+                    if name == "manifest.json"
+                    else _digest(f"fixture:{name}".encode())
+                ),
+            }
+            for name in sorted(asset_names)
+        ],
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--release-metadata-output", type=Path)
+    args = parser.parse_args()
+    manifest = generate_manifest()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(f"Wrote {args.output} ({_digest(args.output.read_bytes())})")
+    if args.release_metadata_output is not None:
+        release_metadata = generate_release_metadata(
+            manifest, _digest(args.output.read_bytes())
+        )
+        args.release_metadata_output.parent.mkdir(parents=True, exist_ok=True)
+        args.release_metadata_output.write_text(
+            json.dumps(release_metadata, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(
+            f"Wrote {args.release_metadata_output} "
+            f"({_digest(args.release_metadata_output.read_bytes())})"
+        )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

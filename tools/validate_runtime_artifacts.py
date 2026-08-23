@@ -37,11 +37,13 @@ OFFICIAL_APPLE_RUNTIME_ARCHIVES = (
 )
 
 
-def required_runtime_artifacts(upstream_tag: str) -> list[Path]:
+def required_runtime_artifacts(
+    upstream_tag: str, *, include_official_assets: bool = True
+) -> list[Path]:
     required = list(REQUIRED_RUNTIME_ARTIFACTS)
     if is_at_least(upstream_tag, (0, 16, 0)):
         required.extend(V0_16_IOS_GPU_ARTIFACTS)
-    if is_at_least(upstream_tag, (0, 14, 0)):
+    if include_official_assets:
         required.extend(
             Path("dist") / "official" / upstream_tag / archive
             for archive in OFFICIAL_APPLE_RUNTIME_ARCHIVES
@@ -54,23 +56,20 @@ def main() -> int:
         description="Validate that release packaging contains upstream runtime libraries."
     )
     parser.add_argument("--upstream-tag", required=True)
+    parser.add_argument(
+        "--allow-missing-official-assets",
+        action="store_true",
+        help=(
+            "Validate source-built runtimes without requiring the upstream "
+            "official Apple release archives."
+        ),
+    )
     args = parser.parse_args()
 
-    required = required_runtime_artifacts(args.upstream_tag)
-    if not is_at_least(args.upstream_tag, (0, 14, 0)):
-        required.extend(
-            [
-                Path("dist")
-                / "official"
-                / args.upstream_tag
-                / "CLiteRTLM.xcframework.zip",
-                Path("dist")
-                / "official"
-                / args.upstream_tag
-                / "CLiteRTLM_mac.xcframework.zip",
-            ]
-        )
-
+    include_official_assets = not args.allow_missing_official_assets
+    required = required_runtime_artifacts(
+        args.upstream_tag, include_official_assets=include_official_assets
+    )
     missing = [path for path in required if not (REPO_ROOT / path).is_file()]
     if missing:
         formatted = "\n".join(f"- {path.as_posix()}" for path in missing)

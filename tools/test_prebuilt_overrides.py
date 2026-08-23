@@ -66,7 +66,12 @@ class PrebuiltOverridesTest(unittest.TestCase):
         )
 
     def test_v016_keeps_the_validated_android_dawn_rollback(self) -> None:
-        overrides = prebuilt_overrides("v0.16.0")
+        for tag in ("v0.16.0", "v0.16.1"):
+            with self.subTest(tag=tag):
+                self._assert_v016_dawn_rollback(tag)
+
+    def _assert_v016_dawn_rollback(self, tag: str) -> None:
+        overrides = prebuilt_overrides(tag)
 
         self.assertEqual(
             {(override.arch, override.filename) for override in overrides},
@@ -81,7 +86,7 @@ class PrebuiltOverridesTest(unittest.TestCase):
         )
         self.assertTrue(all(len(override.sha256) == 64 for override in overrides))
 
-        manifest = prebuilt_override_manifest("v0.16.0")
+        manifest = prebuilt_override_manifest(tag)
         self.assertEqual(len(manifest), 2)
         self.assertEqual(
             {entry["sourceCommit"] for entry in manifest},

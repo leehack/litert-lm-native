@@ -37,6 +37,34 @@ class PackageIosRuntimeTest(unittest.TestCase):
                     b"gpu",
                 )
 
+    def test_source_built_slice_rejects_missing_dlopen_gpu_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            target_dir = Path(temp) / "bin" / "ios" / "arm64"
+            target_dir.mkdir(parents=True)
+            litertlm = target_dir / "libLiteRtLm.dylib"
+            litertlm.write_bytes(b"runtime")
+            first, missing = package_ios_runtime.IOS_DLOPEN_DEPENDENCIES
+            (target_dir / first).write_bytes(b"gpu")
+
+            with patch.object(
+                package_ios_runtime,
+                "macho_needed_libraries",
+                return_value=[],
+            ):
+                with patch.object(
+                    package_ios_runtime,
+                    "stage_dependency_framework",
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        f"Missing required iOS GPU runtime dependency: .*{missing}",
+                    ):
+                        package_ios_runtime.stage_source_built_dependency_frameworks(
+                            {"sdk": "iphoneos"},
+                            target_dir,
+                            litertlm,
+                        )
+
     def test_framework_executable_is_owner_writable_and_executable(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             temp_dir = Path(temp)

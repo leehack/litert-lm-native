@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import subprocess
@@ -24,15 +25,13 @@ from runtime_dependency_utils import (
     is_elf,
     is_system_needed,
 )
+from upstream_archive import github_source_archive_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 BRIDGE_PACKAGE_ROOT = REPO_ROOT / "native"
 UPSTREAM_REPO = "google-ai-edge/LiteRT-LM"
 MACOS_MINIMUM_OS = "14.0"
-UPSTREAM_ARCHIVE_URL = (
-    "https://github.com/google-ai-edge/LiteRT-LM/archive/refs/tags/{tag}.tar.gz"
-)
 USER_AGENT = "litert-lm-native-build"
 ZLIB_URL = "https://zlib.net/fossils/zlib-1.3.1.tar.gz"
 ZLIB_GITHUB_MIRROR_URL = (
@@ -123,6 +122,12 @@ PREBUILT_TARGETS = {
 }
 LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 
+
+def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
+    ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
+    return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
+
+
 def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
     printable = " ".join(command)
     print(f"+ {printable}", flush=True)
@@ -132,15 +137,17 @@ def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> Non
         subprocess.run(command, cwd=cwd, env=env, check=True)
 
 
-def download_upstream(tag: str, work_dir: Path) -> Path:
-    archive_path = work_dir / f"LiteRT-LM-{tag}.tar.gz"
-    url = UPSTREAM_ARCHIVE_URL.format(tag=tag)
+def download_upstream(
+    upstream_ref: str, compatibility_tag: str, work_dir: Path
+) -> Path:
+    archive_path = source_archive_path(work_dir, upstream_ref)
+    url = github_source_archive_url(UPSTREAM_REPO, upstream_ref)
     print(f"Downloading {url}", flush=True)
     download_to_path(
         url,
         archive_path,
         headers={"User-Agent": USER_AGENT},
-        label=f"LiteRT-LM {tag} source archive",
+        label=f"LiteRT-LM {upstream_ref} source archive",
     )
     with tarfile.open(archive_path, "r:gz") as archive:
         archive.extractall(work_dir, filter="data")
@@ -150,7 +157,7 @@ def download_upstream(tag: str, work_dir: Path) -> Path:
     source_root = candidates[0]
     patch_upstream_workspace(
         source_root,
-        patch_ios_framework_paths=has_asr_bridge(tag),
+        patch_ios_framework_paths=has_asr_bridge(compatibility_tag),
     )
     return source_root
 
@@ -253,6 +260,7 @@ def build_runtime(
     arch: str,
     upstream_tag: str,
     jobs: str | None,
+    upstream_ref: str | None = None,
 ) -> Path:
     if platform == "ios" and has_asr_bridge(upstream_tag):
         patch_upstream_ios_sampler_path(source_root)
@@ -261,7 +269,7 @@ def build_runtime(
         source_dir = source_root / "prebuilt" / prebuilt_target
         materialized = materialize_git_lfs_libraries(
             source_dir,
-            upstream_tag=upstream_tag,
+            upstream_tag=upstream_ref or upstream_tag,
             source_root=source_root,
             suffixes=LIB_SUFFIXES,
         )
@@ -534,11 +542,20 @@ def main() -> int:
         description=f"Build the upstream {UPSTREAM_REPO} C runtime library."
     )
     parser.add_argument("--upstream-tag", required=True)
+    parser.add_argument(
+        "--upstream-ref",
+        help=(
+            "Exact source tag or commit. Defaults to --upstream-tag; development "
+            "builds pass a full commit while --upstream-tag remains the stable "
+            "compatibility baseline."
+        ),
+    )
     parser.add_argument("--platform", required=True)
     parser.add_argument("--arch", required=True)
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--jobs")
     args = parser.parse_args()
+    upstream_ref = args.upstream_ref or args.upstream_tag
 
     key = (args.platform, args.arch)
     if key not in RUNTIME_TARGETS:
@@ -553,6 +570,7 @@ def main() -> int:
             args.arch,
             args.upstream_tag,
             args.jobs,
+            upstream_ref,
         )
         validate_exported_symbols(output, args.upstream_tag)
         validate_android_global_visibility(output, args.platform)
@@ -571,13 +589,16 @@ def main() -> int:
         dir=tmp_parent,
         ignore_cleanup_errors=os.name == "nt",
     ) as tmp:
-        source_root = download_upstream(args.upstream_tag, Path(tmp))
+        source_root = download_upstream(
+            upstream_ref, args.upstream_tag, Path(tmp)
+        )
         output = build_runtime(
             source_root,
             args.platform,
             args.arch,
             args.upstream_tag,
             args.jobs,
+            upstream_ref,
         )
         validate_exported_symbols(output, args.upstream_tag)
         validate_android_global_visibility(output, args.platform)

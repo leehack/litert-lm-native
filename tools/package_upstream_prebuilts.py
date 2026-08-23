@@ -15,13 +15,12 @@ from prebuilt_overrides import (
     PrebuiltOverride,
     prebuilt_overrides,
 )
+from upstream_archive import github_source_archive_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 
-UPSTREAM_SOURCE_URL = (
-    "https://github.com/google-ai-edge/LiteRT-LM/archive/refs/tags/{tag}.tar.gz"
-)
+UPSTREAM_REPO = "google-ai-edge/LiteRT-LM"
 
 PREBUILT_TARGETS = {
     "android_arm64": ("android", "arm64"),
@@ -37,14 +36,19 @@ PREBUILT_TARGETS = {
 LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 
 
-def download_source(tag: str, output: Path) -> None:
-    print(f"Downloading upstream source archive for {tag}", flush=True)
+def download_source(upstream_ref: str, output: Path) -> None:
+    print(f"Downloading upstream source archive for {upstream_ref}", flush=True)
     download_to_path(
-        UPSTREAM_SOURCE_URL.format(tag=tag),
+        github_source_archive_url(UPSTREAM_REPO, upstream_ref),
         output,
         headers={"User-Agent": "litert-lm-native-prebuilt-packager"},
-        label=f"LiteRT-LM {tag} source archive",
+        label=f"LiteRT-LM {upstream_ref} source archive",
     )
+
+
+def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
+    ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
+    return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
 
 
 def extract_source(archive: Path, output_dir: Path) -> Path:
@@ -57,7 +61,12 @@ def extract_source(archive: Path, output_dir: Path) -> Path:
     return roots[0]
 
 
-def copy_prebuilts(source_root: Path, upstream_tag: str, clean: bool) -> int:
+def copy_prebuilts(
+    source_root: Path,
+    upstream_tag: str,
+    clean: bool,
+    upstream_ref: str | None = None,
+) -> int:
     copied = 0
     for upstream_name, (platform, arch) in PREBUILT_TARGETS.items():
         source_dir = source_root / "prebuilt" / upstream_name
@@ -66,7 +75,7 @@ def copy_prebuilts(source_root: Path, upstream_tag: str, clean: bool) -> int:
             continue
         materialize_git_lfs_libraries(
             source_dir,
-            upstream_tag=upstream_tag,
+            upstream_tag=upstream_ref or upstream_tag,
             source_root=source_root,
             suffixes=LIB_SUFFIXES,
         )
@@ -149,6 +158,10 @@ def main() -> int:
         description="Copy upstream LiteRT-LM prebuilt runtime libs into bin/."
     )
     parser.add_argument("--upstream-tag", required=True)
+    parser.add_argument(
+        "--upstream-ref",
+        help="Exact source tag or commit. Defaults to --upstream-tag.",
+    )
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--clean", action="store_true")
     mode = parser.add_mutually_exclusive_group()
@@ -171,17 +184,20 @@ def main() -> int:
                 source_root,
                 upstream_tag=args.upstream_tag,
                 clean=args.clean,
+                upstream_ref=args.upstream_ref,
             )
         else:
             with tempfile.TemporaryDirectory(prefix="litert-lm-native-") as temp:
                 temp_dir = Path(temp)
-                archive = temp_dir / f"LiteRT-LM-{args.upstream_tag}.tar.gz"
-                download_source(args.upstream_tag, archive)
+                upstream_ref = args.upstream_ref or args.upstream_tag
+                archive = source_archive_path(temp_dir, upstream_ref)
+                download_source(upstream_ref, archive)
                 source_root = extract_source(archive, temp_dir / "src")
                 copied = copy_prebuilts(
                     source_root,
                     upstream_tag=args.upstream_tag,
                     clean=args.clean,
+                    upstream_ref=upstream_ref,
                 )
 
     overridden = (

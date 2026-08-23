@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
 import json
 import os
 import struct
 import wave
 from pathlib import Path
+
+from fetch_litert_lm_asr_smoke_assets import ASSETS
 
 
 ABI_VERSION = 1
@@ -18,6 +21,39 @@ STATUS_END_OF_STREAM = 11
 STATUS_WOULD_BLOCK = 12
 
 _DLL_DIRECTORY_HANDLES: list[object] = []
+
+
+def pinned_asset_sources(
+    model: Path, tokenizer: Path, audio: Path
+) -> dict[str, str]:
+    source_by_name = {asset.filename: asset.url for asset in ASSETS}
+    requested = {
+        "model": model.name,
+        "tokenizer": tokenizer.name,
+        "fixture": audio.name,
+    }
+    unsupported = [
+        f"{label}={filename}"
+        for label, filename in requested.items()
+        if filename not in source_by_name
+    ]
+    if unsupported:
+        raise ValueError(
+            "Release evidence requires the checksum-pinned ASR assets; "
+            f"unsupported input(s): {', '.join(unsupported)}"
+        )
+    return {
+        label: source_by_name[filename]
+        for label, filename in requested.items()
+    }
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class AsrConfig(ctypes.Structure):
@@ -216,7 +252,30 @@ def main() -> int:
     parser.add_argument("--tokenizer", type=Path, required=True)
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--expect", help="Case-insensitive transcript substring.")
+    parser.add_argument("--evidence-json", type=Path)
+    parser.add_argument("--platform")
+    parser.add_argument("--arch")
+    parser.add_argument("--upstream-commit")
+    parser.add_argument("--native-commit")
+    parser.add_argument("--release-tag")
     args = parser.parse_args()
+    if args.evidence_json and not all(
+        (
+            args.platform,
+            args.arch,
+            args.upstream_commit,
+            args.native_commit,
+            args.release_tag,
+            args.expect,
+        )
+    ):
+        parser.error(
+            "--evidence-json requires --platform, --arch, --upstream-commit, "
+            "--native-commit, --release-tag, and --expect"
+        )
+    pinned_sources = None
+    if args.evidence_json:
+        pinned_sources = pinned_asset_sources(args.model, args.tokenizer, args.audio)
 
     library = bind(args.library.resolve())
     if library.litert_lm_asr_abi_version() != ABI_VERSION:
@@ -297,19 +356,62 @@ def main() -> int:
         raise RuntimeError(
             f"Expected transcript to contain {args.expect!r}, got {transcript!r}."
         )
-    print(
-        "RESULT litert_lm_asr "
-        + json.dumps(
-            {
-                "abiVersion": ABI_VERSION,
+    result = {
+        "abiVersion": ABI_VERSION,
+        "sampleRateHz": sample_rate,
+        "sampleCount": len(samples),
+        "events": events,
+        "transcript": transcript,
+    }
+    print("RESULT litert_lm_asr " + json.dumps(result, sort_keys=True))
+    if args.evidence_json:
+        assert pinned_sources is not None
+        evidence = {
+            "id": "litert_lm_asr_moonshine",
+            "result": "pass",
+            "platform": args.platform,
+            "arch": args.arch,
+            "backend": "cpu",
+            "upstreamCommit": args.upstream_commit,
+            "nativeCommit": args.native_commit,
+            "abiVersion": ABI_VERSION,
+            "library": {
+                "fileName": args.library.name,
+                "sha256": sha256_file(args.library),
+            },
+            "model": {
+                "fileName": args.model.name,
+                "sha256": sha256_file(args.model),
+            },
+            "tokenizer": {
+                "fileName": args.tokenizer.name,
+                "sha256": sha256_file(args.tokenizer),
+            },
+            "fixture": {
+                "fileName": args.audio.name,
+                "sha256": sha256_file(args.audio),
                 "sampleRateHz": sample_rate,
                 "sampleCount": len(samples),
-                "events": events,
-                "transcript": transcript,
             },
-            sort_keys=True,
+            "source": {
+                "runtimeReleaseAsset": (
+                    "litert-lm-native-runtime-"
+                    f"{args.platform}-{args.arch}-{args.release_tag}.tar.gz"
+                ),
+                **pinned_sources,
+            },
+            "expectation": {
+                "type": "case-insensitive-substring",
+                "value": args.expect,
+            },
+            "transcript": transcript,
+        }
+        args.evidence_json.parent.mkdir(parents=True, exist_ok=True)
+        args.evidence_json.write_text(
+            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
         )
-    )
+        print(f"Wrote release evidence {args.evidence_json}", flush=True)
     return 0
 
 

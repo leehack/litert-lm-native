@@ -28,10 +28,11 @@ The release automation publishes these runtime artifact groups:
   wrappers, macOS wrappers, and required companion frameworks used by the
   native-assets payloads
 
-Native release tags are immutable consumer contracts. Use a separate native
-release tag when repackaging the same upstream source tag, for example
-`upstream_tag=v0.13.1` with `release_tag=v0.13.1-native.1`, so downstream
-packages with pinned checksums keep resolving the original artifacts.
+Native release tags are immutable consumer contracts. New rebuilds preserve the
+exact upstream or development prefix and append compact `-N`; legacy
+`vMAJOR.MINOR.PATCH-native.N` tags remain read-only. See
+[`release_protocol.md`](release_protocol.md) for collision, rollback, rebuild,
+development identity, and approval rules.
 
 The upstream C runtime is the production FFI target for downstream packages.
 LiteRtLmBridge is limited to narrow FFI helpers around that runtime surface. It
@@ -100,15 +101,28 @@ The web package should expose:
 
 ## Artifact Manifest
 
-Each artifact entry records:
+Schema 2 records release-wide identity and compatibility data at the top level:
 
-- runtime: `native` or `web`
-- platform and architecture
-- native release tag
-- upstream LiteRT-LM tag
-- file name and SHA-256
-- library names required by loaders
-- accelerator support metadata
-- minimum OS/toolchain notes when known
+- `release`: native release tag, channel, kind, rebuild ordinal, and GitHub
+  prerelease classification
+- `upstream` and `native`: repositories, exact commits, upstream tag or
+  development identity, compatibility baseline, and any prebuilt overrides
+- `abi` and `capabilities`: the complete ABI and capability contract for the
+  release
+- `platforms`: exactly nine platform/architecture bundles; each entry names its
+  release asset, linked `artifactPaths`, and the accelerator union of those
+  linked artifacts
+- `realModelSmokes`: pinned model, tokenizer, audio, library, source URL,
+  expectation, and transcript evidence, separate from artifact entries
+
+Each `artifacts` entry records only the file-level contract:
+
+- runtime family: `native`, `archive`, or `web`
+- platform and architecture (null for release-wide archives)
+- repository-relative path and file name
+- file SHA-256
+- upstream tag, exact upstream commit, and native release tag provenance
+- accelerator support metadata using the schema's allowed values: generic
+  `gpu`, `metal`, `opencl`, and `webgpu`
 
 Downstream packages should not infer platform support from filenames alone.

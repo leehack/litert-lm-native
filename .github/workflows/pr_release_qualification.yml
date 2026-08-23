@@ -1,0 +1,226 @@
+name: PR Release Qualification
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/auto_upstream_release.yml"
+      - ".github/workflows/native_release.yml"
+      - ".github/workflows/pr_release_qualification.yml"
+      - "tools/**"
+      - "native/**"
+      - "prebuilt/**"
+      - "patches/**"
+
+concurrency:
+  group: pr-release-qualification-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  QUALIFICATION_RELEASE_TAG: v0.16.0-3
+  QUALIFICATION_UPSTREAM_TAG: v0.16.0
+  QUALIFICATION_UPSTREAM_COMMIT: 924e79c91542761242244e4f1651851f822e4cbb
+
+jobs:
+  build:
+    name: Build and smoke (${{ matrix.platform }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, platform: linux, arch: x64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 90}
+          - {os: ubuntu-24.04-arm, platform: linux, arch: arm64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 90}
+          - {os: windows-latest, platform: windows, arch: x64, jobs: "3", bazel_output_root: "C:/bzl", timeout_minutes: 120}
+          - {os: ubuntu-latest, platform: android, arch: arm64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 90}
+          - {os: ubuntu-latest, platform: android, arch: x64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 90}
+          - {os: macos-latest, platform: ios, arch: arm64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 120}
+          - {os: macos-latest, platform: ios, arch: arm64-sim, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 120}
+          - {os: macos-latest, platform: macos, arch: arm64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 120}
+          - {os: macos-latest, platform: macos, arch: x64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 120}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Verify exact pull-request head
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$PR_HEAD_SHA"
+
+      - name: Set up Node.js for Bazelisk fallback
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Set up Android NDK
+        id: setup-ndk
+        if: matrix.platform == 'android'
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28b
+          add-to-path: false
+
+      - name: Cache Bazel
+        if: matrix.platform != 'windows' && !(matrix.platform == 'macos' && matrix.arch == 'x64') && !(matrix.platform == 'linux' && matrix.arch == 'x64') && !(matrix.platform == 'android' && matrix.arch == 'x64')
+        continue-on-error: true
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/.cache/bazelisk
+            ~/Library/Caches/bazelisk
+            .bazel-output-root
+          key: pr-bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ env.QUALIFICATION_UPSTREAM_COMMIT }}-${{ hashFiles('tools/build_upstream_runtime.py') }}
+
+      - name: Build exact upstream LiteRT-LM runtime
+        shell: bash
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          BAZEL_OUTPUT_USER_ROOT: ${{ matrix.bazel_output_root }}
+        run: |
+          python3 tools/build_upstream_runtime.py \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
+            --upstream-ref "$QUALIFICATION_UPSTREAM_COMMIT" \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --jobs "${{ matrix.jobs }}"
+
+      - name: Fetch pinned ASR smoke assets
+        if: >-
+          (matrix.platform == 'linux' && matrix.arch == 'x64') ||
+          (matrix.platform == 'windows' && matrix.arch == 'x64') ||
+          (matrix.platform == 'macos' && matrix.arch == 'arm64' && runner.arch == 'ARM64')
+        run: python3 tools/fetch_litert_lm_asr_smoke_assets.py --output-dir asr-smoke-assets
+
+      - name: Run Unix ASR real-model smoke
+        if: >-
+          (matrix.platform == 'linux' && matrix.arch == 'x64') ||
+          (matrix.platform == 'macos' && matrix.arch == 'arm64' && runner.arch == 'ARM64')
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ matrix.platform }}" = linux ]; then
+            export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/bin/linux/x64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            library="bin/linux/x64/libLiteRtLm.so"
+          else
+            export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/bin/macos/arm64${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+            library="bin/macos/arm64/libLiteRtLm.dylib"
+          fi
+          python3 tools/litert_lm_asr_smoke.py \
+            --library "$library" \
+            --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite \
+            --tokenizer asr-smoke-assets/moonshine_tokenizer.json \
+            --audio asr-smoke-assets/jfk.wav \
+            --expect country \
+            --evidence-json "release-evidence/${{ matrix.platform }}-${{ matrix.arch }}.json" \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --upstream-commit "$QUALIFICATION_UPSTREAM_COMMIT" \
+            --native-commit "$PR_HEAD_SHA" \
+            --release-tag "$QUALIFICATION_RELEASE_TAG"
+
+      - name: Run Windows ASR real-model smoke
+        if: matrix.platform == 'windows' && matrix.arch == 'x64'
+        shell: pwsh
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          $env:PATH = "$pwd\bin\windows\x64;$env:PATH"
+          python tools/litert_lm_asr_smoke.py `
+            --library bin/windows/x64/LiteRtLm.dll `
+            --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite `
+            --tokenizer asr-smoke-assets/moonshine_tokenizer.json `
+            --audio asr-smoke-assets/jfk.wav `
+            --expect country `
+            --evidence-json release-evidence/windows-x64.json `
+            --platform windows `
+            --arch x64 `
+            --upstream-commit "$env:QUALIFICATION_UPSTREAM_COMMIT" `
+            --native-commit "$env:PR_HEAD_SHA" `
+            --release-tag "$env:QUALIFICATION_RELEASE_TAG"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-runtime-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            bin
+            release-evidence
+          if-no-files-found: error
+          retention-days: 14
+
+  verify:
+    name: Verify nine-platform candidate
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Package exact upstream prebuilts
+        run: |
+          python3 tools/package_upstream_prebuilts.py \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
+            --upstream-ref "$QUALIFICATION_UPSTREAM_COMMIT" \
+            --clean \
+            --skip-overrides
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pr-runtime-*
+          path: staged
+          merge-multiple: true
+
+      - name: Merge source-built runtimes
+        run: cp -R staged/bin/* bin/
+
+      - name: Apply pinned prebuilt overrides
+        run: |
+          python3 tools/package_upstream_prebuilts.py \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
+            --overrides-only
+
+      - name: Package source-built Apple runtimes
+        run: |
+          python3 tools/package_ios_runtime.py \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
+            --clean
+          python3 tools/package_macos_runtime.py \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
+            --clean
+
+      - name: Validate runtime matrix and real-model evidence
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 tools/validate_runtime_artifacts.py \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
+            --allow-missing-official-assets
+          python3 tools/validate_runtime_dependencies.py
+          PYTHONPATH=tools python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from package_release import load_smoke_evidence
+
+          evidence = load_smoke_evidence(
+              Path("staged/release-evidence"),
+              upstream_commit=os.environ["QUALIFICATION_UPSTREAM_COMMIT"],
+              native_commit=os.environ["PR_HEAD_SHA"],
+              release_tag=os.environ["QUALIFICATION_RELEASE_TAG"],
+          )
+          actual = {(item["platform"], item["arch"]) for item in evidence}
+          expected = {("linux", "x64"), ("windows", "x64"), ("macos", "arm64")}
+          if actual != expected:
+              raise SystemExit(
+                  f"Expected exact real-model evidence {sorted(expected)}, got {sorted(actual)}"
+              )
+          print(f"Verified all nine runtimes and {len(evidence)} real-model smokes")
+          PY

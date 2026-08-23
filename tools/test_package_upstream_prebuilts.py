@@ -9,6 +9,18 @@ import package_upstream_prebuilts
 
 
 class PackageUpstreamPrebuiltsTest(unittest.TestCase):
+    def test_source_archive_filename_never_contains_the_raw_ref_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = package_upstream_prebuilts.source_archive_path(
+                root, "refs/tags/x/../../escape"
+            )
+
+            self.assertEqual(archive.parent, root)
+            self.assertNotIn("refs", archive.name)
+            self.assertNotIn("..", archive.name)
+            self.assertRegex(archive.name, r"^LiteRT-LM-[0-9a-f]{64}\.tar\.gz$")
+
     def test_materializes_pointer_before_copying_prebuilt(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -110,9 +122,9 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         initial_package = workflow.index("- name: Package upstream prebuilt libraries")
-        runtime_merge = workflow.index("- name: Add upstream runtime libraries")
+        runtime_merge = workflow.index("- name: Merge source-built runtimes")
         final_overrides = workflow.index("- name: Apply pinned prebuilt overrides")
-        manifest = workflow.index("- name: Generate manifest and checksums")
+        manifest = workflow.index("- name: Generate and validate provenance manifest")
 
         self.assertLess(initial_package, runtime_merge)
         self.assertLess(runtime_merge, final_overrides)
@@ -129,11 +141,22 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         create_release = workflow[workflow.index('gh release create "'):]
-        self.assertIn('--target "${{ github.sha }}"', create_release)
-        self.assertIn("Choose a new immutable release_tag", workflow)
-        self.assertNotIn("gh release edit", workflow)
-        self.assertNotIn("gh release upload", workflow)
-        self.assertNotIn("--clobber", workflow)
+        self.assertIn('--target "$NATIVE_COMMIT"', create_release)
+        self.assertIn("tools/publication_state.py", workflow)
+        self.assertIn("Create or safely resume exact draft", workflow)
+        self.assertIn("releases/assets/$asset_id", workflow)
+        self.assertIn("jq -jr .notes", workflow)
+        self.assertNotIn("--slurp \\\n            \"repos/${GITHUB_REPOSITORY}/releases?per_page=100\" \\\n            --jq", workflow)
+        self.assertIn("jq 'add' existing-release-pages.json", workflow)
+        self.assertIn("--draft", create_release)
+        self.assertIn("gh release edit", create_release)
+        self.assertIn("--draft=false", create_release)
+        self.assertIn("gh release upload", create_release)
+        self.assertIn("--clobber", create_release)
+        self.assertLess(
+            create_release.index("gh release upload"),
+            create_release.index("gh release edit"),
+        )
 
 
 if __name__ == "__main__":
