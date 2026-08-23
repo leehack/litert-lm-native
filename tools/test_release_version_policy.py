@@ -113,6 +113,29 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         self.assertNotIn("gh release", workflow)
         self.assertNotIn("contents: write", workflow)
 
+    def test_pr_qualification_packages_apple_candidate_before_validation(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        workflow = (
+            root / ".github/workflows/pr_release_qualification.yml"
+        ).read_text(encoding="utf-8")
+        verify = workflow[workflow.index("  verify:") :]
+
+        self.assertIn("runs-on: macos-latest", verify)
+        self.assertIn('--upstream-ref "$QUALIFICATION_UPSTREAM_COMMIT"', verify)
+        self.assertIn("--skip-overrides", verify)
+        self.assertIn("--overrides-only", verify)
+        ordered_steps = (
+            "tools/package_upstream_prebuilts.py",
+            "actions/download-artifact@v4",
+            "cp -R staged/bin/* bin/",
+            "tools/package_ios_runtime.py",
+            "tools/package_macos_runtime.py",
+            "tools/validate_runtime_artifacts.py",
+        )
+        offsets = [verify.index(step) for step in ordered_steps]
+        self.assertEqual(offsets, sorted(offsets))
+        self.assertNotIn("cp -R staged/bin .", verify)
+
     def test_runtime_validator_describes_official_asset_override(self) -> None:
         root = Path(__file__).resolve().parents[1]
         validator = (root / "tools/validate_runtime_artifacts.py").read_text(

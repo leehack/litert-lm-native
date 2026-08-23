@@ -158,12 +158,20 @@ jobs:
   verify:
     name: Verify nine-platform candidate
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+
+      - name: Package exact upstream prebuilts
+        run: |
+          python3 tools/package_upstream_prebuilts.py \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
+            --upstream-ref "$QUALIFICATION_UPSTREAM_COMMIT" \
+            --clean \
+            --skip-overrides
 
       - uses: actions/download-artifact@v4
         with:
@@ -171,11 +179,28 @@ jobs:
           path: staged
           merge-multiple: true
 
+      - name: Merge source-built runtimes
+        run: cp -R staged/bin/* bin/
+
+      - name: Apply pinned prebuilt overrides
+        run: |
+          python3 tools/package_upstream_prebuilts.py \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
+            --overrides-only
+
+      - name: Package source-built Apple runtimes
+        run: |
+          python3 tools/package_ios_runtime.py \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
+            --clean
+          python3 tools/package_macos_runtime.py \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
+            --clean
+
       - name: Validate runtime matrix and real-model evidence
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          cp -R staged/bin .
           python3 tools/validate_runtime_artifacts.py \
             --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
             --allow-missing-official-assets
