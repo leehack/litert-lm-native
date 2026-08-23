@@ -122,6 +122,8 @@ def validate_schema_2_payload(
         },
         "manifest",
     )
+    if manifest.get("schemaVersion") != 2:
+        raise SystemExit("Release manifest schemaVersion must be 2")
     if manifest.get("package") != "litert-lm-native":
         raise SystemExit("Release manifest package must be litert-lm-native")
 

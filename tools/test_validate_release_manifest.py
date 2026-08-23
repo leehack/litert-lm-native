@@ -37,6 +37,12 @@ class ValidateReleaseManifestTest(unittest.TestCase):
     def test_owner_generated_manifest_satisfies_final_contract(self) -> None:
         self.validate(deepcopy(self.valid))
 
+    def test_schema_2_payload_requires_exact_schema_version(self) -> None:
+        wrong_version = deepcopy(self.valid)
+        wrong_version["schemaVersion"] = 1
+        with self.assertRaisesRegex(SystemExit, "schemaVersion must be 2"):
+            self.validate(wrong_version)
+
     def test_invalid_release_identity_uses_clean_cli_error(self) -> None:
         with self.assertRaisesRegex(SystemExit, "Release identity is invalid"):
             validate_schema_2_payload(
