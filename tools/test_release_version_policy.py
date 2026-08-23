@@ -50,6 +50,12 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         self.assertIn("--draft", workflow)
         self.assertIn("--require-smoke linux/x64", workflow)
         self.assertIn("--require-smoke windows/x64", workflow)
+        self.assertGreaterEqual(workflow.count("--tag-ref"), 4)
+        self.assertEqual(workflow.count("--candidate-dir candidate"), 2)
+        self.assertIn(
+            "--release-result published-release-check/release-result.json",
+            workflow,
+        )
         self.assertGreaterEqual(workflow.count("persist-credentials: false"), 4)
         self.assertEqual(
             workflow.count('git merge-base --is-ancestor "$NATIVE_COMMIT" origin/main'),

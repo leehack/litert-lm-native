@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from publication_state import release_notes
 from release_result import build_result
 
 
@@ -13,7 +14,7 @@ class ReleaseResultTest(unittest.TestCase):
     def manifest(self) -> dict:
         return {
             "schemaVersion": 2,
-            "release": {"tag": "v0.16.0-3"},
+            "release": {"tag": "v0.16.0-3", "githubPrerelease": True},
             "upstream": {
                 "tag": "v0.16.0",
                 "commit": UPSTREAM,
@@ -46,7 +47,19 @@ class ReleaseResultTest(unittest.TestCase):
             release_metadata={
                 "id": 7,
                 "html_url": "https://github.com/example/releases/tag/v0.16.0-3",
+                "tag_name": "v0.16.0-3",
+                "target_commitish": NATIVE,
+                "name": "LiteRT-LM v0.16.0-3",
+                "body": release_notes(
+                    release_tag="v0.16.0-3",
+                    upstream_tag="v0.16.0",
+                    upstream_commit=UPSTREAM,
+                    compatibility_tag="v0.16.0",
+                    native_commit=NATIVE,
+                    correlation_id="llamadart-42-1",
+                ),
                 "draft": True,
+                "prerelease": True,
                 "assets": [
                     {"name": "manifest.json", "digest": "sha256:" + "a" * 64},
                     {"name": "release-result.json", "digest": "sha256:" + "b" * 64},
@@ -85,9 +98,39 @@ class ReleaseResultTest(unittest.TestCase):
                 release_metadata={
                     "id": 7,
                     "html_url": "https://example.invalid/release/7",
+                    "tag_name": "v0.16.0-3",
+                    "target_commitish": NATIVE,
+                    "name": "LiteRT-LM v0.16.0-3",
+                    "body": release_notes(
+                        release_tag="v0.16.0-3",
+                        upstream_tag="v0.16.0",
+                        upstream_commit=UPSTREAM,
+                        compatibility_tag="v0.16.0",
+                        native_commit=NATIVE,
+                        correlation_id="valid",
+                    ),
                     "draft": True,
+                    "prerelease": True,
                     "assets": [{"name": "manifest.json", "digest": None}],
                 },
+                **common,
+            )
+
+        mismatched = {
+            "id": 7,
+            "html_url": "https://example.invalid/release/7",
+            "tag_name": "wrong",
+            "target_commitish": NATIVE,
+            "name": "LiteRT-LM v0.16.0-3",
+            "body": "wrong",
+            "draft": False,
+            "prerelease": True,
+            "assets": [],
+        }
+        with self.assertRaisesRegex(ValueError, "exact transaction"):
+            build_result(
+                correlation_id="valid",
+                release_metadata=mismatched,
                 **common,
             )
 

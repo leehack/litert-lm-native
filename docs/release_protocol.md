@@ -65,8 +65,12 @@ rechecks provenance and history, creates a draft release, validates its assets
 and downloaded manifest, and promotes the draft only after validation passes.
 Draft state is deterministic: a retry may resume only a still-draft release
 whose target commit, title, prerelease class, exact-input notes, and correlation
-identity all match. A matching retry removes partial draft assets and uploads
-the candidate again; any mismatched or published collision fails closed. An
+identity all match, and whose lightweight candidate tag still targets the exact
+native commit. A matching retry removes partial draft assets and uploads the
+candidate again; any mismatched or published collision fails closed. Before
+promotion, every GitHub asset name, uploaded state, byte size, and SHA-256 must
+match the locally prepared candidate, and the release/tag identity is queried
+and validated again after the final result upload. An
 upload or validation failure therefore leaves a non-public draft that can be
 safely retried without deleting or rewriting a published release.
 Both paths emit `release-result.json`, which binds the caller correlation ID to

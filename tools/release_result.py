@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 import re
 
+from publication_state import release_notes
+
 
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 CORRELATION_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
@@ -91,6 +93,35 @@ def build_result(
         },
     }
     if release_metadata is not None:
+        expected_release = {
+            "tag_name": release_tag,
+            "target_commitish": native_commit,
+            "name": f"LiteRT-LM {release_tag}",
+            "body": release_notes(
+                release_tag=release_tag,
+                upstream_tag=upstream_tag,
+                upstream_commit=upstream_commit,
+                compatibility_tag=compatibility_tag,
+                native_commit=native_commit,
+                correlation_id=correlation_id,
+            ),
+            "draft": True,
+            "prerelease": manifest.get("release", {}).get("githubPrerelease"),
+        }
+        mismatches = [
+            key
+            for key, expected in expected_release.items()
+            if release_metadata.get(key) != expected
+        ]
+        if mismatches:
+            raise ValueError(
+                "release metadata does not match exact transaction: "
+                + ", ".join(mismatches)
+            )
+        if not isinstance(release_metadata.get("id"), int) or not isinstance(
+            release_metadata.get("html_url"), str
+        ):
+            raise ValueError("release metadata is missing identity fields")
         assets = release_metadata.get("assets", [])
         digests = {
             str(asset.get("name")): str(asset.get("digest"))
@@ -105,7 +136,7 @@ def build_result(
         result["release"] = {
             "id": release_metadata.get("id"),
             "url": release_metadata.get("html_url"),
-            "draftValidated": release_metadata.get("draft") is True,
+            "draftValidated": True,
             "assetDigests": digests,
         }
     return result

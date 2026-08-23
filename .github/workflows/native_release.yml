@@ -183,6 +183,24 @@ jobs:
           history_args=()
           if [ "$(jq -r .action publication-plan.json)" = resume ]; then
             history_args+=(--allow-existing-candidate-tag)
+            jq --arg tag "$RELEASE_TAG" \
+              '.[] | select(.tag_name == $tag)' \
+              existing-releases.json > candidate-release.json
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
+              > candidate-tag-ref.json
+            python3 tools/publication_state.py \
+              --releases existing-releases.json \
+              --approval "$PUBLICATION_APPROVAL" \
+              --release-tag "$RELEASE_TAG" \
+              --upstream-tag "$UPSTREAM_TAG" \
+              --upstream-commit "$UPSTREAM_COMMIT" \
+              --compatibility-tag "$COMPATIBILITY_TAG" \
+              --native-commit "$NATIVE_COMMIT" \
+              --correlation-id "$CORRELATION_ID" \
+              --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
+              --tag-ref candidate-tag-ref.json \
+              --output publication-plan.json
           fi
           gh api --paginate \
             "repos/${GITHUB_REPOSITORY}/tags?per_page=100" \
@@ -664,6 +682,21 @@ jobs:
           history_args=()
           if [ "$(jq -r .action publication-plan.json)" = resume ]; then
             history_args+=(--allow-existing-candidate-tag)
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
+              > candidate-tag-ref.json
+            python3 tools/publication_state.py \
+              --releases existing-releases.json \
+              --approval publish \
+              --release-tag "$RELEASE_TAG" \
+              --upstream-tag "$UPSTREAM_TAG" \
+              --upstream-commit "$UPSTREAM_COMMIT" \
+              --compatibility-tag "$COMPATIBILITY_TAG" \
+              --native-commit "$NATIVE_COMMIT" \
+              --correlation-id "$CORRELATION_ID" \
+              --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
+              --tag-ref candidate-tag-ref.json \
+              --output publication-plan.json
           fi
           gh api --paginate \
             "repos/${GITHUB_REPOSITORY}/tags?per_page=100" \
@@ -730,6 +763,21 @@ jobs:
           release_id="$(jq -r .releaseId publication-plan.json)"
           gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
             > draft-release.json
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
+            > candidate-tag-ref.json
+          python3 tools/publication_state.py \
+            --releases existing-releases.json \
+            --approval publish \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --correlation-id "$CORRELATION_ID" \
+            --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
+            --tag-ref candidate-tag-ref.json \
+            --output publication-plan.json
           while IFS= read -r asset_id; do
             gh api --method DELETE \
               "repos/${GITHUB_REPOSITORY}/releases/assets/$asset_id"
@@ -754,6 +802,24 @@ jobs:
           test -n "$release_id"
           gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
             > published-release-check/release.json
+          jq -s '[.[0]]' published-release-check/release.json \
+            > published-release-check/releases.json
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
+            > published-release-check/tag-ref.json
+          python3 tools/publication_state.py \
+            --releases published-release-check/releases.json \
+            --approval publish \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --correlation-id "$CORRELATION_ID" \
+            --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
+            --tag-ref published-release-check/tag-ref.json \
+            --candidate-dir candidate \
+            --output published-release-check/publication-plan.json
           manifest_url="$(
             python3 - <<'PY'
           import json
@@ -797,8 +863,36 @@ jobs:
             --clobber \
             published-release-check/release-result.json
           gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
-            --jq '.assets[] | select(.name == "release-result.json") | .digest' \
-            | grep -Eq '^sha256:[0-9a-f]{64}$'
+            > published-release-check/final-release.json
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
+            > published-release-check/final-tag-ref.json
+          jq -s '[.[0]]' published-release-check/final-release.json \
+            > published-release-check/final-releases.json
+          python3 tools/publication_state.py \
+            --releases published-release-check/final-releases.json \
+            --approval publish \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --correlation-id "$CORRELATION_ID" \
+            --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
+            --tag-ref published-release-check/final-tag-ref.json \
+            --candidate-dir candidate \
+            --release-result published-release-check/release-result.json \
+            --output published-release-check/final-publication-plan.json
+          python3 tools/validate_release_manifest.py \
+            published-release-check/manifest.json \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --release-tag "$RELEASE_TAG" \
+            --release-metadata published-release-check/final-release.json \
+            --require-smoke linux/x64 \
+            --require-smoke windows/x64
           gh release edit "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false
