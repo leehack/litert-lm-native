@@ -45,6 +45,7 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
             self.assertIn(required_input, workflow)
         self.assertIn("publication_approval == 'publish'", workflow)
         self.assertIn("Invalid correlation identifier", workflow)
+        self.assertIn('test "$GITHUB_SHA" = "$NATIVE_COMMIT"', workflow)
         self.assertIn("github.run_id", workflow)
         self.assertIn("--draft", workflow)
         self.assertIn("--require-smoke linux/x64", workflow)
@@ -78,6 +79,9 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
             run_blocks.append("\n".join(block))
         self.assertTrue(run_blocks)
         self.assertNotIn("${{ inputs.", "\n".join(run_blocks))
+
+        protocol = (root / "docs/release_protocol.md").read_text(encoding="utf-8")
+        self.assertIn("dispatched repository ref resolves exactly to `native_commit`", protocol)
 
     def test_pr_qualification_is_exact_head_prepare_only(self) -> None:
         root = Path(__file__).resolve().parents[1]

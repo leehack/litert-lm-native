@@ -37,6 +37,17 @@ class ValidateReleaseManifestTest(unittest.TestCase):
     def test_owner_generated_manifest_satisfies_final_contract(self) -> None:
         self.validate(deepcopy(self.valid))
 
+    def test_invalid_release_identity_uses_clean_cli_error(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "Release identity is invalid"):
+            validate_schema_2_payload(
+                deepcopy(self.valid),
+                upstream_tag=UPSTREAM_TAG,
+                upstream_commit=UPSTREAM_COMMIT,
+                compatibility_tag=UPSTREAM_TAG,
+                native_commit=NATIVE_COMMIT,
+                release_tag="v0.16.0-01",
+            )
+
     def test_owner_generated_release_inventory_is_exact(self) -> None:
         fixture_dir = Path(__file__).resolve().parent / "fixtures"
         manifest = fixture_dir / "schema2_contract_manifest.json"

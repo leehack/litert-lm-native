@@ -15,6 +15,34 @@ NATIVE_COMMIT = "451ba0ce7c366972b4dc0e58f08ffe590958f943"
 
 
 class PackageReleaseTest(unittest.TestCase):
+    def test_schema_2_commit_rejects_non_hex_before_artifact_checks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest = root / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 2,
+                        "package": "litert-lm-native",
+                        "release": {},
+                        "upstream": {"commit": "z" * 40},
+                        "native": {"commit": NATIVE_COMMIT},
+                        "abi": {},
+                        "capabilities": {},
+                        "platforms": [],
+                        "realModelSmokes": [],
+                        "artifacts": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                patch.object(validate_artifacts, "REPO_ROOT", root),
+                patch.object(validate_artifacts, "MANIFEST_PATH", manifest),
+            ):
+                with self.assertRaisesRegex(SystemExit, "lowercase 40-hex SHA"):
+                    validate_artifacts.validate_manifest()
+
     def test_generic_gpu_accelerator_is_schema_compatible(self) -> None:
         self.assertEqual(
             package_release.artifact_accelerators(

@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "manifest.json"
 SHA256SUMS_PATH = REPO_ROOT / "SHA256SUMS"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def fail(message: str) -> None:
@@ -52,8 +53,8 @@ def validate_manifest() -> dict:
             ("upstream", manifest["upstream"].get("commit")),
             ("native", manifest["native"].get("commit")),
         ):
-            if not isinstance(commit, str) or len(commit) != 40:
-                fail(f"manifest.json {label} commit must be a full SHA")
+            if not isinstance(commit, str) or FULL_SHA_RE.fullmatch(commit) is None:
+                fail(f"manifest.json {label} commit must be a lowercase 40-hex SHA")
 
     seen = set()
     for index, artifact in enumerate(manifest["artifacts"]):

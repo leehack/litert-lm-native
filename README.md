@@ -171,8 +171,12 @@ When moving to a new LiteRT-LM tag:
    together so native-assets and SPM consumers use the same bridge-enabled
    runtime build.
 
-The exact `native_commit` must already be reachable from `main`; release
-preparation and the final publication recheck both enforce that provenance.
+The exact `native_commit` must already be reachable from `main` and must equal
+the commit resolved by the workflow's `--ref` when the dispatch starts. Release
+preparation and the final publication recheck both enforce that provenance. A
+`--ref main` dispatch therefore uses the exact current `main` OID as
+`native_commit`; use an immutable branch or tag resolving to the same commit
+when preparing from another retained source ref.
 
 Release-tooling pull requests automatically run a read-only exact-input
 qualification. It builds all nine targets and requires the pinned ASR

@@ -9,7 +9,7 @@ import re
 from fetch_litert_lm_asr_smoke_assets import ASSETS
 from litert_lm_symbols import has_asr_bridge, is_at_least, uses_stream_chunk_api
 from prebuilt_overrides import prebuilt_override_manifest
-from release_version_policy import parse_upstream, validate_pair
+from release_version_policy import PolicyError, parse_upstream, validate_pair
 from validate_runtime_artifacts import required_runtime_artifacts
 
 
@@ -49,6 +49,24 @@ REQUIRED_PLATFORM_KEYS = {
     ("macos", "x64"),
     ("windows", "x64"),
 }
+
+
+def _validated_release_identity(
+    *,
+    upstream_tag: str | None,
+    upstream_commit: str,
+    compatibility_tag: str,
+    release_tag: str,
+):
+    try:
+        identity = parse_upstream(
+            upstream_tag=upstream_tag,
+            upstream_commit=upstream_commit,
+            compatibility_tag=compatibility_tag,
+        )
+        return validate_pair(identity, release_tag)
+    except PolicyError as error:
+        raise SystemExit(f"Release identity is invalid: {error}") from error
 ALLOWED_ACCELERATORS = {"gpu", "metal", "opencl", "webgpu"}
 
 
@@ -178,12 +196,12 @@ def validate_schema_2_payload(
     ):
         raise SystemExit("Release manifest native commit does not match exact input")
 
-    identity = parse_upstream(
+    parsed_release = _validated_release_identity(
         upstream_tag=upstream_tag,
         upstream_commit=upstream_commit,
         compatibility_tag=compatibility_tag,
+        release_tag=release_tag,
     )
-    parsed_release = validate_pair(identity, release_tag)
     expected_release = {
         "tag": release_tag,
         "channel": parsed_release.channel,
@@ -548,12 +566,12 @@ def validate_schema_2_identity(
             "Release manifest native release tag mismatch: "
             f"expected {release_tag}, got {actual}"
         )
-    identity = parse_upstream(
+    parsed_release = _validated_release_identity(
         upstream_tag=upstream_tag,
         upstream_commit=manifest_upstream_commit,
         compatibility_tag=manifest_compatibility,
+        release_tag=release_tag,
     )
-    parsed_release = validate_pair(identity, release_tag)
     if release.get("channel") != parsed_release.channel:
         raise SystemExit("Release manifest channel does not match release tag")
     if release.get("kind") != parsed_release.kind:
