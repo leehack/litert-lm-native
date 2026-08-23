@@ -570,6 +570,8 @@ def validate_schema_2_identity(
     upstream = manifest.get("upstream")
     if not isinstance(upstream, dict):
         raise SystemExit("Release manifest is missing upstream provenance")
+    if upstream_tag is None and upstream.get("tag") is not None:
+        raise SystemExit("Stable schema 2 manifest requires --upstream-tag")
     if upstream.get("tag") != upstream_tag:
         raise SystemExit(
             "Release manifest upstream tag mismatch: "

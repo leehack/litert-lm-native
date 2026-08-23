@@ -7,7 +7,6 @@ import shutil
 import tarfile
 import tempfile
 from pathlib import Path
-from urllib.parse import quote
 
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -16,13 +15,12 @@ from prebuilt_overrides import (
     PrebuiltOverride,
     prebuilt_overrides,
 )
+from upstream_archive import github_source_archive_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 
-UPSTREAM_SOURCE_URL = (
-    "https://github.com/google-ai-edge/LiteRT-LM/archive/{ref}.tar.gz"
-)
+UPSTREAM_REPO = "google-ai-edge/LiteRT-LM"
 
 PREBUILT_TARGETS = {
     "android_arm64": ("android", "arm64"),
@@ -41,7 +39,7 @@ LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 def download_source(upstream_ref: str, output: Path) -> None:
     print(f"Downloading upstream source archive for {upstream_ref}", flush=True)
     download_to_path(
-        UPSTREAM_SOURCE_URL.format(ref=quote(upstream_ref, safe="")),
+        github_source_archive_url(UPSTREAM_REPO, upstream_ref),
         output,
         headers={"User-Agent": "litert-lm-native-prebuilt-packager"},
         label=f"LiteRT-LM {upstream_ref} source archive",

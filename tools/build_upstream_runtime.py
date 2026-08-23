@@ -9,7 +9,6 @@ import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
-from urllib.parse import quote
 
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -26,15 +25,13 @@ from runtime_dependency_utils import (
     is_elf,
     is_system_needed,
 )
+from upstream_archive import github_source_archive_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 BRIDGE_PACKAGE_ROOT = REPO_ROOT / "native"
 UPSTREAM_REPO = "google-ai-edge/LiteRT-LM"
 MACOS_MINIMUM_OS = "14.0"
-UPSTREAM_ARCHIVE_URL = (
-    "https://github.com/google-ai-edge/LiteRT-LM/archive/{ref}.tar.gz"
-)
 USER_AGENT = "litert-lm-native-build"
 ZLIB_URL = "https://zlib.net/fossils/zlib-1.3.1.tar.gz"
 ZLIB_GITHUB_MIRROR_URL = (
@@ -144,7 +141,7 @@ def download_upstream(
     upstream_ref: str, compatibility_tag: str, work_dir: Path
 ) -> Path:
     archive_path = source_archive_path(work_dir, upstream_ref)
-    url = UPSTREAM_ARCHIVE_URL.format(ref=quote(upstream_ref, safe=""))
+    url = github_source_archive_url(UPSTREAM_REPO, upstream_ref)
     print(f"Downloading {url}", flush=True)
     download_to_path(
         url,

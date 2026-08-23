@@ -92,6 +92,16 @@ class ValidateReleaseManifestTest(unittest.TestCase):
                         release_tag=RELEASE_TAG,
                     )
 
+        with self.assertRaisesRegex(SystemExit, "requires --upstream-tag"):
+            validate_schema_2_identity(
+                deepcopy(self.valid),
+                upstream_tag=None,
+                upstream_commit=UPSTREAM_COMMIT,
+                compatibility_tag=UPSTREAM_TAG,
+                native_commit=NATIVE_COMMIT,
+                release_tag=RELEASE_TAG,
+            )
+
     def test_owner_generated_release_inventory_is_exact(self) -> None:
         fixture_dir = Path(__file__).resolve().parent / "fixtures"
         manifest = fixture_dir / "schema2_contract_manifest.json"
