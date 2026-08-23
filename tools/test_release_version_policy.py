@@ -23,6 +23,7 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("contents: read", workflow)
+        self.assertIn("persist-credentials: false", workflow)
         self.assertIn("preparation.json", workflow)
         self.assertNotIn("gh workflow run", workflow)
         self.assertNotIn("gh release create", workflow)
