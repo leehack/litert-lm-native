@@ -17,6 +17,10 @@ from generate_schema2_contract_fixture import (
     generate_manifest,
 )
 from validate_release_manifest import main, validate_schema_2_payload
+from validate_runtime_artifacts import (
+    OFFICIAL_APPLE_RUNTIME_ARCHIVES,
+    required_runtime_artifacts,
+)
 
 
 class ValidateReleaseManifestTest(unittest.TestCase):
@@ -36,6 +40,21 @@ class ValidateReleaseManifestTest(unittest.TestCase):
 
     def test_owner_generated_manifest_satisfies_final_contract(self) -> None:
         self.validate(deepcopy(self.valid))
+
+    def test_pre_v0_14_official_archive_paths_share_the_runtime_contract(self) -> None:
+        tag = "v0.13.1"
+        required = set(required_runtime_artifacts(tag, include_official_assets=True))
+        expected = {
+            Path("dist") / "official" / tag / archive
+            for archive in OFFICIAL_APPLE_RUNTIME_ARCHIVES
+        }
+
+        self.assertTrue(expected.issubset(required))
+        self.assertTrue(
+            expected.isdisjoint(
+                required_runtime_artifacts(tag, include_official_assets=False)
+            )
+        )
 
     def test_schema_2_payload_requires_exact_schema_version(self) -> None:
         wrong_version = deepcopy(self.valid)
@@ -158,6 +177,25 @@ class ValidateReleaseManifestTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "nine platform"):
             self.validate(empty_platforms)
 
+    def test_malformed_platform_fields_fail_cleanly_before_set_use(self) -> None:
+        mutations = {
+            "platform and arch must be strings": lambda platform: platform.update(
+                {"platform": []}
+            ),
+            "unique artifact paths": lambda platform: platform.update(
+                {"artifactPaths": [[]]}
+            ),
+            "unique allowed strings": lambda platform: platform.update(
+                {"accelerators": [[]]}
+            ),
+        }
+        for expected_error, mutate in mutations.items():
+            with self.subTest(expected_error=expected_error):
+                malformed = deepcopy(self.valid)
+                mutate(malformed["platforms"][0])
+                with self.assertRaisesRegex(SystemExit, expected_error):
+                    self.validate(malformed)
+
     def test_path_only_artifact_and_unbound_provenance_fail_closed(self) -> None:
         path_only = deepcopy(self.valid)
         path_only["artifacts"][0] = {"path": path_only["artifacts"][0]["path"]}
@@ -181,6 +219,14 @@ class ValidateReleaseManifestTest(unittest.TestCase):
                 platform["artifactPaths"].remove(override["targetPath"])
         with self.assertRaisesRegex(SystemExit, "override target provenance"):
             self.validate(missing_override_target)
+
+    def test_malformed_artifact_runtime_fails_before_set_membership(self) -> None:
+        for malformed_runtime in ([], {}):
+            with self.subTest(runtime=malformed_runtime):
+                malformed = deepcopy(self.valid)
+                malformed["artifacts"][0]["runtime"] = malformed_runtime
+                with self.assertRaisesRegex(SystemExit, "invalid runtime family"):
+                    self.validate(malformed)
 
     def test_required_runtime_path_must_keep_exact_platform_binding(self) -> None:
         misclassified = deepcopy(self.valid)

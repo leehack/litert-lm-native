@@ -44,12 +44,18 @@ def build_result(
     candidate_artifact: str,
     release_metadata: dict | None = None,
 ) -> dict:
+    if not isinstance(manifest, dict):
+        raise ValueError("release manifest must be an object")
     if not CORRELATION_RE.fullmatch(correlation_id):
         raise ValueError("invalid correlation identifier")
     if approval not in {"prepare-only", "publish"}:
         raise ValueError("invalid publication approval")
     if outcome not in {"prepared", "validated-for-publication"}:
         raise ValueError("invalid release outcome")
+    if run_id <= 0 or run_attempt <= 0:
+        raise ValueError("invalid workflow run identity")
+    if run_url != f"https://github.com/{repository}/actions/runs/{run_id}":
+        raise ValueError("invalid workflow run URL")
     for name, commit in (
         ("upstream", upstream_commit),
         ("native", native_commit),
@@ -58,15 +64,30 @@ def build_result(
             raise ValueError(f"invalid {name} commit")
     if manifest.get("schemaVersion") != 2:
         raise ValueError("release result requires manifest schema 2")
-    if manifest.get("release", {}).get("tag") != release_tag:
+    identity_sections = {}
+    for name in ("release", "upstream", "native"):
+        section = manifest.get(name)
+        if not isinstance(section, dict):
+            raise ValueError(f"manifest {name} must be an object")
+        identity_sections[name] = section
+    release = identity_sections["release"]
+    upstream = identity_sections["upstream"]
+    native = identity_sections["native"]
+    for name in ("platforms", "artifacts", "realModelSmokes"):
+        items = manifest.get(name)
+        if not isinstance(items, list) or any(
+            not isinstance(item, dict) for item in items
+        ):
+            raise ValueError(f"manifest {name} must be a list of objects")
+    if release.get("tag") != release_tag:
         raise ValueError("manifest release tag mismatch")
-    if manifest.get("upstream", {}).get("tag") != upstream_tag:
+    if upstream.get("tag") != upstream_tag:
         raise ValueError("manifest upstream tag mismatch")
-    if manifest.get("upstream", {}).get("commit") != upstream_commit:
+    if upstream.get("commit") != upstream_commit:
         raise ValueError("manifest upstream commit mismatch")
-    if manifest.get("upstream", {}).get("compatibilityTag") != compatibility_tag:
+    if upstream.get("compatibilityTag") != compatibility_tag:
         raise ValueError("manifest compatibility tag mismatch")
-    if manifest.get("native", {}).get("commit") != native_commit:
+    if native.get("commit") != native_commit:
         raise ValueError("manifest native commit mismatch")
 
     passing_smokes = sorted(
@@ -117,8 +138,10 @@ def build_result(
                 workflow_run_id=run_id,
             ),
             "draft": True,
-            "prerelease": manifest.get("release", {}).get("githubPrerelease"),
+            "prerelease": release.get("githubPrerelease"),
         }
+        if not isinstance(release_metadata, dict):
+            raise ValueError("release metadata must be an object")
         mismatches = [
             key
             for key, expected in expected_release.items()
@@ -134,6 +157,10 @@ def build_result(
         ):
             raise ValueError("release metadata is missing identity fields")
         assets = release_metadata.get("assets", [])
+        if not isinstance(assets, list) or any(
+            not isinstance(asset, dict) for asset in assets
+        ):
+            raise ValueError("release assets must be a list of objects")
         digests = {
             str(asset.get("name")): str(asset.get("digest"))
             for asset in assets

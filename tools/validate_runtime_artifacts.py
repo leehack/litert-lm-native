@@ -43,7 +43,7 @@ def required_runtime_artifacts(
     required = list(REQUIRED_RUNTIME_ARTIFACTS)
     if is_at_least(upstream_tag, (0, 16, 0)):
         required.extend(V0_16_IOS_GPU_ARTIFACTS)
-    if include_official_assets and is_at_least(upstream_tag, (0, 14, 0)):
+    if include_official_assets:
         required.extend(
             Path("dist") / "official" / upstream_tag / archive
             for archive in OFFICIAL_APPLE_RUNTIME_ARCHIVES
@@ -70,20 +70,6 @@ def main() -> int:
     required = required_runtime_artifacts(
         args.upstream_tag, include_official_assets=include_official_assets
     )
-    if include_official_assets and not is_at_least(args.upstream_tag, (0, 14, 0)):
-        required.extend(
-            [
-                Path("dist")
-                / "official"
-                / args.upstream_tag
-                / "CLiteRTLM.xcframework.zip",
-                Path("dist")
-                / "official"
-                / args.upstream_tag
-                / "CLiteRTLM_mac.xcframework.zip",
-            ]
-        )
-
     missing = [path for path in required if not (REPO_ROOT / path).is_file()]
     if missing:
         formatted = "\n".join(f"- {path.as_posix()}" for path in missing)

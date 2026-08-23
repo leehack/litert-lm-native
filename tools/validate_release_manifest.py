@@ -275,7 +275,12 @@ def validate_schema_2_payload(
             raise SystemExit(f"artifact[{index}] upstream commit provenance mismatch")
         if artifact.get("releaseTag") != release_tag:
             raise SystemExit(f"artifact[{index}] release tag provenance mismatch")
-        if artifact.get("runtime") not in {"native", "archive", "web"}:
+        runtime = artifact.get("runtime")
+        if not isinstance(runtime, str) or runtime not in {
+            "native",
+            "archive",
+            "web",
+        }:
             raise SystemExit(f"artifact[{index}] has an invalid runtime family")
         accelerators = artifact.get("accelerators")
         if not isinstance(accelerators, list) or any(
@@ -309,7 +314,16 @@ def validate_schema_2_payload(
             {"platform", "arch", "releaseAsset", "artifactPaths", "accelerators"},
             f"platform[{index}]",
         )
-        key = (platform.get("platform"), platform.get("arch"))
+        platform_name = platform.get("platform")
+        arch = platform.get("arch")
+        if (
+            not isinstance(platform_name, str)
+            or not platform_name
+            or not isinstance(arch, str)
+            or not arch
+        ):
+            raise SystemExit(f"platform[{index}] platform and arch must be strings")
+        key = (platform_name, arch)
         if key not in REQUIRED_PLATFORM_KEYS or key in seen_platforms:
             raise SystemExit(f"platform[{index}] is missing, duplicate, or unsupported")
         seen_platforms.add(key)
@@ -317,7 +331,15 @@ def validate_schema_2_payload(
         if platform.get("releaseAsset") != expected_asset:
             raise SystemExit(f"platform[{index}] release asset does not match identity")
         paths = platform.get("artifactPaths")
-        if not isinstance(paths, list) or not paths or len(paths) != len(set(paths)):
+        if (
+            not isinstance(paths, list)
+            or not paths
+            or any(not isinstance(path, str) for path in paths)
+        ):
+            raise SystemExit(f"platform[{index}] must contain unique artifact paths")
+        for path_index, path in enumerate(paths):
+            _require_relative_path(path, f"platform[{index}].artifactPaths[{path_index}]")
+        if len(paths) != len(set(paths)):
             raise SystemExit(f"platform[{index}] must contain unique artifact paths")
         for path in paths:
             if path not in artifacts_by_path:
@@ -329,10 +351,15 @@ def validate_schema_2_payload(
                 raise SystemExit(f"platform[{index}] artifact provenance mismatch")
             covered_paths.add(path)
         accelerators = platform.get("accelerators")
-        if not isinstance(accelerators, list) or len(accelerators) != len(
-            set(accelerators)
+        if (
+            not isinstance(accelerators, list)
+            or any(not isinstance(accelerator, str) for accelerator in accelerators)
+            or len(accelerators) != len(set(accelerators))
+            or not set(accelerators).issubset(ALLOWED_ACCELERATORS)
         ):
-            raise SystemExit(f"platform[{index}] accelerators must be unique")
+            raise SystemExit(
+                f"platform[{index}] accelerators must be unique allowed strings"
+            )
         linked_accelerators = sorted(
             {
                 accelerator
@@ -340,9 +367,7 @@ def validate_schema_2_payload(
                 for accelerator in artifacts_by_path[path]["accelerators"]
             }
         )
-        if accelerators != linked_accelerators or not set(accelerators).issubset(
-            ALLOWED_ACCELERATORS
-        ):
+        if accelerators != linked_accelerators:
             raise SystemExit(
                 f"platform[{index}] accelerators do not match linked artifacts"
             )

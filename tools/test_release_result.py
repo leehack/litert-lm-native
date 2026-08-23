@@ -96,6 +96,17 @@ class ReleaseResultTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "correlation"):
             build_result(correlation_id="bad value", **common)
+        for section in ("release", "upstream", "native"):
+            with self.subTest(section=section):
+                malformed = self.manifest()
+                malformed[section] = []
+                with self.assertRaisesRegex(
+                    ValueError, f"manifest {section} must be an object"
+                ):
+                    build_result(
+                        correlation_id="valid",
+                        **{**common, "manifest": malformed},
+                    )
         with self.assertRaisesRegex(ValueError, "digests"):
             build_result(
                 correlation_id="valid",
