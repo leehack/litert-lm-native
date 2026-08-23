@@ -239,6 +239,14 @@ class ValidateReleaseManifestTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "override target provenance"):
             self.validate(missing_override_target)
 
+    def test_artifact_paths_require_normalized_posix_form(self) -> None:
+        for unsafe in (r"bin\linux\x64\libLiteRtLm.so", "."):
+            with self.subTest(path=unsafe):
+                malformed = deepcopy(self.valid)
+                malformed["artifacts"][0]["path"] = unsafe
+                with self.assertRaisesRegex(SystemExit, "safe normalized"):
+                    self.validate(malformed)
+
     def test_malformed_artifact_runtime_fails_before_set_membership(self) -> None:
         for malformed_runtime in ([], {}):
             with self.subTest(runtime=malformed_runtime):

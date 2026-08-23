@@ -161,11 +161,18 @@ def build_result(
             not isinstance(asset, dict) for asset in assets
         ):
             raise ValueError("release assets must be a list of objects")
-        digests = {
-            str(asset.get("name")): str(asset.get("digest"))
-            for asset in assets
-            if isinstance(asset, dict) and asset.get("name") != "release-result.json"
-        }
+        digests = {}
+        seen_asset_names: set[str] = set()
+        for asset in assets:
+            name = asset.get("name")
+            digest = asset.get("digest")
+            if not isinstance(name, str) or not name or not isinstance(digest, str):
+                raise ValueError("release assets require non-empty names and digests")
+            if name in seen_asset_names:
+                raise ValueError(f"release assets contain duplicate name: {name}")
+            seen_asset_names.add(name)
+            if name != "release-result.json":
+                digests[name] = digest
         invalid = sorted(
             name for name, digest in digests.items() if not DIGEST_RE.fullmatch(digest)
         )

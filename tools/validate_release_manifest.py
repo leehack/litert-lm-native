@@ -91,7 +91,13 @@ def _require_relative_path(value: object, label: str) -> str:
     if not isinstance(value, str) or not value:
         raise SystemExit(f"{label} must be a non-empty repository-relative path")
     path = Path(value)
-    if path.is_absolute() or ".." in path.parts or path.as_posix() != value:
+    if (
+        "\\" in value
+        or value == "."
+        or path.is_absolute()
+        or ".." in path.parts
+        or path.as_posix() != value
+    ):
         raise SystemExit(f"{label} must be a safe normalized repository-relative path")
     return value
 

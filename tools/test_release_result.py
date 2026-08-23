@@ -131,6 +131,43 @@ class ReleaseResultTest(unittest.TestCase):
                 },
                 **common,
             )
+        for assets, expected in (
+            ([{"digest": "sha256:" + "a" * 64}], "non-empty names"),
+            ([{"name": "manifest.json"}], "non-empty names"),
+            (
+                [
+                    {"name": "manifest.json", "digest": "sha256:" + "a" * 64},
+                    {"name": "manifest.json", "digest": "sha256:" + "a" * 64},
+                ],
+                "duplicate name",
+            ),
+        ):
+            with self.subTest(expected=expected):
+                metadata = {
+                    "id": 7,
+                    "html_url": "https://example.invalid/release/7",
+                    "tag_name": "v0.16.0-3",
+                    "target_commitish": NATIVE,
+                    "name": "LiteRT-LM v0.16.0-3",
+                    "body": release_notes(
+                        release_tag="v0.16.0-3",
+                        upstream_tag="v0.16.0",
+                        upstream_commit=UPSTREAM,
+                        compatibility_tag="v0.16.0",
+                        native_commit=NATIVE,
+                        correlation_id="valid",
+                        workflow_run_id=42,
+                    ),
+                    "draft": True,
+                    "prerelease": True,
+                    "assets": assets,
+                }
+                with self.assertRaisesRegex(ValueError, expected):
+                    build_result(
+                        correlation_id="valid",
+                        release_metadata=metadata,
+                        **common,
+                    )
         mismatched = {
             "id": 7,
             "html_url": "https://example.invalid/release/7",
