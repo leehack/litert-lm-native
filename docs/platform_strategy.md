@@ -122,6 +122,7 @@ Each `artifacts` entry records only the file-level contract:
 - repository-relative path and file name
 - file SHA-256
 - upstream tag, exact upstream commit, and native release tag provenance
-- accelerator support metadata using the schema's allowed values
+- accelerator support metadata using the schema's allowed values: generic
+  `gpu`, `metal`, `opencl`, and `webgpu`
 
 Downstream packages should not infer platform support from filenames alone.

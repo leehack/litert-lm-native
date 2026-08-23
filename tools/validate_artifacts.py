@@ -5,10 +5,12 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "manifest.json"
 SHA256SUMS_PATH = REPO_ROOT / "SHA256SUMS"
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def fail(message: str) -> None:
@@ -64,7 +66,10 @@ def validate_manifest() -> dict:
         seen.add(artifact["path"])
         if not path.is_file():
             fail(f"artifact does not exist: {artifact['path']}")
-        if not isinstance(artifact["sha256"], str) or len(artifact["sha256"]) != 64:
+        if (
+            not isinstance(artifact["sha256"], str)
+            or SHA256_RE.fullmatch(artifact["sha256"]) is None
+        ):
             fail(f"artifact[{index}] sha256 must be a 64-hex digest")
         actual = sha256_file(path)
         if actual != artifact["sha256"]:

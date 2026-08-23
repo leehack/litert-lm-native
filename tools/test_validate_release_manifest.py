@@ -146,6 +146,31 @@ class ValidateReleaseManifestTest(unittest.TestCase):
             self.validate(misclassified)
 
     def test_accelerator_summaries_are_allowed_linked_unions(self) -> None:
+        generic_gpu = deepcopy(self.valid)
+        platform = next(
+            item
+            for item in generic_gpu["platforms"]
+            if item["platform"] == "linux" and item["arch"] == "x64"
+        )
+        artifact = next(
+            item
+            for item in generic_gpu["artifacts"]
+            if item["path"] in platform["artifactPaths"]
+        )
+        artifact["accelerators"] = ["gpu"]
+        platform["accelerators"] = sorted(
+            {
+                accelerator
+                for path in platform["artifactPaths"]
+                for accelerator in next(
+                    item
+                    for item in generic_gpu["artifacts"]
+                    if item["path"] == path
+                )["accelerators"]
+            }
+        )
+        self.validate(generic_gpu)
+
         fabricated = deepcopy(self.valid)
         platform = next(
             item

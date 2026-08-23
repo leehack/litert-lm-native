@@ -7,9 +7,13 @@ on:
       - ".github/workflows/native_release.yml"
       - ".github/workflows/pr_release_qualification.yml"
       - "tools/**"
-      - "docs/release_protocol.md"
-      - "docs/platform_strategy.md"
-      - "README.md"
+      - "native/**"
+      - "prebuilt/**"
+      - "patches/**"
+
+concurrency:
+  group: pr-release-qualification-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

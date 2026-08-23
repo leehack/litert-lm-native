@@ -49,7 +49,7 @@ REQUIRED_PLATFORM_KEYS = {
     ("macos", "x64"),
     ("windows", "x64"),
 }
-ALLOWED_ACCELERATORS = {"metal", "opencl", "webgpu"}
+ALLOWED_ACCELERATORS = {"gpu", "metal", "opencl", "webgpu"}
 
 
 def _require_exact_keys(value: dict, expected: set[str], label: str) -> None:

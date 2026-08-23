@@ -60,6 +60,8 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         self.assertEqual(workflow.count("platform:"), 9)
         self.assertIn("Verify nine-platform candidate", workflow)
         self.assertIn("Expected exact real-model evidence", workflow)
+        self.assertIn("group: pr-release-qualification-", workflow)
+        self.assertIn("cancel-in-progress: true", workflow)
         self.assertNotIn("publication_approval", workflow)
         self.assertNotIn("gh release", workflow)
         self.assertNotIn("contents: write", workflow)

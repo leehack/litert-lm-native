@@ -58,6 +58,7 @@ jobs:
             tools/test_package_upstream_prebuilts.py \
             tools/test_build_upstream_runtime.py \
             tools/test_litert_lm_bridge.py \
+            tools/test_litert_lm_asr_smoke.py \
             tools/test_fetch_litert_lm_asr_smoke_assets.py \
             tools/test_litert_lm_symbols.py \
             tools/test_prebuilt_overrides.py \

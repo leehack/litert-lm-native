@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import package_release
+import validate_artifacts
 
 
 UPSTREAM_COMMIT = "924e79c91542761242244e4f1651851f822e4cbb"
@@ -14,6 +15,45 @@ NATIVE_COMMIT = "451ba0ce7c366972b4dc0e58f08ffe590958f943"
 
 
 class PackageReleaseTest(unittest.TestCase):
+    def test_generic_gpu_accelerator_is_schema_compatible(self) -> None:
+        self.assertEqual(
+            package_release.artifact_accelerators(
+                Path("libLiteRtGpuAccelerator.so")
+            ),
+            ["gpu"],
+        )
+
+    def test_artifact_digest_rejects_non_hex_before_checksum_comparison(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            artifact = root / "runtime.so"
+            artifact.write_bytes(b"runtime")
+            manifest = root / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "package": "litert-lm-native",
+                        "artifacts": [
+                            {
+                                "runtime": "native",
+                                "platform": "linux",
+                                "path": "runtime.so",
+                                "fileName": "runtime.so",
+                                "sha256": "z" * 64,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                patch.object(validate_artifacts, "REPO_ROOT", root),
+                patch.object(validate_artifacts, "MANIFEST_PATH", manifest),
+            ):
+                with self.assertRaisesRegex(SystemExit, "64-hex digest"):
+                    validate_artifacts.validate_manifest()
+
     def test_manifest_separates_all_release_identities_and_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

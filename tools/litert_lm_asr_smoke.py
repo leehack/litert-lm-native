@@ -23,6 +23,31 @@ STATUS_WOULD_BLOCK = 12
 _DLL_DIRECTORY_HANDLES: list[object] = []
 
 
+def pinned_asset_sources(
+    model: Path, tokenizer: Path, audio: Path
+) -> dict[str, str]:
+    source_by_name = {asset.filename: asset.url for asset in ASSETS}
+    requested = {
+        "model": model.name,
+        "tokenizer": tokenizer.name,
+        "fixture": audio.name,
+    }
+    unsupported = [
+        f"{label}={filename}"
+        for label, filename in requested.items()
+        if filename not in source_by_name
+    ]
+    if unsupported:
+        raise ValueError(
+            "Release evidence requires the checksum-pinned ASR assets; "
+            f"unsupported input(s): {', '.join(unsupported)}"
+        )
+    return {
+        label: source_by_name[filename]
+        for label, filename in requested.items()
+    }
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -248,6 +273,9 @@ def main() -> int:
             "--evidence-json requires --platform, --arch, --upstream-commit, "
             "--native-commit, --release-tag, and --expect"
         )
+    pinned_sources = None
+    if args.evidence_json:
+        pinned_sources = pinned_asset_sources(args.model, args.tokenizer, args.audio)
 
     library = bind(args.library.resolve())
     if library.litert_lm_asr_abi_version() != ABI_VERSION:
@@ -337,7 +365,7 @@ def main() -> int:
     }
     print("RESULT litert_lm_asr " + json.dumps(result, sort_keys=True))
     if args.evidence_json:
-        source_by_name = {asset.filename: asset.url for asset in ASSETS}
+        assert pinned_sources is not None
         evidence = {
             "id": "litert_lm_asr_moonshine",
             "result": "pass",
@@ -370,9 +398,7 @@ def main() -> int:
                     "litert-lm-native-runtime-"
                     f"{args.platform}-{args.arch}-{args.release_tag}.tar.gz"
                 ),
-                "model": source_by_name[args.model.name],
-                "tokenizer": source_by_name[args.tokenizer.name],
-                "fixture": source_by_name[args.audio.name],
+                **pinned_sources,
             },
             "expectation": {
                 "type": "case-insensitive-substring",
