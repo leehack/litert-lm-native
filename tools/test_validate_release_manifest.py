@@ -16,7 +16,11 @@ from generate_schema2_contract_fixture import (
     UPSTREAM_TAG,
     generate_manifest,
 )
-from validate_release_manifest import main, validate_schema_2_payload
+from validate_release_manifest import (
+    main,
+    validate_schema_2_identity,
+    validate_schema_2_payload,
+)
 from validate_runtime_artifacts import (
     OFFICIAL_APPLE_RUNTIME_ARCHIVES,
     required_runtime_artifacts,
@@ -72,6 +76,21 @@ class ValidateReleaseManifestTest(unittest.TestCase):
                 native_commit=NATIVE_COMMIT,
                 release_tag="v0.16.0-01",
             )
+
+    def test_identity_phase_requires_hex_commits(self) -> None:
+        for section in ("upstream", "native"):
+            with self.subTest(section=section):
+                malformed = deepcopy(self.valid)
+                malformed[section]["commit"] = "z" * 40
+                with self.assertRaisesRegex(SystemExit, "must be a full SHA"):
+                    validate_schema_2_identity(
+                        malformed,
+                        upstream_tag=UPSTREAM_TAG,
+                        upstream_commit=None,
+                        compatibility_tag=UPSTREAM_TAG,
+                        native_commit=None,
+                        release_tag=RELEASE_TAG,
+                    )
 
     def test_owner_generated_release_inventory_is_exact(self) -> None:
         fixture_dir = Path(__file__).resolve().parent / "fixtures"
@@ -336,6 +355,12 @@ class ValidateReleaseManifestTest(unittest.TestCase):
         fabricated["realModelSmokes"][0]["transcript"] = "fabricated"
         with self.assertRaisesRegex(SystemExit, "pinned transcript expectation"):
             self.validate(fabricated)
+
+        with patch("validate_release_manifest.ASSETS", []):
+            with self.assertRaisesRegex(
+                SystemExit, "Pinned smoke asset configuration is incomplete"
+            ):
+                self.validate(deepcopy(self.valid))
 
     def test_incomplete_abi_capabilities_and_release_fail_closed(self) -> None:
         for section, field in (

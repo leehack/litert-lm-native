@@ -422,6 +422,23 @@ def validate_schema_2_payload(
         raise SystemExit("Release manifest realModelSmokes must be a list")
     seen_smokes: set[tuple[str, str, str]] = set()
     pinned_smoke_assets = {asset.filename: asset for asset in ASSETS}
+    pinned_filenames = {
+        "model": "moonshine_tiny_5s_i8.tflite",
+        "tokenizer": "moonshine_tokenizer.json",
+        "fixture": "jfk.wav",
+    }
+    missing_pinned_assets = sorted(
+        set(pinned_filenames.values()).difference(pinned_smoke_assets)
+    )
+    if missing_pinned_assets:
+        raise SystemExit(
+            "Pinned smoke asset configuration is incomplete: "
+            + ", ".join(missing_pinned_assets)
+        )
+    pinned_by_field = {
+        field: pinned_smoke_assets[filename]
+        for field, filename in pinned_filenames.items()
+    }
     for index, smoke in enumerate(smokes):
         if not isinstance(smoke, dict):
             raise SystemExit(f"smoke[{index}] must be an object")
@@ -474,12 +491,7 @@ def validate_schema_2_payload(
             fixture.get("sampleCount"), int
         ) or fixture["sampleCount"] <= 0:
             raise SystemExit(f"smoke[{index}] has invalid fixture metadata")
-        for field, expected_filename in (
-            ("model", "moonshine_tiny_5s_i8.tflite"),
-            ("tokenizer", "moonshine_tokenizer.json"),
-            ("fixture", "jfk.wav"),
-        ):
-            pinned = pinned_smoke_assets[expected_filename]
+        for field, pinned in pinned_by_field.items():
             payload = smoke[field]
             if (
                 payload.get("fileName") != pinned.filename
@@ -512,7 +524,7 @@ def validate_schema_2_payload(
         )
         expected_asset = f"litert-lm-native-runtime-{key[1]}-{key[2]}-{release_tag}.tar.gz"
         if source.get("runtimeReleaseAsset") != expected_asset or any(
-            source.get(field) != pinned_smoke_assets[smoke[field]["fileName"]].url
+            source.get(field) != pinned_by_field[field].url
             for field in ("model", "tokenizer", "fixture")
         ):
             raise SystemExit(f"smoke[{index}] has invalid immutable source provenance")
@@ -558,7 +570,9 @@ def validate_schema_2_identity(
             f"expected {upstream_tag}, got {upstream.get('tag')}"
         )
     manifest_upstream_commit = upstream.get("commit")
-    if not isinstance(manifest_upstream_commit, str) or len(manifest_upstream_commit) != 40:
+    if not isinstance(manifest_upstream_commit, str) or not FULL_SHA_RE.fullmatch(
+        manifest_upstream_commit
+    ):
         raise SystemExit("Release manifest upstream commit must be a full SHA")
     if upstream_commit and manifest_upstream_commit != upstream_commit:
         raise SystemExit(
@@ -578,7 +592,9 @@ def validate_schema_2_identity(
     if not isinstance(native, dict):
         raise SystemExit("Release manifest is missing native provenance")
     manifest_native_commit = native.get("commit")
-    if not isinstance(manifest_native_commit, str) or len(manifest_native_commit) != 40:
+    if not isinstance(manifest_native_commit, str) or not FULL_SHA_RE.fullmatch(
+        manifest_native_commit
+    ):
         raise SystemExit("Release manifest native commit must be a full SHA")
     if native_commit and manifest_native_commit != native_commit:
         raise SystemExit(

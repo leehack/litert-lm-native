@@ -63,6 +63,13 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         )
         self.assertEqual(workflow.count("litert-release-publication"), 5)
         self.assertEqual(workflow.count('type == "required_reviewers"'), 2)
+        publish_job = workflow[workflow.index("  publish:") :]
+        self.assertIn("group: litert-lm-native-publication", publish_job)
+        self.assertIn("cancel-in-progress: false", publish_job)
+        self.assertLess(
+            publish_job.index("group: litert-lm-native-publication"),
+            publish_job.index("Recheck exact identity and immutable history"),
+        )
         self.assertLess(
             workflow.index("Revalidate protected environment after reviewer approval"),
             workflow.index("- uses: actions/checkout@v6", workflow.index("  publish:")),

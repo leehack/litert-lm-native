@@ -601,6 +601,9 @@ jobs:
     name: Publish approved immutable release
     if: inputs.publication_approval == 'publish'
     needs: [preflight, package, authorize-publication]
+    concurrency:
+      group: litert-lm-native-publication
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: litert-release-publication
     permissions:

@@ -99,9 +99,27 @@ def load_smoke_evidence(
 ) -> list[dict]:
     if evidence_dir is None or not evidence_dir.exists():
         return []
+    try:
+        evidence_root = evidence_dir.resolve(strict=True)
+    except OSError as error:
+        raise ValueError(f"smoke evidence directory is unavailable: {error}") from error
     evidence: list[dict] = []
     identities: set[tuple[str, str, str]] = set()
     for path in sorted(evidence_dir.rglob("*.json")):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(
+                f"smoke evidence must be a regular non-symlink file: {path}"
+            )
+        try:
+            resolved = path.resolve(strict=True)
+        except OSError as error:
+            raise ValueError(f"smoke evidence path is unavailable: {path}: {error}") from error
+        try:
+            resolved.relative_to(evidence_root)
+        except ValueError as error:
+            raise ValueError(
+                f"smoke evidence must remain inside its evidence directory: {path}"
+            ) from error
         try:
             item = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError) as error:

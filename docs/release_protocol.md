@@ -61,6 +61,9 @@ environment exists and has at least one required reviewer. The workflow checks
 that rule before waiting for approval and again immediately after approval,
 before its first write-capable step. Merging this workflow does not configure
 the environment; a repository administrator must do that separately. The job
+shares a non-canceling repository-wide concurrency group with every other
+publication job, so its final history recheck and all later mutations are
+serialized across release tags. The job
 rechecks provenance and history, creates a draft release, validates its assets
 and downloaded manifest, and promotes the draft only after validation passes.
 Draft state is deterministic: a retry may resume only a still-draft release
