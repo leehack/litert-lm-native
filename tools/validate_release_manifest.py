@@ -299,6 +299,14 @@ def validate_schema_2_payload(
             )
         artifacts_by_path[path] = artifact
 
+    if upstream_tag is None and any(
+        Path(path).parts[:2] == ("dist", "official")
+        for path in artifacts_by_path
+    ):
+        raise SystemExit(
+            "Development release manifests must not include official upstream artifacts"
+        )
+
     for override in upstream["prebuiltOverrides"]:
         target = artifacts_by_path.get(override["targetPath"])
         if (

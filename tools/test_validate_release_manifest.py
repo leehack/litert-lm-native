@@ -43,8 +43,81 @@ class ValidateReleaseManifestTest(unittest.TestCase):
             release_tag=RELEASE_TAG,
         )
 
+    def development_manifest(self) -> tuple[dict, str]:
+        manifest = deepcopy(self.valid)
+        release_tag = f"g{UPSTREAM_COMMIT[:12]}"
+        manifest["release"] = {
+            "tag": release_tag,
+            "channel": "development",
+            "kind": "commit",
+            "rebuild": 0,
+            "githubPrerelease": True,
+        }
+        manifest["upstream"]["tag"] = None
+        manifest["capabilities"]["officialUpstreamAssets"] = False
+
+        path_updates: dict[str, str] = {}
+        development_artifacts: list[dict] = []
+        for artifact in manifest["artifacts"]:
+            original_path = artifact["path"]
+            if Path(original_path).parts[:2] == ("dist", "official"):
+                continue
+            updated_path = original_path.replace(RELEASE_TAG, release_tag)
+            path_updates[original_path] = updated_path
+            artifact["path"] = updated_path
+            artifact["fileName"] = Path(updated_path).name
+            artifact["upstreamTag"] = None
+            artifact["releaseTag"] = release_tag
+            development_artifacts.append(artifact)
+        manifest["artifacts"] = development_artifacts
+
+        for platform in manifest["platforms"]:
+            platform["releaseAsset"] = (
+                f"litert-lm-native-runtime-{platform['platform']}-"
+                f"{platform['arch']}-{release_tag}.tar.gz"
+            )
+            platform["artifactPaths"] = [
+                path_updates[path] for path in platform["artifactPaths"]
+            ]
+        for smoke in manifest["realModelSmokes"]:
+            smoke["source"]["runtimeReleaseAsset"] = smoke["source"][
+                "runtimeReleaseAsset"
+            ].replace(RELEASE_TAG, release_tag)
+        return manifest, release_tag
+
     def test_owner_generated_manifest_satisfies_final_contract(self) -> None:
         self.validate(deepcopy(self.valid))
+
+    def test_development_manifest_excludes_official_upstream_artifacts(self) -> None:
+        development, release_tag = self.development_manifest()
+        validate_schema_2_payload(
+            development,
+            upstream_tag=None,
+            upstream_commit=UPSTREAM_COMMIT,
+            compatibility_tag=UPSTREAM_TAG,
+            native_commit=NATIVE_COMMIT,
+            release_tag=release_tag,
+        )
+
+        official_artifact = next(
+            deepcopy(artifact)
+            for artifact in self.valid["artifacts"]
+            if Path(artifact["path"]).parts[:2] == ("dist", "official")
+        )
+        official_artifact["upstreamTag"] = None
+        official_artifact["releaseTag"] = release_tag
+        development["artifacts"].append(official_artifact)
+        with self.assertRaisesRegex(
+            SystemExit, "must not include official upstream artifacts"
+        ):
+            validate_schema_2_payload(
+                development,
+                upstream_tag=None,
+                upstream_commit=UPSTREAM_COMMIT,
+                compatibility_tag=UPSTREAM_TAG,
+                native_commit=NATIVE_COMMIT,
+                release_tag=release_tag,
+            )
 
     def test_pre_v0_14_official_archive_paths_share_the_runtime_contract(self) -> None:
         tag = "v0.13.1"
