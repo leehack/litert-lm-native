@@ -171,10 +171,11 @@ When moving to a new LiteRT-LM tag:
    together so native-assets and SPM consumers use the same bridge-enabled
    runtime build.
 
-Release-tooling pull requests automatically run the same exact-input workflow
-in a hard-coded `prepare-only` mode. That qualification builds all nine targets
-and requires the pinned ASR real-model smoke on Linux x64, Windows x64, and
-macOS arm64. It uploads a candidate for review but cannot publish a release.
+Release-tooling pull requests automatically run a read-only exact-input
+qualification. It builds all nine targets and requires the pinned ASR
+real-model smoke on Linux x64, Windows x64, and macOS arm64. It uploads the
+runtime/evidence artifacts for review but has no publication input or write
+permission.
 
 To prepare a corrected package for existing upstream sources without breaking
 downstream checksum pins, dispatch the workflow with all exact identities:

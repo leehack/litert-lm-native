@@ -54,29 +54,15 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         workflow = (
             root / ".github/workflows/pr_release_qualification.yml"
         ).read_text(encoding="utf-8")
-        self.assertIn("uses: ./.github/workflows/native_release.yml", workflow)
         self.assertIn(
-            "native_commit: ${{ github.event.pull_request.head.sha }}", workflow
+            "ref: ${{ github.event.pull_request.head.sha }}", workflow
         )
-        self.assertIn("publication_approval: prepare-only", workflow)
-        self.assertIn("target_platform: all", workflow)
-        self.assertIn("target_arch: all", workflow)
-        self.assertIn("run_asr_smoke: true", workflow)
-        self.assertNotIn("publication_approval: publish", workflow)
+        self.assertEqual(workflow.count("platform:"), 9)
+        self.assertIn("Verify nine-platform candidate", workflow)
+        self.assertIn("Expected exact real-model evidence", workflow)
+        self.assertNotIn("publication_approval", workflow)
+        self.assertNotIn("gh release", workflow)
         self.assertNotIn("contents: write", workflow)
-
-        release_workflow = (
-            root / ".github/workflows/native_release.yml"
-        ).read_text(encoding="utf-8")
-        pull_request_gate = release_workflow[
-            release_workflow.index("pull_request)") :
-            release_workflow.index("*)", release_workflow.index("pull_request)"))
-        ]
-        self.assertIn('test "$PUBLICATION_APPROVAL" = prepare-only', pull_request_gate)
-        self.assertIn('test "$TARGET_PLATFORM" = all', pull_request_gate)
-        self.assertIn('test "$TARGET_ARCH" = all', pull_request_gate)
-        self.assertIn('test "$RUN_ASR_SMOKE" = true', pull_request_gate)
-        self.assertIn("--require-smoke macos/arm64", release_workflow)
 
     def test_draft_identity_is_reconciled_before_candidate_tag_is_allowed(self) -> None:
         root = Path(__file__).resolve().parents[1]

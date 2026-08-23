@@ -66,14 +66,13 @@ the exact workflow run, inputs, commits, validation counts, smoke targets, and
 candidate identity. Published releases replace that record with the validated
 draft release ID, URL, and GitHub SHA-256 digests before promotion.
 
-Pull requests that change release tooling call the same workflow through
-`.github/workflows/pr_release_qualification.yml`, with inputs fixed to the
-current compatible stable line and `publication_approval=prepare-only`. The
-qualification workflow checks out the exact pull-request head, builds all nine
-platform targets, and requires pinned real-model evidence on Linux x64,
-Windows x64, and macOS arm64. Pull-request events fail closed unless the full
-matrix, smoke policy, and prepare-only boundary remain intact; the publish job
-is therefore unreachable from this path.
+Pull requests that change release tooling run the read-only
+`.github/workflows/pr_release_qualification.yml` workflow. Its inputs are fixed
+to the current compatible stable line; it checks out the exact pull-request
+head, builds all nine platform targets, and requires pinned real-model evidence
+on Linux x64, Windows x64, and macOS arm64. It contains no publication input,
+write permission, release command, or call into the write-scoped publication
+job.
 
 The scheduled `.github/workflows/auto_upstream_release.yml` only detects a
 consumable stable upstream candidate and uploads `preparation.json`. It has
