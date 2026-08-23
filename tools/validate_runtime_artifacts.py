@@ -59,7 +59,10 @@ def main() -> int:
     parser.add_argument(
         "--allow-missing-official-assets",
         action="store_true",
-        help="Validate a source-only development package without release assets.",
+        help=(
+            "Validate source-built runtimes without requiring the upstream "
+            "official Apple release archives."
+        ),
     )
     args = parser.parse_args()
 

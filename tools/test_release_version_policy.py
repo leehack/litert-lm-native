@@ -96,6 +96,17 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         self.assertNotIn("gh release", workflow)
         self.assertNotIn("contents: write", workflow)
 
+    def test_runtime_validator_describes_official_asset_override(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        validator = (root / "tools/validate_runtime_artifacts.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            '"official Apple release archives."',
+            validator,
+        )
+        self.assertNotIn("source-only development package", validator)
+
     def test_draft_identity_is_reconciled_before_candidate_tag_is_allowed(self) -> None:
         root = Path(__file__).resolve().parents[1]
         workflow = (root / ".github/workflows/native_release.yml").read_text(
