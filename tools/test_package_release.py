@@ -377,6 +377,32 @@ class PackageReleaseTest(unittest.TestCase):
                     release_tag="v0.16.0-3",
                 )
 
+    def test_smoke_evidence_rejects_symlinked_or_non_directory_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            outside = root / "outside"
+            outside.mkdir()
+            linked = root / "linked-evidence"
+            try:
+                linked.symlink_to(outside, target_is_directory=True)
+            except OSError as error:
+                self.skipTest(f"symlinks unavailable: {error}")
+            evidence_file = root / "evidence.json"
+            evidence_file.write_text("{}", encoding="utf-8")
+
+            for evidence_root in (linked, evidence_file):
+                with self.subTest(evidence_root=evidence_root.name):
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "smoke evidence directory must be a non-symlink directory",
+                    ):
+                        package_release.load_smoke_evidence(
+                            evidence_root,
+                            upstream_commit=UPSTREAM_COMMIT,
+                            native_commit=NATIVE_COMMIT,
+                            release_tag="v0.16.0-3",
+                        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -107,8 +107,20 @@ def load_smoke_evidence(
     native_commit: str,
     release_tag: str,
 ) -> list[dict]:
-    if evidence_dir is None or not evidence_dir.exists():
+    if evidence_dir is None:
         return []
+    if evidence_dir.is_symlink():
+        raise ValueError(
+            "smoke evidence directory must be a non-symlink directory: "
+            f"{evidence_dir}"
+        )
+    if not evidence_dir.exists():
+        return []
+    if not evidence_dir.is_dir():
+        raise ValueError(
+            "smoke evidence directory must be a non-symlink directory: "
+            f"{evidence_dir}"
+        )
     try:
         evidence_root = evidence_dir.resolve(strict=True)
     except OSError as error:
