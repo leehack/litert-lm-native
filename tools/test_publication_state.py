@@ -65,6 +65,34 @@ class PublicationStateTest(unittest.TestCase):
         published["draft"] = False
         with self.assertRaisesRegex(PublicationStateError, "published"):
             plan([published])
+        terminal = plan_publication(
+            [published],
+            approval="publish",
+            release_tag="v0.16.0-3",
+            upstream_tag="v0.16.0",
+            upstream_commit=UPSTREAM,
+            compatibility_tag="v0.16.0",
+            native_commit=NATIVE,
+            correlation_id="llamadart-400-1",
+            prerelease=True,
+            allow_published_exact=True,
+        )
+        self.assertEqual(terminal["action"], "verify-published")
+
+        published["body"] = "wrong transaction"
+        with self.assertRaisesRegex(PublicationStateError, "exact inputs"):
+            plan_publication(
+                [published],
+                approval="publish",
+                release_tag="v0.16.0-3",
+                upstream_tag="v0.16.0",
+                upstream_commit=UPSTREAM,
+                compatibility_tag="v0.16.0",
+                native_commit=NATIVE,
+                correlation_id="llamadart-400-1",
+                prerelease=True,
+                allow_published_exact=True,
+            )
 
         mismatch = self.matching_draft()
         mismatch["body"] = "different correlation"

@@ -67,7 +67,10 @@ Draft state is deterministic: a retry may resume only a still-draft release
 whose target commit, title, prerelease class, exact-input notes, and correlation
 identity all match, and whose lightweight candidate tag still targets the exact
 native commit. A matching retry removes partial draft assets and uploads the
-candidate again; any mismatched or published collision fails closed. Before
+candidate again. If draft promotion succeeded remotely but the client lost the
+response, an exact retry revalidates the published release, tag target, complete
+asset bytes, manifest, and stored transaction result, then exits without a
+write. Any mismatch or unrelated published collision fails closed. Before
 promotion, every GitHub asset name, uploaded state, byte size, and SHA-256 must
 match the locally prepared candidate, and the release/tag identity is queried
 and validated again after the final result upload. An

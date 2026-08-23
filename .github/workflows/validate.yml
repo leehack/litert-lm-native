@@ -41,6 +41,7 @@ jobs:
             tools/release_version_policy.py \
             tools/release_result.py \
             tools/publication_state.py \
+            tools/validate_release_result.py \
             tools/generate_schema2_contract_fixture.py \
             tools/build_upstream_runtime.py \
             tools/package_release.py \

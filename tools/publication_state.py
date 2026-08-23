@@ -45,6 +45,7 @@ def plan_publication(
     native_commit: str,
     correlation_id: str,
     prerelease: bool,
+    allow_published_exact: bool = False,
 ) -> dict:
     if any(not isinstance(item, dict) for item in releases):
         raise PublicationStateError("release metadata entries must be objects")
@@ -76,10 +77,6 @@ def plan_publication(
         raise PublicationStateError(
             f"release collision: {release_tag} already has a release record"
         )
-    if existing.get("draft") is not True:
-        raise PublicationStateError(
-            f"release collision: published release {release_tag} is immutable"
-        )
     expected = {
         "target_commitish": native_commit,
         "name": title,
@@ -96,7 +93,19 @@ def plan_publication(
         )
     release_id = existing.get("id")
     if not isinstance(release_id, int):
-        raise PublicationStateError("matching draft release has no numeric id")
+        raise PublicationStateError("matching release has no numeric id")
+    if existing.get("draft") is not True:
+        if not allow_published_exact:
+            raise PublicationStateError(
+                f"release collision: published release {release_tag} is immutable"
+            )
+        return {
+            "action": "verify-published",
+            "releaseId": release_id,
+            "title": title,
+            "notes": notes,
+            "prerelease": prerelease,
+        }
     return {
         "action": "resume",
         "releaseId": release_id,
@@ -209,6 +218,7 @@ def main() -> int:
     parser.add_argument("--tag-ref", type=Path)
     parser.add_argument("--candidate-dir", type=Path)
     parser.add_argument("--release-result", type=Path)
+    parser.add_argument("--allow-published-exact", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:
@@ -228,12 +238,13 @@ def main() -> int:
             native_commit=args.native_commit,
             correlation_id=args.correlation_id,
             prerelease=args.prerelease == "true",
+            allow_published_exact=args.allow_published_exact,
         )
         matches = [item for item in releases if item.get("tag_name") == args.release_tag]
         if args.tag_ref is not None:
-            if plan["action"] != "resume" or len(matches) != 1:
+            if plan["action"] not in {"resume", "verify-published"} or len(matches) != 1:
                 raise PublicationStateError(
-                    "candidate tag validation requires one exact resumable draft"
+                    "candidate tag validation requires one exact release transaction"
                 )
             tag_ref = _load_json(args.tag_ref, label="candidate tag metadata")
             validate_tag_ref(
@@ -242,9 +253,9 @@ def main() -> int:
                 native_commit=args.native_commit,
             )
         if args.candidate_dir is not None:
-            if plan["action"] != "resume" or len(matches) != 1:
+            if plan["action"] not in {"resume", "verify-published"} or len(matches) != 1:
                 raise PublicationStateError(
-                    "candidate asset validation requires one exact resumable draft"
+                    "candidate asset validation requires one exact release transaction"
                 )
             validate_candidate_assets(
                 matches[0],

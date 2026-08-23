@@ -142,6 +142,65 @@ def build_result(
     return result
 
 
+def validate_published_result(
+    result: dict,
+    *,
+    manifest: dict,
+    correlation_id: str,
+    repository: str,
+    release_tag: str,
+    upstream_tag: str | None,
+    upstream_commit: str,
+    compatibility_tag: str,
+    native_commit: str,
+    candidate_artifact: str,
+    release_metadata: dict,
+) -> None:
+    if not isinstance(result, dict):
+        raise ValueError("published release result must be an object")
+    workflow = result.get("workflow")
+    if not isinstance(workflow, dict):
+        raise ValueError("published release result is missing workflow identity")
+    run_id = workflow.get("runId")
+    run_attempt = workflow.get("runAttempt")
+    run_url = workflow.get("url")
+    if (
+        not isinstance(run_id, int)
+        or run_id <= 0
+        or not isinstance(run_attempt, int)
+        or run_attempt <= 0
+        or not isinstance(run_url, str)
+        or not run_url
+    ):
+        raise ValueError("published release result workflow identity is invalid")
+    expected_run_url = f"https://github.com/{repository}/actions/runs/{run_id}"
+    if run_url != expected_run_url:
+        raise ValueError("published release result workflow URL is invalid")
+    if release_metadata.get("draft") is not False:
+        raise ValueError("published release metadata must not be a draft")
+    validation_metadata = dict(release_metadata)
+    validation_metadata["draft"] = True
+    expected = build_result(
+        manifest=manifest,
+        correlation_id=correlation_id,
+        repository=repository,
+        run_id=run_id,
+        run_attempt=run_attempt,
+        run_url=run_url,
+        approval="publish",
+        outcome="validated-for-publication",
+        release_tag=release_tag,
+        upstream_tag=upstream_tag,
+        upstream_commit=upstream_commit,
+        compatibility_tag=compatibility_tag,
+        native_commit=native_commit,
+        candidate_artifact=candidate_artifact,
+        release_metadata=validation_metadata,
+    )
+    if result != expected:
+        raise ValueError("published release result does not match exact transaction")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, required=True)

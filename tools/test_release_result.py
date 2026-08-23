@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from publication_state import release_notes
-from release_result import build_result
+from release_result import build_result, validate_published_result
 
 
 UPSTREAM = "924e79c91542761242244e4f1651851f822e4cbb"
@@ -80,7 +80,7 @@ class ReleaseResultTest(unittest.TestCase):
             repository="leehack/litert-lm-native",
             run_id=42,
             run_attempt=1,
-            run_url="https://example.invalid/run/42",
+            run_url="https://github.com/leehack/litert-lm-native/actions/runs/42",
             approval="publish",
             outcome="validated-for-publication",
             release_tag="v0.16.0-3",
@@ -115,7 +115,6 @@ class ReleaseResultTest(unittest.TestCase):
                 },
                 **common,
             )
-
         mismatched = {
             "id": 7,
             "html_url": "https://example.invalid/release/7",
@@ -134,6 +133,90 @@ class ReleaseResultTest(unittest.TestCase):
                 **common,
             )
 
+    def test_exact_published_result_is_terminal_and_mismatch_rejects(self) -> None:
+        metadata = {
+            "id": 7,
+            "html_url": "https://example.invalid/release/7",
+            "tag_name": "v0.16.0-3",
+            "target_commitish": NATIVE,
+            "name": "LiteRT-LM v0.16.0-3",
+            "body": release_notes(
+                release_tag="v0.16.0-3",
+                upstream_tag="v0.16.0",
+                upstream_commit=UPSTREAM,
+                compatibility_tag="v0.16.0",
+                native_commit=NATIVE,
+                correlation_id="valid",
+            ),
+            "draft": True,
+            "prerelease": True,
+            "assets": [
+                {"name": "manifest.json", "digest": "sha256:" + "a" * 64},
+                {"name": "release-result.json", "digest": "sha256:" + "b" * 64},
+            ],
+        }
+        result = build_result(
+            manifest=self.manifest(),
+            correlation_id="valid",
+            repository="leehack/litert-lm-native",
+            run_id=42,
+            run_attempt=1,
+            run_url="https://github.com/leehack/litert-lm-native/actions/runs/42",
+            approval="publish",
+            outcome="validated-for-publication",
+            release_tag="v0.16.0-3",
+            upstream_tag="v0.16.0",
+            upstream_commit=UPSTREAM,
+            compatibility_tag="v0.16.0",
+            native_commit=NATIVE,
+            candidate_artifact="candidate",
+            release_metadata=metadata,
+        )
+        metadata["draft"] = False
+        validate_published_result(
+            result,
+            manifest=self.manifest(),
+            correlation_id="valid",
+            repository="leehack/litert-lm-native",
+            release_tag="v0.16.0-3",
+            upstream_tag="v0.16.0",
+            upstream_commit=UPSTREAM,
+            compatibility_tag="v0.16.0",
+            native_commit=NATIVE,
+            candidate_artifact="candidate",
+            release_metadata=metadata,
+        )
+        result["correlationId"] = "wrong"
+        with self.assertRaisesRegex(ValueError, "exact transaction"):
+            validate_published_result(
+                result,
+                manifest=self.manifest(),
+                correlation_id="valid",
+                repository="leehack/litert-lm-native",
+                release_tag="v0.16.0-3",
+                upstream_tag="v0.16.0",
+                upstream_commit=UPSTREAM,
+                compatibility_tag="v0.16.0",
+                native_commit=NATIVE,
+                candidate_artifact="candidate",
+                release_metadata=metadata,
+            )
+        result["correlationId"] = "valid"
+        result["workflow"]["url"] = "https://example.invalid/run/42"
+        with self.assertRaisesRegex(ValueError, "workflow URL"):
+            validate_published_result(
+                result,
+                manifest=self.manifest(),
+                correlation_id="valid",
+                repository="leehack/litert-lm-native",
+                release_tag="v0.16.0-3",
+                upstream_tag="v0.16.0",
+                upstream_commit=UPSTREAM,
+                compatibility_tag="v0.16.0",
+                native_commit=NATIVE,
+                candidate_artifact="candidate",
+                release_metadata=metadata,
+            )
 
 if __name__ == "__main__":
     unittest.main()

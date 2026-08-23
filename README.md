@@ -123,7 +123,9 @@ python3 tools/validate_artifacts.py
   writes a fail-closed schema 2 `manifest.json` plus `SHA256SUMS`, and uploads a prepared
   candidate by default. Publication requires the explicit `publish` input,
   exact-input revalidation, required real-model evidence, draft validation, and
-  draft promotion. Existing releases are never edited or overwritten.
+  draft promotion. Existing releases are never edited or overwritten; an exact
+  retry after a lost promotion response verifies the immutable published
+  transaction and exits without mutation.
 - `Detect Upstream Release`: runs daily with read-only permissions. It detects
   and records a consumable stable candidate as `preparation.json`; it never
   dispatches the build and never publishes.

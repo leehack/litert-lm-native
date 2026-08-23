@@ -135,8 +135,26 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
                 section.index("tools/publication_state.py"),
                 section.index("--allow-existing-candidate-tag"),
             )
-            self.assertIn('if [ "$(jq -r .action publication-plan.json)" = resume ]', section)
+            self.assertIn('publication_action="$(jq -r .action publication-plan.json)"', section)
+            self.assertIn('[ "$publication_action" = resume ]', section)
+            self.assertIn('[ "$publication_action" = verify-published ]', section)
         self.assertIn("--skip-history", preflight)
+
+    def test_exact_published_retry_is_verified_without_mutation(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/native_release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertGreaterEqual(workflow.count("--allow-published-exact"), 7)
+        self.assertIn("tools/validate_release_result.py", workflow)
+        self.assertIn("Exact published transaction already exists", workflow)
+        asset_mutation = workflow[
+            workflow.index(
+                'if [ "$(jq -r .action publication-plan.json)" != verify-published ]'
+            ) :
+            workflow.index("- name: Validate draft and promote it")
+        ]
+        self.assertIn("!= verify-published", asset_mutation)
 
     def test_stable_and_compact_rebuild(self) -> None:
         upstream = parse_upstream(

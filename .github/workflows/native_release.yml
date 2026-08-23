@@ -168,6 +168,10 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
             > existing-release-pages.json
           jq 'add' existing-release-pages.json > existing-releases.json
+          publication_args=()
+          if [ "$PUBLICATION_APPROVAL" = publish ]; then
+            publication_args+=(--allow-published-exact)
+          fi
           python3 tools/publication_state.py \
             --releases existing-releases.json \
             --approval "$PUBLICATION_APPROVAL" \
@@ -178,10 +182,13 @@ jobs:
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
             --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
+            "${publication_args[@]}" \
             --output publication-plan.json
 
           history_args=()
-          if [ "$(jq -r .action publication-plan.json)" = resume ]; then
+          publication_action="$(jq -r .action publication-plan.json)"
+          if [ "$publication_action" = resume ] || \
+            [ "$publication_action" = verify-published ]; then
             history_args+=(--allow-existing-candidate-tag)
             jq --arg tag "$RELEASE_TAG" \
               '.[] | select(.tag_name == $tag)' \
@@ -200,6 +207,7 @@ jobs:
               --correlation-id "$CORRELATION_ID" \
               --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
               --tag-ref candidate-tag-ref.json \
+              "${publication_args[@]}" \
               --output publication-plan.json
           fi
           gh api --paginate \
@@ -678,9 +686,12 @@ jobs:
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
+            --allow-published-exact \
             --output publication-plan.json
           history_args=()
-          if [ "$(jq -r .action publication-plan.json)" = resume ]; then
+          publication_action="$(jq -r .action publication-plan.json)"
+          if [ "$publication_action" = resume ] || \
+            [ "$publication_action" = verify-published ]; then
             history_args+=(--allow-existing-candidate-tag)
             gh api \
               "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
@@ -696,6 +707,7 @@ jobs:
               --correlation-id "$CORRELATION_ID" \
               --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
               --tag-ref candidate-tag-ref.json \
+              --allow-published-exact \
               --output publication-plan.json
           fi
           gh api --paginate \
@@ -729,6 +741,7 @@ jobs:
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
+            --allow-published-exact \
             --output publication-plan.json
           prerelease_args=()
           if [ "${{ needs.preflight.outputs.github_prerelease }}" = true ]; then
@@ -759,6 +772,7 @@ jobs:
             --native-commit "$NATIVE_COMMIT" \
             --correlation-id "$CORRELATION_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
+            --allow-published-exact \
             --output publication-plan.json
           release_id="$(jq -r .releaseId publication-plan.json)"
           gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
@@ -777,17 +791,20 @@ jobs:
             --correlation-id "$CORRELATION_ID" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --tag-ref candidate-tag-ref.json \
+            --allow-published-exact \
             --output publication-plan.json
-          while IFS= read -r asset_id; do
-            gh api --method DELETE \
-              "repos/${GITHUB_REPOSITORY}/releases/assets/$asset_id"
-          done < <(jq -r '.assets[].id' draft-release.json)
-          gh release upload "$RELEASE_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            candidate/release/* \
-            candidate/manifest.json \
-            candidate/SHA256SUMS \
-            candidate/release-result.json
+          if [ "$(jq -r .action publication-plan.json)" != verify-published ]; then
+            while IFS= read -r asset_id; do
+              gh api --method DELETE \
+                "repos/${GITHUB_REPOSITORY}/releases/assets/$asset_id"
+            done < <(jq -r '.assets[].id' draft-release.json)
+            gh release upload "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              candidate/release/* \
+              candidate/manifest.json \
+              candidate/SHA256SUMS \
+              candidate/release-result.json
+          fi
 
       - name: Validate draft and promote it
         shell: bash
@@ -807,6 +824,22 @@ jobs:
           gh api \
             "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
             > published-release-check/tag-ref.json
+          release_result_args=()
+          if [ "$(jq -r .draft published-release-check/release.json)" = false ]; then
+            release_result_url="$(
+              jq -r '.assets[] | select(.name == "release-result.json") | .url' \
+                published-release-check/release.json
+            )"
+            test -n "$release_result_url"
+            test "$release_result_url" != null
+            gh api "$release_result_url" \
+              -H 'Accept: application/octet-stream' \
+              > published-release-check/existing-release-result.json
+            release_result_args+=(
+              --release-result
+              published-release-check/existing-release-result.json
+            )
+          fi
           python3 tools/publication_state.py \
             --releases published-release-check/releases.json \
             --approval publish \
@@ -819,6 +852,8 @@ jobs:
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             --tag-ref published-release-check/tag-ref.json \
             --candidate-dir candidate \
+            "${release_result_args[@]}" \
+            --allow-published-exact \
             --output published-release-check/publication-plan.json
           manifest_url="$(
             python3 - <<'PY'
@@ -840,6 +875,24 @@ jobs:
             --release-metadata published-release-check/release.json \
             --require-smoke linux/x64 \
             --require-smoke windows/x64
+          if [ "$(jq -r .action published-release-check/publication-plan.json)" = \
+            verify-published ]; then
+            python3 tools/validate_release_result.py \
+              --result published-release-check/existing-release-result.json \
+              --manifest published-release-check/manifest.json \
+              --release-metadata published-release-check/release.json \
+              --correlation-id "$CORRELATION_ID" \
+              --repository "$GITHUB_REPOSITORY" \
+              --release-tag "$RELEASE_TAG" \
+              --upstream-tag "$UPSTREAM_TAG" \
+              --upstream-commit "$UPSTREAM_COMMIT" \
+              --compatibility-tag "$COMPATIBILITY_TAG" \
+              --native-commit "$NATIVE_COMMIT" \
+              --candidate-artifact \
+                "release-candidate-${RELEASE_TAG}-${CORRELATION_ID}"
+            echo "Exact published transaction already exists; no publication mutation needed."
+            exit 0
+          fi
           python3 tools/release_result.py \
             --manifest published-release-check/manifest.json \
             --correlation-id "$CORRELATION_ID" \
@@ -882,6 +935,7 @@ jobs:
             --tag-ref published-release-check/final-tag-ref.json \
             --candidate-dir candidate \
             --release-result published-release-check/release-result.json \
+            --allow-published-exact \
             --output published-release-check/final-publication-plan.json
           python3 tools/validate_release_manifest.py \
             published-release-check/manifest.json \
