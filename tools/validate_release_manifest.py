@@ -36,6 +36,16 @@ V0_16_IOS_GPU_SPM_XCFRAMEWORKS = [
     "litert-lm-native-apple-LiteRtTopKMetalSampler-xcframework-{tag}.zip",
 ]
 
+# The Apple packager emits these when their pinned v0.16 runtime inputs exist.
+# Keep the optional inventory explicit so arbitrary manifest-added zips still fail.
+V0_16_ALLOWED_SPM_COMPANION_XCFRAMEWORKS = [
+    "litert-lm-native-apple-GemmaModelConstraintProvider-xcframework-{tag}.zip",
+    "litert-lm-native-apple-LiteRt-xcframework-{tag}.zip",
+    "litert-lm-native-apple-LiteRtTopKWebGpuSampler-xcframework-{tag}.zip",
+    "litert-lm-native-apple-LiteRtWebGpuAccelerator-xcframework-{tag}.zip",
+    "litert-lm-native-apple-WebgpuDawn-xcframework-{tag}.zip",
+]
+
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED_PLATFORM_KEYS = {
@@ -395,7 +405,7 @@ def validate_schema_2_payload(
     if covered_paths != native_paths:
         raise SystemExit("Release manifest has unbound native artifact provenance")
 
-    expected_spm_paths = {
+    required_spm_paths = {
         (
             Path("dist")
             / "spm"
@@ -404,16 +414,27 @@ def validate_schema_2_payload(
         ).as_posix()
         for asset in required_spm_assets(compatibility_tag)
     }
+    allowed_spm_paths = {
+        (
+            Path("dist")
+            / "spm"
+            / release_tag
+            / asset.format(tag=release_tag)
+        ).as_posix()
+        for asset in allowed_spm_assets(compatibility_tag)
+    }
     actual_spm_paths = {
         path
         for path in artifacts_by_path
         if Path(path).parts[:2] == ("dist", "spm")
     }
-    if actual_spm_paths != expected_spm_paths:
+    missing_spm_paths = required_spm_paths - actual_spm_paths
+    unexpected_spm_paths = actual_spm_paths - allowed_spm_paths
+    if missing_spm_paths or unexpected_spm_paths:
         raise SystemExit(
             "Release manifest SPM artifact inventory mismatch; "
-            f"missing={sorted(expected_spm_paths - actual_spm_paths)}, "
-            f"unexpected={sorted(actual_spm_paths - expected_spm_paths)}"
+            f"missing={sorted(missing_spm_paths)}, "
+            f"unexpected={sorted(unexpected_spm_paths)}"
         )
 
     required_paths = required_runtime_artifacts(
@@ -584,6 +605,13 @@ def required_spm_assets(compatibility_tag: str) -> list[str]:
     assets = list(REQUIRED_SPM_XCFRAMEWORKS)
     if is_at_least(compatibility_tag, (0, 16, 0)):
         assets.extend(V0_16_IOS_GPU_SPM_XCFRAMEWORKS)
+    return assets
+
+
+def allowed_spm_assets(compatibility_tag: str) -> list[str]:
+    assets = required_spm_assets(compatibility_tag)
+    if is_at_least(compatibility_tag, (0, 16, 0)):
+        assets.extend(V0_16_ALLOWED_SPM_COMPANION_XCFRAMEWORKS)
     return assets
 
 
@@ -826,16 +854,12 @@ def main() -> int:
                         f"release asset[{index}] must have an exact GitHub SHA-256 digest"
                     )
         asset_name_set = set(asset_names)
-        legacy_spm_assets = (
-            sorted(
-                Path(path).name
-                for path in paths
-                if isinstance(path, str)
-                and path.startswith(f"dist/spm/{args.release_tag}/")
-                and path.endswith(".zip")
-            )
-            if schema_version == 1
-            else []
+        manifest_spm_assets = sorted(
+            Path(path).name
+            for path in paths
+            if isinstance(path, str)
+            and path.startswith(f"dist/spm/{args.release_tag}/")
+            and path.endswith(".zip")
         )
         required_assets = [
             "manifest.json",
@@ -846,7 +870,7 @@ def main() -> int:
                 for pattern in REQUIRED_RUNTIME_ARCHIVES
             ],
             *[pattern.format(tag=args.release_tag) for pattern in required_spm],
-            *legacy_spm_assets,
+            *manifest_spm_assets,
         ]
         if schema_version == 2:
             required_assets.append("release-result.json")

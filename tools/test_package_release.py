@@ -119,6 +119,41 @@ class PackageReleaseTest(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, r"artifact\[0\] must be an object"):
                     validate_artifacts.validate_manifest()
 
+                base_artifact = {
+                    "runtime": "native",
+                    "platform": "linux",
+                    "path": "runtime.so",
+                    "fileName": "runtime.so",
+                    "sha256": "0" * 64,
+                }
+                for unsafe_path in (
+                    None,
+                    [],
+                    "",
+                    ".",
+                    "../runtime.so",
+                    "/runtime.so",
+                    "dir\\runtime.so",
+                ):
+                    with self.subTest(unsafe_path=unsafe_path):
+                        artifact = dict(base_artifact)
+                        artifact["path"] = unsafe_path
+                        manifest.write_text(
+                            json.dumps(
+                                {
+                                    "schemaVersion": 1,
+                                    "package": "litert-lm-native",
+                                    "artifacts": [artifact],
+                                }
+                            ),
+                            encoding="utf-8",
+                        )
+                        with self.assertRaisesRegex(
+                            SystemExit,
+                            "safe normalized repository-relative path",
+                        ):
+                            validate_artifacts.validate_manifest()
+
     def test_schema_2_commit_rejects_non_hex_before_artifact_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

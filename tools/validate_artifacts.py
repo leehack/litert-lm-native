@@ -71,12 +71,27 @@ def validate_manifest() -> dict:
         for key in ("runtime", "platform", "path", "fileName", "sha256"):
             if key not in artifact:
                 fail(f"artifact[{index}] missing {key}")
-        path = REPO_ROOT / artifact["path"]
-        if artifact["path"] in seen:
-            fail(f"duplicate artifact path: {artifact['path']}")
-        seen.add(artifact["path"])
+        artifact_path = artifact["path"]
+        relative_path = Path(artifact_path) if isinstance(artifact_path, str) else None
+        if (
+            relative_path is None
+            or not artifact_path
+            or "\\" in artifact_path
+            or artifact_path == "."
+            or relative_path.is_absolute()
+            or ".." in relative_path.parts
+            or relative_path.as_posix() != artifact_path
+        ):
+            fail(
+                f"artifact[{index}] path must be a safe normalized "
+                "repository-relative path"
+            )
+        path = REPO_ROOT / relative_path
+        if artifact_path in seen:
+            fail(f"duplicate artifact path: {artifact_path}")
+        seen.add(artifact_path)
         if not path.is_file():
-            fail(f"artifact does not exist: {artifact['path']}")
+            fail(f"artifact does not exist: {artifact_path}")
         if (
             not isinstance(artifact["sha256"], str)
             or SHA256_RE.fullmatch(artifact["sha256"]) is None
@@ -84,7 +99,7 @@ def validate_manifest() -> dict:
             fail(f"artifact[{index}] sha256 must be a 64-hex digest")
         actual = sha256_file(path)
         if actual != artifact["sha256"]:
-            fail(f"checksum mismatch for {artifact['path']}")
+            fail(f"checksum mismatch for {artifact_path}")
     return manifest
 
 

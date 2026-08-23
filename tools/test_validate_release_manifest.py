@@ -362,6 +362,79 @@ class ValidateReleaseManifestTest(unittest.TestCase):
                 ):
                     main()
 
+    def test_known_v0_16_spm_companions_are_allowed_and_release_bound(self) -> None:
+        manifest = deepcopy(self.valid)
+        source = next(
+            artifact
+            for artifact in manifest["artifacts"]
+            if artifact["path"].startswith(f"dist/spm/{RELEASE_TAG}/")
+        )
+        companion_modules = (
+            "GemmaModelConstraintProvider",
+            "LiteRt",
+            "LiteRtTopKWebGpuSampler",
+            "LiteRtWebGpuAccelerator",
+            "WebgpuDawn",
+        )
+        companion_names = []
+        for module in companion_modules:
+            name = (
+                f"litert-lm-native-apple-{module}-xcframework-{RELEASE_TAG}.zip"
+            )
+            companion_names.append(name)
+            companion = deepcopy(source)
+            companion["path"] = f"dist/spm/{RELEASE_TAG}/{name}"
+            companion["fileName"] = name
+            manifest["artifacts"].append(companion)
+
+        fixture = (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "schema2_contract_release.json"
+        )
+        release = json.loads(fixture.read_text(encoding="utf-8"))
+        release["assets"].extend(
+            {
+                "name": name,
+                "digest": "sha256:" + hashlib.sha256(name.encode()).hexdigest(),
+            }
+            for name in companion_names
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest_path = root / "manifest.json"
+            release_path = root / "release.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            release_path.write_text(json.dumps(release), encoding="utf-8")
+            argv = [
+                "validate_release_manifest.py",
+                str(manifest_path),
+                "--upstream-tag",
+                UPSTREAM_TAG,
+                "--upstream-commit",
+                UPSTREAM_COMMIT,
+                "--compatibility-tag",
+                UPSTREAM_TAG,
+                "--native-commit",
+                NATIVE_COMMIT,
+                "--release-tag",
+                RELEASE_TAG,
+                "--release-metadata",
+                str(release_path),
+            ]
+            with patch.object(sys, "argv", argv):
+                self.assertEqual(main(), 0)
+
+            release["assets"] = [
+                asset
+                for asset in release["assets"]
+                if asset["name"] != companion_names[-1]
+            ]
+            release_path.write_text(json.dumps(release), encoding="utf-8")
+            with patch.object(sys, "argv", argv):
+                with self.assertRaisesRegex(SystemExit, "missing required assets"):
+                    main()
+
     def test_cli_rejects_malformed_manifest_and_release_metadata_cleanly(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
