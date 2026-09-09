@@ -14,6 +14,7 @@ from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
 from litert_lm_symbols import (
     has_asr_bridge,
+    is_at_least,
     required_bridge_symbols,
     required_c_api_symbols,
     uses_stream_chunk_api,
@@ -177,7 +178,10 @@ def patch_upstream_workspace(
         "    ],"
     )
     if needle not in text:
-        if ZLIB_GITHUB_MIRROR_URL not in text:
+        if ZLIB_GITHUB_MIRROR_URL not in text and (
+            f'        "{ZLIB_URL}",' not in text
+            or '"https://mirror.bazel.build/zlib.net/fossils/zlib-1.3.1.tar.gz"' not in text
+        ):
             raise RuntimeError(f"Expected zlib URL not found in {workspace}")
     else:
         text = text.replace(needle, replacement)
@@ -305,6 +309,8 @@ def build_runtime(
     ]
     if uses_stream_chunk_api(upstream_tag):
         command.append("--define=litert_lm_stream_chunk_api=true")
+    if is_at_least(upstream_tag, (0, 17, 0)):
+        command.append("--define=litert_lm_capabilities_in_c_engine=true")
     if has_asr_bridge(upstream_tag):
         command.append("--define=litert_lm_asr_api=true")
     if platform == "macos":
