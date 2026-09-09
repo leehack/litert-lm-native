@@ -12,6 +12,17 @@ config_setting(
     define_values = {"litert_lm_asr_api": "true"},
 )
 
+# v0.17 moved the capabilities C implementation into //c:engine.
+config_setting(
+    name = "capabilities_in_c_engine",
+    define_values = {"litert_lm_capabilities_in_c_engine": "true"},
+)
+
+CAPABILITIES_DEPS = select({
+    ":capabilities_in_c_engine": [],
+    "//conditions:default": ["//schema/capabilities:capabilities_c"],
+})
+
 cc_library(
     name = "litert_lm_bridge",
     srcs = ["litert_lm_bridge.c"],
@@ -97,8 +108,7 @@ cc_binary(
         ":litert_lm_bridge",
         ":litert_lm_asr_bridge",
         "//c:engine",
-        "//schema/capabilities:capabilities_c",
-    ],
+    ] + CAPABILITIES_DEPS,
 )
 
 cc_binary(
@@ -108,8 +118,7 @@ cc_binary(
         ":litert_lm_bridge",
         ":litert_lm_asr_bridge",
         "//c:engine",
-        "//schema/capabilities:capabilities_c",
-    ],
+    ] + CAPABILITIES_DEPS,
 )
 
 cc_binary(
@@ -119,6 +128,5 @@ cc_binary(
         ":litert_lm_bridge",
         ":litert_lm_asr_bridge",
         "//c:engine",
-        "//schema/capabilities:capabilities_c",
-    ],
+    ] + CAPABILITIES_DEPS,
 )

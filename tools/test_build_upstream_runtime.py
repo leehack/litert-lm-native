@@ -9,6 +9,18 @@ import build_upstream_runtime
 
 
 class BuildUpstreamRuntimeTest(unittest.TestCase):
+    def test_runtime_selects_capabilities_owner_by_upstream_version(self) -> None:
+        for tag, expected in [("v0.16.0", False), ("v0.17.0", True)]:
+            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
+                     patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]), \
+                     patch.object(build_upstream_runtime, "run", side_effect=RuntimeError("captured build")) as run:
+                    with self.assertRaisesRegex(RuntimeError, "captured build"):
+                        build_upstream_runtime.build_runtime(root, "macos", "arm64", tag, "3")
+                command = run.call_args.args[0]
+                self.assertEqual("--define=litert_lm_capabilities_in_c_engine=true" in command, expected)
+
     def test_workspace_accepts_upstream_v017_zlib_mirrors(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

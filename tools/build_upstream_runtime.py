@@ -14,6 +14,7 @@ from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
 from litert_lm_symbols import (
     has_asr_bridge,
+    is_at_least,
     required_bridge_symbols,
     required_c_api_symbols,
     uses_stream_chunk_api,
@@ -308,6 +309,8 @@ def build_runtime(
     ]
     if uses_stream_chunk_api(upstream_tag):
         command.append("--define=litert_lm_stream_chunk_api=true")
+    if is_at_least(upstream_tag, (0, 17, 0)):
+        command.append("--define=litert_lm_capabilities_in_c_engine=true")
     if has_asr_bridge(upstream_tag):
         command.append("--define=litert_lm_asr_api=true")
     if platform == "macos":
