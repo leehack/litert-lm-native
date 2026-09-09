@@ -177,7 +177,10 @@ def patch_upstream_workspace(
         "    ],"
     )
     if needle not in text:
-        if ZLIB_GITHUB_MIRROR_URL not in text:
+        if ZLIB_GITHUB_MIRROR_URL not in text and (
+            f'        "{ZLIB_URL}",' not in text
+            or '"https://mirror.bazel.build/zlib.net/fossils/zlib-1.3.1.tar.gz"' not in text
+        ):
             raise RuntimeError(f"Expected zlib URL not found in {workspace}")
     else:
         text = text.replace(needle, replacement)

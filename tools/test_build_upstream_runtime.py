@@ -9,6 +9,22 @@ import build_upstream_runtime
 
 
 class BuildUpstreamRuntimeTest(unittest.TestCase):
+    def test_workspace_accepts_upstream_v017_zlib_mirrors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "WORKSPACE"
+            text = ('http_archive(\n    name = "minizip",\n    urls = [\n'
+                    '        "https://mirror.bazel.build/zlib.net/fossils/zlib-1.3.1.tar.gz",\n'
+                    f'        "{build_upstream_runtime.ZLIB_URL}",\n    ],\n)\n')
+            workspace.write_text(text)
+            build_upstream_runtime.patch_upstream_workspace(
+                root, patch_ios_framework_paths=False)
+            self.assertEqual(workspace.read_text(), text)
+            workspace.write_text(text.replace(build_upstream_runtime.ZLIB_URL, "https://invalid.example/zlib"))
+            with self.assertRaisesRegex(RuntimeError, "Expected zlib URL"):
+                build_upstream_runtime.patch_upstream_workspace(
+                    root, patch_ios_framework_paths=False)
+
     def test_source_archive_filename_never_contains_the_raw_ref_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
