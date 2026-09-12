@@ -137,6 +137,7 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         self.assertEqual(workflow.count("platform:"), 9)
         self.assertIn("Verify nine-platform candidate", workflow)
         self.assertEqual(workflow.count("python3 tools/verify_qualification_source.py --tag"), 2)
+        self.assertEqual(workflow.count("Verify pinned upstream tag identity\n        shell: bash"), 2)
         self.assertIn('--commit "$QUALIFICATION_UPSTREAM_COMMIT"', workflow)
         self.assertLess(workflow.index("Verify pinned upstream tag identity"), workflow.index("Build exact upstream LiteRT-LM runtime"))
         self.assertLess(workflow.rindex("Verify pinned upstream tag identity"), workflow.index("Validate runtime matrix and real-model evidence"))

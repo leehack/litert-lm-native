@@ -54,6 +54,7 @@ jobs:
         run: test "$(git rev-parse HEAD)" = "$PR_HEAD_SHA"
 
       - name: Verify pinned upstream tag identity
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/verify_qualification_source.py --tag "$QUALIFICATION_UPSTREAM_TAG" --commit "$QUALIFICATION_UPSTREAM_COMMIT"
@@ -203,6 +204,7 @@ jobs:
             --clean
 
       - name: Verify pinned upstream tag identity
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/verify_qualification_source.py --tag "$QUALIFICATION_UPSTREAM_TAG" --commit "$QUALIFICATION_UPSTREAM_COMMIT"
