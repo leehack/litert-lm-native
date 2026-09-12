@@ -21,7 +21,7 @@ permissions:
 env:
   QUALIFICATION_RELEASE_TAG: v0.17.0
   QUALIFICATION_UPSTREAM_TAG: v0.17.0
-  QUALIFICATION_UPSTREAM_COMMIT: 945edf38faa78b4ead9d09ec5b07f266ee2029c1
+  QUALIFICATION_UPSTREAM_COMMIT: e9fd8c53ff968071774206163027dd84bedfe925
 
 jobs:
   build:
@@ -52,6 +52,12 @@ jobs:
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: test "$(git rev-parse HEAD)" = "$PR_HEAD_SHA"
+
+      - name: Verify pinned upstream tag identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/verify_qualification_source.py --tag "$QUALIFICATION_UPSTREAM_TAG" --commit "$QUALIFICATION_UPSTREAM_COMMIT"
 
       - name: Set up Node.js for Bazelisk fallback
         uses: actions/setup-node@v4
@@ -196,6 +202,12 @@ jobs:
           python3 tools/package_macos_runtime.py \
             --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
             --clean
+
+      - name: Verify pinned upstream tag identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/verify_qualification_source.py --tag "$QUALIFICATION_UPSTREAM_TAG" --commit "$QUALIFICATION_UPSTREAM_COMMIT"
 
       - name: Validate runtime matrix and real-model evidence
         env:
