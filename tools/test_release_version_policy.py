@@ -91,8 +91,8 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
             workflow.count('git merge-base --is-ancestor "$NATIVE_COMMIT" origin/main'),
             2,
         )
-        self.assertEqual(workflow.count("litert-release-publication"), 5)
-        self.assertEqual(workflow.count('type == "required_reviewers"'), 2)
+        self.assertNotIn("litert-release-publication", workflow)
+        self.assertNotIn('type == "required_reviewers"', workflow)
         publish_job = workflow[workflow.index("  publish:") :]
         self.assertIn("group: litert-lm-native-publication", publish_job)
         self.assertIn("cancel-in-progress: false", publish_job)
@@ -101,7 +101,7 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
             publish_job.index("Recheck exact identity and immutable history"),
         )
         self.assertLess(
-            workflow.index("Revalidate protected environment after reviewer approval"),
+            workflow.index("github.sha == inputs.native_commit", workflow.index("  publish:")),
             workflow.index("- uses: actions/checkout@v6", workflow.index("  publish:")),
         )
 

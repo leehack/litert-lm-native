@@ -56,11 +56,18 @@ official iOS and macOS C-runtime XCFramework archives. This makes upstream
 
 `prepare-only` builds and uploads a 14-day release candidate but cannot write a
 GitHub release. `publish` is an explicit manual boundary. The publish job
-is unreachable unless the repository's `litert-release-publication`
-environment exists and has at least one required reviewer. The workflow checks
-that rule before waiting for approval and again immediately after approval,
-before its first write-capable step. Merging this workflow does not configure
-the environment; a repository administrator must do that separately. The job
+runs automatically after successful full qualification when a maintainer explicitly
+dispatches `publication_approval=publish` on canonical repository `main`, with
+`native_commit` equal to the dispatch SHA. This is the publication intent boundary;
+there is no additional reviewer environment or PAT dependency. Other events,
+repositories, refs, partial matrices, and disabled smokes cannot publish.
+Only the isolated publication job receives `contents: write`; build jobs and
+upstream code retain read permissions and no persisted checkout credentials.
+Before any release mutation, trusted dispatch-SHA tools validate the candidate's
+full manifest and all three CPU model smokes (Linux x64, Windows x64, macOS arm64),
+and reconstruct its result against exact inputs, correlation ID and workflow run.
+Failed-job retries may reuse a successful package artifact from an earlier attempt
+of the same run; future attempts and cross-run artifacts fail closed. The job
 shares a non-canceling repository-wide concurrency group with every other
 publication job, so its final history recheck and all later mutations are
 serialized across release tags. The job

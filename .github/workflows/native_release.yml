@@ -81,6 +81,13 @@ concurrency:
 jobs:
   preflight:
     name: Validate exact release identity
+    if: >-
+      inputs.publication_approval == 'prepare-only' ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.repository == 'leehack/litert-lm-native' &&
+       github.ref == 'refs/heads/main' &&
+       github.sha == inputs.native_commit &&
+       inputs.publication_approval == 'publish')
     runs-on: ubuntu-latest
     outputs:
       channel: ${{ steps.policy.outputs.channel }}
@@ -506,7 +513,7 @@ jobs:
             --release-tag "$RELEASE_TAG"
           )
           if [ "$PUBLICATION_APPROVAL" = publish ]; then
-            validate_args+=(--require-smoke linux/x64 --require-smoke windows/x64)
+            validate_args+=(--require-smoke linux/x64 --require-smoke windows/x64 --require-smoke macos/arm64)
           fi
           python3 tools/validate_release_manifest.py "${validate_args[@]}"
 
@@ -575,69 +582,30 @@ jobs:
             echo "- Approval: \`$PUBLICATION_APPROVAL\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  authorize-publication:
-    name: Verify protected publication environment
-    if: inputs.publication_approval == 'publish'
-    needs: preflight
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - name: Require configured reviewers
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh api \
-            "repos/${GITHUB_REPOSITORY}/environments/litert-release-publication" \
-            > publication-environment.json
-          jq -e '
-            .protection_rules
-            | any(
-                .type == "required_reviewers"
-                and (.reviewers | type == "array" and length > 0)
-              )
-          ' publication-environment.json >/dev/null || {
-            echo "::error::litert-release-publication must require at least one reviewer"
-            exit 1
-          }
-
   publish:
-    name: Publish approved immutable release
-    if: inputs.publication_approval == 'publish'
-    needs: [preflight, package, authorize-publication]
+    name: Publish validated immutable release
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'leehack/litert-lm-native' &&
+      github.ref == 'refs/heads/main' &&
+      github.sha == inputs.native_commit &&
+      inputs.publication_approval == 'publish' &&
+      needs.preflight.result == 'success' &&
+      needs.runtime-matrix.result == 'success' &&
+      needs.build-upstream-runtime.result == 'success' &&
+      needs.package.result == 'success'
+    needs: [preflight, runtime-matrix, build-upstream-runtime, package]
     concurrency:
       group: litert-lm-native-publication
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    environment: litert-release-publication
     permissions:
       actions: read
       contents: write
     steps:
-      - name: Revalidate protected environment after reviewer approval
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh api \
-            "repos/${GITHUB_REPOSITORY}/environments/litert-release-publication" \
-            > publication-environment.json
-          jq -e '
-            .protection_rules
-            | any(
-                .type == "required_reviewers"
-                and (.reviewers | type == "array" and length > 0)
-              )
-          ' publication-environment.json >/dev/null || {
-            echo "::error::litert-release-publication reviewer protection changed"
-            exit 1
-          }
-
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.native_commit }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -645,6 +613,22 @@ jobs:
         with:
           name: release-candidate-${{ inputs.release_tag }}-${{ inputs.correlation_id }}
           path: candidate
+
+      - name: Validate same-run candidate before any publication mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/validate_publication_intent.py
+          python3 tools/validate_release_manifest.py \
+            candidate/manifest.json \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --release-tag "$RELEASE_TAG" \
+            --require-smoke linux/x64 \
+            --require-smoke windows/x64 \
+            --require-smoke macos/arm64
 
       - name: Recheck exact identity and immutable history
         shell: bash
@@ -892,7 +876,8 @@ jobs:
             --release-tag "$RELEASE_TAG" \
             --release-metadata published-release-check/release.json \
             --require-smoke linux/x64 \
-            --require-smoke windows/x64
+            --require-smoke windows/x64 \
+            --require-smoke macos/arm64
           if [ "$(jq -r .action published-release-check/publication-plan.json)" = \
             verify-published ]; then
             python3 tools/validate_release_result.py \
@@ -965,7 +950,8 @@ jobs:
             --release-tag "$RELEASE_TAG" \
             --release-metadata published-release-check/final-release.json \
             --require-smoke linux/x64 \
-            --require-smoke windows/x64
+            --require-smoke windows/x64 \
+            --require-smoke macos/arm64
           gh release edit "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false
