@@ -18,6 +18,14 @@ class VerifyQualificationSourceTest(unittest.TestCase):
             self.assertEqual(main(), 0)
         resolve.assert_called_once_with("v0.17.0")
 
+    def test_cli_rejects_tag_drift(self) -> None:
+        with patch("sys.argv", ["verify_qualification_source.py", "--tag", "v0.17.0", "--commit", OLD_COMMIT]), patch(
+            "verify_qualification_source.resolve_upstream_commit", return_value=COMMIT
+        ) as resolve:
+            with self.assertRaisesRegex(ValueError, "moved.*rerun all builds"):
+                main()
+        resolve.assert_called_once_with("v0.17.0")
+
     def test_retag_rejects_previously_qualified_commit(self) -> None:
         with patch("verify_qualification_source.resolve_upstream_commit", return_value=COMMIT):
             with self.assertRaisesRegex(ValueError, "moved.*rerun all builds"):

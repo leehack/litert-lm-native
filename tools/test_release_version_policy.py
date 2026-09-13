@@ -136,9 +136,29 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         )
         self.assertEqual(workflow.count("platform:"), 9)
         self.assertIn("Verify nine-platform candidate", workflow)
-        self.assertEqual(workflow.count("python3 tools/verify_qualification_source.py --tag"), 2)
-        self.assertEqual(workflow.count("Verify pinned upstream tag identity\n        shell: bash"), 2)
-        self.assertIn('--commit "$QUALIFICATION_UPSTREAM_COMMIT"', workflow)
+        build_job, verify_job = workflow.split("\n  verify:", 1)
+        expected_invocation = (
+            '        run: python3 tools/verify_qualification_source.py '
+            '--tag "$QUALIFICATION_UPSTREAM_TAG" '
+            '--commit "$QUALIFICATION_UPSTREAM_COMMIT"'
+        )
+        for name, job in (("build", build_job), ("verify", verify_job)):
+            with self.subTest(job=name):
+                invocations = [
+                    line for line in job.splitlines()
+                    if "run: python3 tools/verify_qualification_source.py" in line
+                ]
+                self.assertEqual(invocations, [expected_invocation])
+                step_marker = "      - name: Verify pinned upstream tag identity\n"
+                self.assertEqual(job.count(step_marker), 1)
+                guard_step = job.split(step_marker, 1)[1].split("\n      - ", 1)[0]
+                self.assertEqual(
+                    guard_step.strip(),
+                    ("        shell: bash\n"
+                     "        env:\n"
+                     "          GH_TOKEN: ${{ github.token }}\n"
+                     f"{expected_invocation}").strip(),
+                )
         self.assertLess(workflow.index("Verify pinned upstream tag identity"), workflow.index("Build exact upstream LiteRT-LM runtime"))
         self.assertLess(workflow.rindex("Verify pinned upstream tag identity"), workflow.index("Validate runtime matrix and real-model evidence"))
         self.assertIn("Expected exact real-model evidence", workflow)
