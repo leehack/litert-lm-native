@@ -1,14 +1,23 @@
 # Current Upstream Snapshot
 
-As of `2026-09-09`, upstream `v0.17.0` resolves to commit
-`945edf38faa78b4ead9d09ec5b07f266ee2029c1` and was published at
-`2026-09-08T20:56:42Z`:
+As of `2026-09-12`, upstream `v0.17.0` resolves to commit
+`e9fd8c53ff968071774206163027dd84bedfe925` and its release was recreated at
+`2026-09-09T17:06:13Z`:
 
 - Release: https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.17.0
 - `CLiteRTLM.xcframework.zip`: 121,798,772 bytes; GitHub SHA-256
   `c94fc12aa0403cb47208e419cc3bfe258214ea17035f7a63c16de536869f2186`.
 - `CLiteRTLM_mac.xcframework.zip`: 47,006,925 bytes; GitHub SHA-256
   `83efd536485c9d58fcd7fb7d4556ddb16ca46bb775b0449d08d9825c6836c1a4`.
+
+The prior qualification used `945edf38faa78b4ead9d09ec5b07f266ee2029c1`.
+The tag moved while both Apple archive byte hashes stayed unchanged; their
+GitHub asset IDs were recreated. The source delta updates SwiftPM v0.17.0
+archive URLs/checksums and a Swift embedding-test syntax correction, with no
+native C/C++ changes. Prior build and smoke evidence still belongs to the old
+commit and is not qualification of the new commit. The workflow checks the
+live tag against its exact source pin before building and again before aggregate
+validation; drift fails closed and requires fresh qualification.
 
 These are upstream asset identities, not evidence of a qualified bridge-enabled
 native release. The read-only PR qualification workflow now targets this exact
