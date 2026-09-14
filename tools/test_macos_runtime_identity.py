@@ -58,10 +58,20 @@ class MacosRuntimeIdentityTest(unittest.TestCase):
                 self.assertNotEqual(original_digest, qualified_digest)
                 self.assertEqual(hashlib.sha256(output.read_bytes()).hexdigest(), original_digest)
                 # Loading and smoke evidence happen after stage_runtime in production.
-                package_macos_runtime.stage_source_built_runtime(
-                    [{"arch": "arm64", "source_arch": "arm64", "source": staged}],
-                    clean=True, upstream_tag=UPSTREAM_TAG,
-                )
+                # Spy on the real subprocess boundary: an unconditional rewrite can
+                # preserve today's bytes but still violate the no-writer contract.
+                with patch.object(subprocess, "run", wraps=subprocess.run) as packaging_run:
+                    package_macos_runtime.stage_source_built_runtime(
+                        [{"arch": "arm64", "source_arch": "arm64", "source": staged}],
+                        clean=True, upstream_tag=UPSTREAM_TAG,
+                    )
+                runtime_writes = [
+                    call.args[0]
+                    for call in packaging_run.call_args_list
+                    if Path(call.args[0][0]).name == "install_name_tool"
+                    and str(staged) in [str(argument) for argument in call.args[0][1:]]
+                ]
+                self.assertEqual(runtime_writes, [], "Packaging must not rewrite a qualified runtime")
                 packaged_digest = hashlib.sha256(staged.read_bytes()).hexdigest()
                 self.assertEqual(qualified_digest, packaged_digest)
                 subprocess.run(["codesign", "--verify", str(staged)], check=True)
