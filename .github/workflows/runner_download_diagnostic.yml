@@ -1,0 +1,34 @@
+name: Runner Download Diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Downloads (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 17
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Sample exact acquisition paths three times
+        run: python diagnostics/runner_downloads.py
+      - name: Retain sanitized diagnostic reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: download-diagnostic-${{ matrix.os }}
+          path: diagnostic-results/*.json
+          if-no-files-found: warn
+          retention-days: 7
