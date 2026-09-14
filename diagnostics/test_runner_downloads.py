@@ -146,6 +146,33 @@ class DownloadDiagnosticTest(unittest.TestCase):
         self.assertNotIn("secret", json.dumps(result))
         self.assertEqual((diagnostic.ROUNDS, diagnostic.INTERVAL_SECONDS, diagnostic.ROUND_SECONDS), (3, 300, 240))
 
+    def test_production_round_rejects_failed_owner_even_with_passing_report(self):
+        passing_owner = {"result": "pass", "sha256": diagnostic.RULES_SHA256, "bytesRead": 22017}
+        passing_bazel = {"bootstrap": {"result": "pass", "bazel761": True},
+                         "repository": {"result": "pass"}, "repositoryInventory": {"onlyPinnedSmallArchive": True}}
+        cases = [
+            ({"result": "fail", "error": "deadline"}, passing_owner, False),
+            ({"result": "fail", "exitCode": 1}, passing_owner, False),
+            ({"result": "pass"}, None, False),
+            ({"result": "pass"}, {"result": "pass"}, False),
+            ({"result": "pass"}, passing_owner, True),
+        ]
+        for status, payload, expected in cases:
+            with self.subTest(status=status, payload=payload), tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary) / "round.json"
+                def owner_worker(command, *args):
+                    path = Path(command[-1])
+                    self.assertFalse(path.exists(), "Owner evidence must be fresh")
+                    if payload is not None:
+                        path.write_text(json.dumps(payload))
+                    return status
+                with patch.object(diagnostic, "command", side_effect=owner_worker), patch.object(diagnostic, "bazel_probes", return_value=passing_bazel), patch.object(diagnostic, "screen", return_value={"result": "pass"}), patch.object(diagnostic, "host_bazel_url", return_value="https://example.invalid/bazel"):
+                    diagnostic.run_round(output)
+                report = json.loads(output.read_text())
+                self.assertEqual(diagnostic.round_passed(report), expected)
+                if status["result"] == "fail":
+                    self.assertEqual(report["ownerSmallArchive"], status)
+
     def test_worker_failure_and_stale_pass_report_cannot_pass(self):
         for worker_result in ("pass", "fail"):
             with self.subTest(worker_result=worker_result), tempfile.TemporaryDirectory() as temporary:

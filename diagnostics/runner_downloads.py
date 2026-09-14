@@ -280,8 +280,24 @@ def run_round(report_path: Path) -> None:
         report = {"startedAtUtc": datetime.now(timezone.utc).isoformat(), "upstreamCommit": UPSTREAM, "platform": platform.system(), "arch": platform.machine(), "screens": {}}
         write_report(report_path, report)
         owner_path = directory / "owner.json"
+        owner_path.unlink(missing_ok=True)
         owner_status = command([sys.executable, str(Path(__file__).resolve()), "--owner-report", str(owner_path)], ROOT, dict(os.environ), 45)
-        report["ownerSmallArchive"] = json.loads(owner_path.read_text()) if owner_path.exists() else owner_status
+        if owner_status["result"] != "pass":
+            report["ownerSmallArchive"] = owner_status
+        else:
+            try:
+                owner = json.loads(owner_path.read_text())
+                if not isinstance(owner, dict) or owner.get("result") not in {"pass", "fail"}:
+                    raise ValueError("Invalid owner report")
+                if owner["result"] == "pass" and (
+                    owner.get("sha256") != RULES_SHA256
+                    or type(owner.get("bytesRead")) is not int
+                    or not 0 < owner["bytesRead"] <= SMALL_ARCHIVE_BYTES
+                ):
+                    raise ValueError("Incomplete owner evidence")
+                report["ownerSmallArchive"] = owner
+            except (OSError, ValueError):
+                report["ownerSmallArchive"] = {"result": "fail", "error": "missing_or_invalid_owner_report"}
         write_report(report_path, report)
         report["actualBazel"] = bazel_probes(directory)
         write_report(report_path, report)
