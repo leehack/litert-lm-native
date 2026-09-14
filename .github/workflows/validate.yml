@@ -77,5 +77,7 @@ jobs:
             --output /tmp/schema2_contract_manifest.json
           cmp tools/fixtures/schema2_contract_manifest.json \
             /tmp/schema2_contract_manifest.json
+      - name: Validate download diagnostic contracts
+        run: python3 -m unittest discover -s diagnostics -p 'test_*.py'
       - name: Web scaffold self-test
         run: node web/src/index.js --self-test
