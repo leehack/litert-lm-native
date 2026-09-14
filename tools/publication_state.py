@@ -88,9 +88,7 @@ def plan_publication(
         "body": notes,
         "prerelease": prerelease,
     }
-    mismatches = [
-        key for key, value in expected.items() if existing.get(key) != value
-    ]
+    mismatches = [key for key, value in expected.items() if existing.get(key) != value]
     if mismatches:
         raise PublicationStateError(
             f"release collision: draft {release_tag} does not match exact inputs: "
@@ -147,6 +145,7 @@ def validate_candidate_assets(
     *,
     candidate_dir: Path,
     release_result: Path | None = None,
+    allow_partial: bool = False,
 ) -> None:
     release_dir = candidate_dir / "release"
     required_top_level = {
@@ -176,7 +175,9 @@ def validate_candidate_assets(
             raise PublicationStateError(f"candidate asset is missing: {name}")
 
     assets = release.get("assets")
-    if not isinstance(assets, list) or any(not isinstance(item, dict) for item in assets):
+    if not isinstance(assets, list) or any(
+        not isinstance(item, dict) for item in assets
+    ):
         raise PublicationStateError("release asset metadata must be a list of objects")
     actual_by_name: dict[str, dict] = {}
     for asset in assets:
@@ -186,14 +187,16 @@ def validate_candidate_assets(
         if name in actual_by_name:
             raise PublicationStateError(f"duplicate release asset name: {name}")
         actual_by_name[name] = asset
-    if set(actual_by_name) != set(expected_files):
+    if (not set(actual_by_name) <= set(expected_files)) or (
+        not allow_partial and set(actual_by_name) != set(expected_files)
+    ):
         missing = sorted(set(expected_files) - set(actual_by_name))
         unexpected = sorted(set(actual_by_name) - set(expected_files))
         raise PublicationStateError(
             f"release asset inventory mismatch; missing={missing}, unexpected={unexpected}"
         )
-    for name, path in expected_files.items():
-        asset = actual_by_name[name]
+    for name, asset in actual_by_name.items():
+        path = expected_files[name]
         expected_digest = f"sha256:{_sha256(path)}"
         if asset.get("state") != "uploaded":
             raise PublicationStateError(f"release asset is not uploaded: {name}")
@@ -218,7 +221,9 @@ def _load_json(path: Path, *, label: str):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--releases", type=Path, required=True)
-    parser.add_argument("--approval", choices=("prepare-only", "publish"), required=True)
+    parser.add_argument(
+        "--approval", choices=("prepare-only", "publish"), required=True
+    )
     parser.add_argument("--release-tag", required=True)
     parser.add_argument("--upstream-tag", default="")
     parser.add_argument("--upstream-commit", required=True)
@@ -228,6 +233,7 @@ def main() -> int:
     parser.add_argument("--workflow-run-id", type=int, required=True)
     parser.add_argument("--prerelease", choices=("true", "false"), required=True)
     parser.add_argument("--tag-ref", type=Path)
+    parser.add_argument("--allow-missing-draft-tag", action="store_true")
     parser.add_argument("--candidate-dir", type=Path)
     parser.add_argument("--release-result", type=Path)
     parser.add_argument("--allow-published-exact", action="store_true")
@@ -253,20 +259,33 @@ def main() -> int:
             prerelease=args.prerelease == "true",
             allow_published_exact=args.allow_published_exact,
         )
-        matches = [item for item in releases if item.get("tag_name") == args.release_tag]
+        matches = [
+            item for item in releases if item.get("tag_name") == args.release_tag
+        ]
         if args.tag_ref is not None:
-            if plan["action"] not in {"resume", "verify-published"} or len(matches) != 1:
+            if (
+                plan["action"] not in {"resume", "verify-published"}
+                or len(matches) != 1
+            ):
                 raise PublicationStateError(
                     "candidate tag validation requires one exact release transaction"
                 )
             tag_ref = _load_json(args.tag_ref, label="candidate tag metadata")
-            validate_tag_ref(
-                tag_ref,
-                release_tag=args.release_tag,
-                native_commit=args.native_commit,
-            )
+            if not (
+                args.allow_missing_draft_tag
+                and plan["action"] == "resume"
+                and tag_ref == {"missingDraftTag": True}
+            ):
+                validate_tag_ref(
+                    tag_ref,
+                    release_tag=args.release_tag,
+                    native_commit=args.native_commit,
+                )
         if args.candidate_dir is not None:
-            if plan["action"] not in {"resume", "verify-published"} or len(matches) != 1:
+            if (
+                plan["action"] not in {"resume", "verify-published"}
+                or len(matches) != 1
+            ):
                 raise PublicationStateError(
                     "candidate asset validation requires one exact release transaction"
                 )

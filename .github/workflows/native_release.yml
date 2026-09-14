@@ -201,8 +201,8 @@ jobs:
             jq --arg tag "$RELEASE_TAG" \
               '.[] | select(.tag_name == $tag)' \
               existing-releases.json > candidate-release.json
-            gh api \
-              "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
+            python3 tools/reconcile_release_tag.py --mode read \
+              --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
               > candidate-tag-ref.json
             python3 tools/publication_state.py \
               --releases existing-releases.json \
@@ -216,6 +216,7 @@ jobs:
               --workflow-run-id "$GITHUB_RUN_ID" \
               --prerelease "$(grep -qx 'github_prerelease=true' release-policy.env && echo true || echo false)" \
               --tag-ref candidate-tag-ref.json \
+              --allow-missing-draft-tag \
               "${publication_args[@]}" \
               --output publication-plan.json
           fi
@@ -690,8 +691,8 @@ jobs:
           if [ "$publication_action" = resume ] || \
             [ "$publication_action" = verify-published ]; then
             history_args+=(--allow-existing-candidate-tag)
-            gh api \
-              "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
+            python3 tools/reconcile_release_tag.py --mode read \
+              --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
               > candidate-tag-ref.json
             python3 tools/publication_state.py \
               --releases existing-releases.json \
@@ -705,6 +706,7 @@ jobs:
               --workflow-run-id "$GITHUB_RUN_ID" \
               --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
               --tag-ref candidate-tag-ref.json \
+              --allow-missing-draft-tag \
               --allow-published-exact \
               --output publication-plan.json
           fi
@@ -777,8 +779,9 @@ jobs:
           release_id="$(jq -r .releaseId publication-plan.json)"
           gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
             > draft-release.json
-          gh api \
-            "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
+          python3 tools/reconcile_release_tag.py --mode create \
+            --expected-release-id "$release_id" \
+            --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             > candidate-tag-ref.json
           python3 tools/publication_state.py \
             --releases existing-releases.json \

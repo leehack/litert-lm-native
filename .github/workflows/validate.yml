@@ -81,3 +81,15 @@ jobs:
         run: python3 -m unittest discover -s diagnostics -p 'test_*.py'
       - name: Web scaffold self-test
         run: node web/src/index.js --self-test
+
+  publication-lifecycle:
+    name: Publication lifecycle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Exercise production publication steps with a stateful GitHub fixture
+        run: python3 tests/test_release_tag_lifecycle.py
