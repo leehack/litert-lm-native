@@ -31,6 +31,7 @@ jobs:
         run: |
           python3 -m py_compile \
             tools/runtime_dependency_utils.py \
+            tools/macos_runtime_identity.py \
             tools/git_lfs_utils.py \
             tools/litert_lm_symbols.py \
             tools/fetch_litert_lm_asr_smoke_assets.py \
