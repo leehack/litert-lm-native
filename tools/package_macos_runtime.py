@@ -18,6 +18,11 @@ from litert_lm_symbols import (
     uses_stream_chunk_api,
 )
 
+from macos_runtime_identity import (
+    LITERTLM_INSTALL_NAME,
+    normalize_macos_runtime_identity,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
 DIST_OFFICIAL_DIR = REPO_ROOT / "dist" / "official"
@@ -42,7 +47,6 @@ EXPECTED_OFFICIAL_ARCHIVE_SHA256 = {
 
 LITERTLM_LIBRARY = "libLiteRtLm.dylib"
 CLITERTLM_MAC_LIBRARY = "libCLiteRTLM_mac.dylib"
-LITERTLM_INSTALL_NAME = f"@rpath/{LITERTLM_LIBRARY}"
 CLITERTLM_MAC_INSTALL_NAME = f"@rpath/{CLITERTLM_MAC_LIBRARY}"
 LITERTLM_REEXPORT_NAME = LITERTLM_INSTALL_NAME.encode("ascii")
 CLITERTLM_MAC_REEXPORT_NAME = CLITERTLM_MAC_INSTALL_NAME.encode("ascii")
@@ -368,7 +372,7 @@ def stage_source_built_runtime(
         target_dir = BIN_DIR / "macos" / arch
         if clean:
             (target_dir / CLITERTLM_MAC_LIBRARY).unlink(missing_ok=True)
-        run(["install_name_tool", "-id", LITERTLM_INSTALL_NAME, str(source)])
+        normalize_macos_runtime_identity(source)
         validate_source_built_symbols(source, upstream_tag)
         companion = target_dir / CLITERTLM_MAC_LIBRARY
         build_source_reexport_wrapper(spec, source, companion)

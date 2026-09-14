@@ -25,6 +25,20 @@ development input also names the latest stable `upstreamCompatibilityTag` whose
 ABI and capability contract it is expected to satisfy. It does not claim that
 the development commit has that stable tag.
 
+## Runtime bytes and model evidence
+
+A model smoke's library digest must identify the final packaged runtime. macOS
+source builds normalize the dylib install name to `@rpath/libLiteRtLm.dylib`
+during staging, before loading the library for the smoke. Apple packaging checks
+the same identity and leaves an already-normalized dylib untouched. Any later
+runtime byte change requires a fresh model smoke; never rewrite a recorded digest
+to make older evidence match a different binary.
+
+The macOS regression test compiles a real Mach-O dylib and runs the production
+staging and packaging functions. It verifies successful strict manifest binding
+and rejection after a post-smoke install-name change. This is packaging coverage;
+its synthetic model fields are not real-model qualification evidence.
+
 ## Exact-input workflow
 
 `.github/workflows/native_release.yml` accepts these independent identities:

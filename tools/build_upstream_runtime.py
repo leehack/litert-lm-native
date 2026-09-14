@@ -19,6 +19,7 @@ from litert_lm_symbols import (
     required_c_api_symbols,
     uses_stream_chunk_api,
 )
+from macos_runtime_identity import normalize_macos_runtime_identity
 from package_upstream_prebuilts import apply_prebuilt_overrides
 from runtime_dependency_utils import (
     elf_has_global_flag,
@@ -339,6 +340,8 @@ def stage_runtime(output: Path, platform: str, arch: str) -> Path:
     stage_dir.mkdir(parents=True, exist_ok=True)
     staged = stage_dir / target["library"]
     copy_artifact(output, staged)
+    if platform == "macos":
+        normalize_macos_runtime_identity(staged)
     print(f"Staged {staged}", flush=True)
     return staged
 
