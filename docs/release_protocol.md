@@ -195,3 +195,10 @@ identity, and correlation ID. Recovery of a transaction created by older code
 requires a separate explicit decision about bounded continuation or retirement
 before a new qualified transaction. Never adopt or relabel its retained candidate
 as a new run or native commit.
+
+Run the maintained stateful workflow suite with
+`python3 tests/test_release_tag_lifecycle.py`. It requires Bash 4 or newer;
+set `LIFECYCLE_BASH=/path/to/bash` when the default shell binary is older.
+The `Publication lifecycle` Ubuntu CI job runs this suite separately from the
+macOS `tools/` unit-test discovery. It uses a local fake GitHub service and
+never dispatches or mutates a real release.

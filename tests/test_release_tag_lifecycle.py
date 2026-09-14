@@ -151,6 +151,9 @@ class DraftTagLifecycleTest(unittest.TestCase):
             [x[:2] for x in writes],
             [["release", "create"], ["api", "--include"], ["release", "upload"]],
         )
+        self.assertIn("--method", writes[1])
+        self.assertEqual(writes[1][writes[1].index("--method") + 1], "POST")
+        self.assertFalse(any("PATCH" in call for call in self.state["calls"]))
         self.assertEqual(
             self.state["create_payload"], {"ref": "refs/tags/v0.17.0", "sha": NATIVE}
         )
@@ -172,31 +175,77 @@ class DraftTagLifecycleTest(unittest.TestCase):
             )
             self.assertFalse(any(x[:2] == ["release", "create"] for x in self.writes()))
 
+    def run_readonly_history(self, name):
+        script = workflow_step(name)
+        start = script.index("history_args=()")
+        end = script.index("gh api --paginate " + chr(92) + "\n", start)
+        segment = script[start:end]
+        action = "resume" if self.state["release"]["draft"] else "verify-published"
+        (self.root / "publication-plan.json").write_text(json.dumps({"action": action}))
+        (self.root / "existing-releases.json").write_text(
+            json.dumps([self.state["release"]])
+        )
+        (self.root / "release-policy.env").write_text("github_prerelease=false\n")
+        return self.run_shell("publication_args=(--allow-published-exact)\n" + segment)
+
     def test_both_readonly_workflow_history_paths_admit_exact_missing_draft(self):
         for name in (
             "Verify native and upstream commits",
             "Recheck exact identity and immutable history",
         ):
-            script = workflow_step(name)
-            start = script.index("history_args=()")
-            end = script.index("gh api --paginate \\\n", start)
-            segment = script[start:end]
-            self.state = dict(
-                release=copy.deepcopy(self.release),
-                ref=None,
-                template=self.release,
-                calls=[],
-            )
-            (self.root / "publication-plan.json").write_text('{"action":"resume"}')
-            (self.root / "existing-releases.json").write_text(
-                json.dumps([self.release])
-            )
-            (self.root / "release-policy.env").write_text("github_prerelease=false\n")
-            result = self.run_shell(
-                "publication_args=(--allow-published-exact)\n" + segment
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(self.writes(), [])
+            with self.subTest(path=name):
+                self.state = dict(
+                    release=copy.deepcopy(self.release),
+                    ref=None,
+                    template=self.release,
+                    calls=[],
+                )
+                result = self.run_readonly_history(name)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.writes(), [])
+                self.assertEqual(
+                    json.loads((self.root / "candidate-tag-ref.json").read_text()),
+                    {"missingDraftTag": True},
+                )
+
+    def test_both_readonly_paths_reject_lookup_failures_without_missing_evidence(self):
+        cases = [
+            {"get_status": status} for status in (401, 403, 429, 500, 502, 503, 504)
+        ]
+        cases += [
+            {"get_malformed": True},
+            {"get_transport": True},
+            {"release": {**self.release, "draft": False}},
+            {"ref": {"ref": "refs/tags/foreign", "object": self.ref["object"]}},
+            {"ref": {"ref": self.ref["ref"], "object": {"type": "tag", "sha": NATIVE}}},
+            {
+                "ref": {
+                    "ref": self.ref["ref"],
+                    "object": {"type": "commit", "sha": "c" * 40},
+                }
+            },
+        ]
+        for name in (
+            "Verify native and upstream commits",
+            "Recheck exact identity and immutable history",
+        ):
+            for case in cases:
+                with self.subTest(path=name, case=case):
+                    self.state = dict(
+                        release=copy.deepcopy(self.release),
+                        ref=None,
+                        template=self.release,
+                        calls=[],
+                    )
+                    self.state.update(copy.deepcopy(case))
+                    result = self.run_readonly_history(name)
+                    self.assertNotEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(self.writes(), [])
+                    # The lookup itself must reject, not emit admitted missing
+                    # evidence that happens to be rejected by a later guard.
+                    self.assertEqual(
+                        (self.root / "candidate-tag-ref.json").read_text(), ""
+                    )
 
     def test_published_existing_is_readonly_missing_is_rejected(self):
         published = {**self.release, "draft": False}
@@ -250,6 +299,16 @@ class DraftTagLifecycleTest(unittest.TestCase):
             result = self.run_shell(self.writer)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(self.writes(), [])
+
+    def test_release_id_change_before_helper_rejects_without_mutation(self):
+        result = self.run_shell(
+            self.writer,
+            release=copy.deepcopy(self.release),
+            change_id_before_helper=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.writes(), [])
+        self.assertEqual((self.root / "candidate-tag-ref.json").read_text(), "")
 
     def test_matching_partial_assets_can_resume(self):
         data = (self.root / "candidate/manifest.json").read_bytes()

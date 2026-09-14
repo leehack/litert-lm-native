@@ -67,6 +67,8 @@ if a[:2] == ["release", "upload"]:
 endpoint = next((x for x in a if x.startswith("repos/")), "")
 if "/releases?per_page=" in endpoint:
     s["lists"] = s.get("lists", 0) + 1
+    if s.get("change_id_before_helper") and s["lists"] == 3:
+        s["release"]["id"] += 1
     if s.get("mutate_after_readback") and s.get("tag_reads", 0) >= 2:
         s["release"][s["mutate_after_readback"]] = "changed"
     if "--jq" in a:
@@ -91,6 +93,8 @@ if "/git/ref/tags/" in endpoint:
         out({"message": "Not Found"}, 404)
     out(s["ref"])
 if endpoint.endswith("/git/refs"):
+    if "--method" not in a or a[a.index("--method") + 1] != "POST":
+        out({"message": "Method Not Allowed"}, 405)
     payload = json.load(sys.stdin)
     s["create_payload"] = payload
     if s.get("create_applies", True):
