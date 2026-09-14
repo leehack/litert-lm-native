@@ -6,8 +6,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from publication_state import release_notes
-from release_result import build_result, load_json_object, main, validate_published_result
-
+from release_result import (
+    build_result,
+    load_json_object,
+    main,
+    validate_published_result,
+)
 
 UPSTREAM = "924e79c91542761242244e4f1651851f822e4cbb"
 NATIVE = "451ba0ce7c366972b4dc0e58f08ffe590958f943"
@@ -26,9 +30,7 @@ class ReleaseResultTest(unittest.TestCase):
             "native": {"commit": NATIVE},
             "platforms": [{"platform": "linux", "arch": "x64"}],
             "artifacts": [{"path": "bin/linux/x64/libLiteRtLm.so"}],
-            "realModelSmokes": [
-                {"platform": "linux", "arch": "x64", "result": "pass"}
-            ],
+            "realModelSmokes": [{"platform": "linux", "arch": "x64", "result": "pass"}],
         }
 
     def test_result_binds_correlation_run_inputs_and_release_digests(self) -> None:
@@ -226,6 +228,11 @@ class ReleaseResultTest(unittest.TestCase):
             candidate_artifact="candidate",
             release_metadata=metadata,
         )
+        self.assertEqual(
+            result["release"]["url"],
+            "https://github.com/leehack/litert-lm-native/releases/tag/v0.16.0-3",
+        )
+        metadata["html_url"] = result["release"]["url"]
         metadata["draft"] = False
         validate_published_result(
             result,
@@ -240,6 +247,27 @@ class ReleaseResultTest(unittest.TestCase):
             candidate_artifact="candidate",
             release_metadata=metadata,
         )
+        canonical_url = result["release"]["url"]
+        for wrong_url in (
+            "https://github.com/foreign/repo/releases/tag/v0.16.0-3",
+            "https://github.com/leehack/litert-lm-native/releases/tag/v9.0.0",
+        ):
+            result["release"]["url"] = wrong_url
+            with self.assertRaisesRegex(ValueError, "exact transaction"):
+                validate_published_result(
+                    result,
+                    manifest=self.manifest(),
+                    correlation_id="valid",
+                    repository="leehack/litert-lm-native",
+                    release_tag="v0.16.0-3",
+                    upstream_tag="v0.16.0",
+                    upstream_commit=UPSTREAM,
+                    compatibility_tag="v0.16.0",
+                    native_commit=NATIVE,
+                    candidate_artifact="candidate",
+                    release_metadata=metadata,
+                )
+        result["release"]["url"] = canonical_url
         result["correlationId"] = "wrong"
         with self.assertRaisesRegex(ValueError, "exact transaction"):
             validate_published_result(
@@ -328,6 +356,7 @@ class ReleaseResultTest(unittest.TestCase):
                     SystemExit, "release manifest must be valid UTF-8 JSON"
                 ):
                     main()
+
 
 if __name__ == "__main__":
     unittest.main()

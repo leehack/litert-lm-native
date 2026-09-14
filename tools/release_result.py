@@ -7,9 +7,9 @@ import argparse
 import json
 from pathlib import Path
 import re
+from urllib.parse import quote
 
 from publication_state import release_notes
-
 
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 CORRELATION_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
@@ -177,10 +177,15 @@ def build_result(
             name for name, digest in digests.items() if not DIGEST_RE.fullmatch(digest)
         )
         if invalid:
-            raise ValueError("release assets lack GitHub SHA-256 digests: " + ", ".join(invalid))
+            raise ValueError(
+                "release assets lack GitHub SHA-256 digests: " + ", ".join(invalid)
+            )
         result["release"] = {
             "id": release_metadata.get("id"),
-            "url": release_metadata.get("html_url"),
+            # Draft HTML URLs can contain an ephemeral untagged identifier even
+            # when the Git ref exists. Bind the receipt to the stable release
+            # route so publishing cannot invalidate its exact reconstruction.
+            "url": f"https://github.com/{repository}/releases/tag/{quote(release_tag, safe='')}",
             "draftValidated": True,
             "assetDigests": digests,
         }

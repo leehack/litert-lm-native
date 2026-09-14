@@ -160,3 +160,38 @@ only `litert_lm_main.macos_arm64`; it does not publish the required official C
 runtime XCFramework assets. It is therefore not a new consumable native source
 line. The latest consumable native artifact remains the immutable legacy release
 `v0.16.0-native.2` until a separately approved release is built and validated.
+
+### Draft tags and interrupted publication
+
+Creating a GitHub draft does not necessarily create its Git tag. Read-only
+preflight and publication-history checks accept a genuine tag API 404 only for
+one reconciled exact draft transaction. Published releases always require the
+exact lightweight tag; permission, rate-limit, server, transport, malformed
+response, wrong-target, and annotated-tag failures are not missing-tag evidence.
+
+After full qualification, the serialized publication job reconciles the draft
+again and verifies any existing partial assets against the retained candidate.
+Only this writer may create a missing lightweight ref, using the create endpoint
+and the exact native commit. It never updates, force-pushes, or deletes a ref.
+A conflict or uncertain create response requires independent exact ref readback
+and unchanged release identity and assets before any asset replacement. Later
+promotion checks remain strict. An interrupted exact draft/ref is retained for
+safe same-run recovery; no automatic tag rollback is attempted.
+
+Release receipts use the canonical repository/tag URL derived from exact inputs.
+GitHub can give drafts an ephemeral `untagged-...` URL even when the tag exists;
+publishing changes that presentation URL without changing transaction identity.
+The receipt still binds the exact release ID and complete asset digests.
+
+A retry may also encounter the final validated receipt uploaded just before a
+failed promotion. This receipt is accepted only with the complete byte-exact
+candidate, its recorded GitHub digest, and a reconstructed exact same-run result
+from a prior or current attempt. Foreign receipts and mismatched partial assets
+fail before any deletion or upload.
+
+Merging a lifecycle fix does not change code pinned to an existing failed run.
+A draft remains bound to its original workflow run, native commit, upstream
+identity, and correlation ID. Recovery of a transaction created by older code
+requires a separate explicit decision about bounded continuation or retirement
+before a new qualified transaction. Never adopt or relabel its retained candidate
+as a new run or native commit.
