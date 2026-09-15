@@ -203,6 +203,12 @@ jobs:
             --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
             --clean
 
+      - name: Qualify Apple SwiftPM archives
+        run: |
+          python3 tools/package_apple_xcframeworks.py \
+            --release-tag "$QUALIFICATION_RELEASE_TAG" \
+            --clean
+
       - name: Verify pinned upstream tag identity
         shell: bash
         env:
