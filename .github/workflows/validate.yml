@@ -30,6 +30,8 @@ jobs:
       - name: Validate Python tooling
         run: |
           python3 -m py_compile \
+            tools/download_utils.py \
+            tools/test_download_utils.py \
             tools/runtime_dependency_utils.py \
             tools/macos_runtime_identity.py \
             tools/git_lfs_utils.py \

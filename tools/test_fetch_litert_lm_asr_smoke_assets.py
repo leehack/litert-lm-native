@@ -8,9 +8,19 @@ from pathlib import Path
 from unittest.mock import patch
 
 import fetch_litert_lm_asr_smoke_assets as assets
+import download_utils
 
 
 class FetchLiteRtLmAsrSmokeAssetsTest(unittest.TestCase):
+    def setUp(self):
+        def in_process(url, path, **kwargs):
+            kwargs["deadline_seconds"] = None
+            return download_utils.download_to_path(url, path, **kwargs)
+
+        patched = patch.object(assets, "download_to_path", side_effect=in_process)
+        patched.start()
+        self.addCleanup(patched.stop)
+
     def test_downloads_and_reuses_verified_asset(self) -> None:
         payload = b"speech-model"
         asset = assets.Asset(
@@ -19,7 +29,7 @@ class FetchLiteRtLmAsrSmokeAssetsTest(unittest.TestCase):
             sha256=hashlib.sha256(payload).hexdigest(),
         )
         with tempfile.TemporaryDirectory() as temp, patch.object(
-            assets.urllib.request, "urlopen", return_value=io.BytesIO(payload)
+            download_utils.urllib.request, "urlopen", return_value=io.BytesIO(payload)
         ) as urlopen:
             output_dir = Path(temp)
             path = assets.fetch_asset(asset, output_dir)
@@ -34,7 +44,7 @@ class FetchLiteRtLmAsrSmokeAssetsTest(unittest.TestCase):
             sha256=hashlib.sha256(b"expected").hexdigest(),
         )
         with tempfile.TemporaryDirectory() as temp, patch.object(
-            assets.urllib.request, "urlopen", return_value=io.BytesIO(b"wrong")
+            download_utils.urllib.request, "urlopen", return_value=io.BytesIO(b"wrong")
         ):
             output_dir = Path(temp)
             with self.assertRaisesRegex(RuntimeError, "Checksum mismatch"):

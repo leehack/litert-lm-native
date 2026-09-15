@@ -202,3 +202,30 @@ set `LIFECYCLE_BASH=/path/to/bash` when the default shell binary is older.
 The `Publication lifecycle` Ubuntu CI job runs this suite separately from the
 macOS `tools/` unit-test discovery. It uses a local fake GitHub service and
 never dispatches or mutates a real release.
+
+
+### ASR smoke asset downloads
+
+The three immutable Moonshine smoke assets keep their pinned source URLs and
+SHA-256 values. Each uncached asset download has at most three attempts, a
+30-second socket timeout, and a 300-second elapsed budget. The elapsed budget
+includes process startup, DNS, connection/redirect/header handling, body reads,
+backoff and checksum verification. A supervised worker writes only temporary
+staging files; timeout kills and waits for that worker, and only the parent may
+atomically replace the cached asset after verified success within the budget.
+
+HTTP 429, 500, 502, 503, 504 and transport failures may retry. Permanent HTTP
+errors and checksum mismatches fail immediately. Retry-After accepts bounded
+seconds or HTTP dates, caps waits at 30 seconds, and never extends the remaining
+budget; malformed, negative or oversized values use bounded exponential backoff.
+Errors identify the asset and failure class without remote URLs or raw exception
+text. Failed transfers remove temporary files and leave an existing cache file
+unchanged; every cache hit still requires its exact checksum, so an existing
+corrupt file is never treated as verified.
+
+Other shared-downloader consumers retain their existing in-process timeout
+behavior unless they explicitly request the elapsed budget. Shared retries now
+reject permanent HTTP failures immediately and use safe diagnostics. The tests in
+`tools/test_download_utils.py` use a local HTTP server and the real worker path,
+including 429 recovery, truncated/stalled/trickling responses, redirects, header
+bounds, checksum rejection, cache preservation and worker cleanup.
