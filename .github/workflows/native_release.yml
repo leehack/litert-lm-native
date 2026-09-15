@@ -727,58 +727,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api --paginate --slurp \
-            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            > existing-release-pages.json
-          jq 'add' existing-release-pages.json > existing-releases.json
-          python3 tools/publication_state.py \
-            --releases existing-releases.json \
-            --approval publish \
-            --release-tag "$RELEASE_TAG" \
-            --upstream-tag "$UPSTREAM_TAG" \
-            --upstream-commit "$UPSTREAM_COMMIT" \
-            --compatibility-tag "$COMPATIBILITY_TAG" \
-            --native-commit "$NATIVE_COMMIT" \
-            --correlation-id "$CORRELATION_ID" \
-            --workflow-run-id "$GITHUB_RUN_ID" \
+          echo "Publication stage: prepare exact draft and read back numeric ID"
+          python3 tools/reconcile_release_tag.py --mode prepare \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
-            --allow-published-exact \
-            --output publication-plan.json
-          prerelease_args=()
-          if [ "${{ needs.preflight.outputs.github_prerelease }}" = true ]; then
-            prerelease_args+=(--prerelease)
-          fi
-          if [ "$(jq -r .action publication-plan.json)" = create ]; then
-            jq -jr .notes publication-plan.json > release-notes.txt
-            gh release create "$RELEASE_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$NATIVE_COMMIT" \
-              --title "LiteRT-LM $RELEASE_TAG" \
-              --notes-file release-notes.txt \
-              --draft \
-              "${prerelease_args[@]}"
-          fi
-
-          gh api --paginate --slurp \
-            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            > existing-release-pages.json
-          jq 'add' existing-release-pages.json > existing-releases.json
-          python3 tools/publication_state.py \
-            --releases existing-releases.json \
-            --approval publish \
-            --release-tag "$RELEASE_TAG" \
-            --upstream-tag "$UPSTREAM_TAG" \
-            --upstream-commit "$UPSTREAM_COMMIT" \
-            --compatibility-tag "$COMPATIBILITY_TAG" \
-            --native-commit "$NATIVE_COMMIT" \
-            --correlation-id "$CORRELATION_ID" \
-            --workflow-run-id "$GITHUB_RUN_ID" \
-            --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
-            --allow-published-exact \
-            --output publication-plan.json
-          release_id="$(jq -r .releaseId publication-plan.json)"
-          gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
             > draft-release.json
+          release_id="$(jq -r .id draft-release.json)"
+          jq -s '[.[0]]' draft-release.json > existing-releases.json
+          echo "Publication stage: reconcile exact draft tag"
           python3 tools/reconcile_release_tag.py --mode create \
             --expected-release-id "$release_id" \
             --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
@@ -802,6 +757,7 @@ jobs:
               gh api --method DELETE \
                 "repos/${GITHUB_REPOSITORY}/releases/assets/$asset_id"
             done < <(jq -r '.assets[].id' draft-release.json)
+            echo "Publication stage: upload candidate assets (CLI tag lookup)"
             gh release upload "$RELEASE_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               candidate/release/* \
@@ -816,12 +772,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p published-release-check
-          release_id="$(
-            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-              --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | .id"
-          )"
-          test -n "$release_id"
-          gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
+          release_id="$(jq -r .id draft-release.json)"
+          python3 tools/reconcile_release_tag.py --mode release \
+            --expected-release-id "$release_id" \
+            --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             > published-release-check/release.json
           jq -s '[.[0]]' published-release-check/release.json \
             > published-release-check/releases.json
@@ -917,11 +871,14 @@ jobs:
               "release-candidate-${RELEASE_TAG}-${CORRELATION_ID}" \
             --release-metadata published-release-check/release.json \
             --output published-release-check/release-result.json
+          echo "Publication stage: upload final receipt (CLI tag lookup)"
           gh release upload "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber \
             published-release-check/release-result.json
-          gh api "repos/${GITHUB_REPOSITORY}/releases/$release_id" \
+          python3 tools/reconcile_release_tag.py --mode release \
+            --expected-release-id "$release_id" \
+            --prerelease "${{ needs.preflight.outputs.github_prerelease }}" \
             > published-release-check/final-release.json
           gh api \
             "repos/${GITHUB_REPOSITORY}/git/ref/tags/$RELEASE_TAG" \
@@ -955,6 +912,7 @@ jobs:
             --require-smoke linux/x64 \
             --require-smoke windows/x64 \
             --require-smoke macos/arm64
+          echo "Publication stage: promote validated draft (CLI tag lookup)"
           gh release edit "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false

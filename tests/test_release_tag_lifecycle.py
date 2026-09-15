@@ -149,7 +149,7 @@ class DraftTagLifecycleTest(unittest.TestCase):
         writes = self.writes()
         self.assertEqual(
             [x[:2] for x in writes],
-            [["release", "create"], ["api", "--include"], ["release", "upload"]],
+            [["api", "--include"], ["api", "--include"], ["release", "upload"]],
         )
         self.assertIn("--method", writes[1])
         self.assertEqual(writes[1][writes[1].index("--method") + 1], "POST")
@@ -159,6 +159,146 @@ class DraftTagLifecycleTest(unittest.TestCase):
         )
         self.assertEqual(len(self.state["release"]["assets"]), 4)
         self.assertGreaterEqual(self.state["tag_reads"], 2)
+
+    def test_created_id_survives_delayed_list_and_readback_through_publication(self):
+        self.prepare_full_candidate()
+        qualification = workflow_step(
+            "Validate same-run candidate before any publication mutation"
+        )
+        promotion = workflow_step("Validate draft and promote it")
+        result = self.run_shell(
+            qualification + "\n" + self.writer + "\n" + promotion,
+            omit_created_from_lists=True,
+            release_read_404_count=2,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.state["release"]["draft"])
+        self.assertEqual(self.state["release_posts"], 1)
+        self.assertTrue(
+            all("/releases/null" not in " ".join(call) for call in self.state["calls"])
+        )
+
+    def test_readback_rejects_exhausted_missing_auth_server_and_wrong_identity(self):
+        cases = [
+            {"release_read_status": status} for status in (404, 401, 403, 429, 500)
+        ]
+        cases += [
+            {"release_read_failure": "malformed"},
+            {"release_read_failure": "transport"},
+            {"release_read_response": {"id": 101}},
+            {"release_read_response": {"body": "foreign"}},
+            {"release_read_response": {"target_commitish": "c" * 40}},
+        ]
+        for case in cases:
+            with self.subTest(case=case):
+                self.state = dict(
+                    release=None, ref=None, template=self.release, calls=[]
+                )
+                result = self.run_shell(self.writer, **case)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.state["release_posts"], 1)
+                self.assertEqual(len(self.writes()), 1)
+                self.assertIsNone(self.state["ref"])
+                self.assertLessEqual(self.state["release_reads"], 3)
+                self.assertIn(
+                    "GET repos/leehack/litert-lm-native/releases/100", result.stderr
+                )
+
+    def test_create_response_identity_is_verified_before_readback(self):
+        for field, value in (
+            ("body", "foreign"),
+            ("name", "foreign"),
+            ("target_commitish", "c" * 40),
+            ("prerelease", True),
+            ("draft", False),
+        ):
+            with self.subTest(field=field):
+                self.state = dict(
+                    release=None, ref=None, template=self.release, calls=[]
+                )
+                result = self.run_shell(
+                    self.writer, create_release_response={field: value}
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.state.get("release_reads", 0), 0)
+                self.assertEqual(len(self.writes()), 1)
+
+    def test_create_requires_http_created_without_retry(self):
+        for status in (200, 202, 401, 403, 429, 500, 502, 503, 504):
+            with self.subTest(status=status):
+                self.state = dict(
+                    release=None, ref=None, template=self.release, calls=[]
+                )
+                result = self.run_shell(self.writer, release_create_status=status)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.state.get("release_reads", 0), 0)
+                self.assertEqual(len(self.writes()), 1)
+
+    def test_prepare_rejects_untrusted_context_before_create(self):
+        original = self.env.copy()
+        for field, value in (
+            ("GITHUB_EVENT_NAME", "push"),
+            ("GITHUB_REF", "refs/heads/other"),
+            ("GITHUB_REPOSITORY", "foreign/repo"),
+            ("GITHUB_SHA", "c" * 40),
+            ("PUBLICATION_APPROVAL", "prepare-only"),
+        ):
+            with self.subTest(field=field):
+                self.env = {**original, field: value}
+                self.state = dict(
+                    release=None, ref=None, template=self.release, calls=[]
+                )
+                result = self.run_shell(self.writer)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.writes(), [])
+        self.env = original
+
+    def test_uncertain_create_never_retries_or_mutates_assets(self):
+        for failure in ("malformed", "transport"):
+            self.state = dict(
+                release=None,
+                ref=None,
+                template=self.release,
+                calls=[],
+                release_response_failure=failure,
+            )
+            result = self.run_shell(self.writer)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(self.state["release_posts"], 1)
+            self.assertEqual(len(self.writes()), 1)
+            self.assertEqual(self.state.get("release_reads", 0), 0)
+
+    def test_invalid_create_ids_never_reach_readback_or_second_post(self):
+        for value in (None, "100", True, False, 0, -1):
+            with self.subTest(id=value):
+                self.state = dict(
+                    release=None, ref=None, template=self.release, calls=[]
+                )
+                result = self.run_shell(
+                    self.writer,
+                    create_release_response={"id": value},
+                    omit_created_from_lists=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.state["release_posts"], 1)
+                self.assertEqual(self.state.get("release_reads", 0), 0)
+                self.assertEqual(len(self.writes()), 1)
+
+    def test_visible_collision_is_not_hidden_by_authoritative_id(self):
+        result = self.run_shell(self.writer, listed_collision=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIsNone(self.state["ref"])
+        self.assertFalse(
+            any(call[:2] == ["release", "upload"] for call in self.writes())
+        )
+
+    def test_stale_listing_competitor_cannot_replace_captured_id(self):
+        result = self.run_shell(self.writer, listed_competing_only=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.state["release_posts"], 1)
+        self.assertEqual(self.state.get("release_reads", 0), 0)
+        self.assertEqual(len(self.writes()), 1)
+        self.assertIn("release ID changed", result.stderr)
 
     def test_exact_resume_missing_and_existing_ref(self):
         for ref in (None, self.ref):
@@ -173,7 +313,7 @@ class DraftTagLifecycleTest(unittest.TestCase):
             self.assertEqual(
                 sum("/git/refs" in " ".join(x) for x in self.writes()), int(ref is None)
             )
-            self.assertFalse(any(x[:2] == ["release", "create"] for x in self.writes()))
+            self.assertEqual(self.state.get("release_posts", 0), 0)
 
     def run_readonly_history(self, name):
         script = workflow_step(name)

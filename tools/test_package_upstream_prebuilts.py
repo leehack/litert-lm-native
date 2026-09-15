@@ -140,12 +140,13 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
             / "native_release.yml"
         ).read_text(encoding="utf-8")
 
-        create_release = workflow[workflow.index('gh release create "'):]
-        self.assertIn('--target "$NATIVE_COMMIT"', create_release)
+        create_release = workflow[workflow.index('python3 tools/reconcile_release_tag.py --mode prepare'):]
+        helper = (Path(__file__).resolve().parents[1] / "tools/reconcile_release_tag.py").read_text()
+        self.assertIn('target_commitish=env["NATIVE_COMMIT"]', helper)
         self.assertIn("tools/publication_state.py", workflow)
         self.assertIn("Create or safely resume exact draft", workflow)
         self.assertIn("releases/assets/$asset_id", workflow)
-        self.assertIn("jq -jr .notes", workflow)
+        self.assertIn('body=plan["notes"]', helper)
         self.assertNotIn("--slurp \\\n            \"repos/${GITHUB_REPOSITORY}/releases?per_page=100\" \\\n            --jq", workflow)
         self.assertIn("jq 'add' existing-release-pages.json", workflow)
         self.assertIn("--draft", create_release)

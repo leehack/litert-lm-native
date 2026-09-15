@@ -229,3 +229,20 @@ reject permanent HTTP failures immediately and use safe diagnostics. The tests i
 `tools/test_download_utils.py` use a local HTTP server and the real worker path,
 including 429 recovery, truncated/stalled/trickling responses, redirects, header
 bounds, checksum rejection, cache preservation and worker cleanup.
+
+### Exact draft readback
+
+The publisher captures the positive numeric ID returned by its single draft
+creation request, then verifies that exact ID through tag reconciliation and
+promotion. A delayed listing may omit that ID, but visible conflicting releases
+still fail closed. Exact-ID reads retry only genuine HTTP 404 responses: at most
+three requests, 10 seconds per request, one- then two-second backoff, and a
+30-second elapsed budget. Late success, malformed responses, authentication and
+server errors fail closed. Creation is never blindly retried after an uncertain
+outcome. Existing drafts must retain the exact transaction identity.
+
+Stage messages distinguish preparation, tag reconciliation, asset upload and
+promotion. The GitHub CLI upload and edit commands retain their own tag lookup;
+this repair does not promise retries for those mutating commands. A merged
+workflow cannot replace the source pinned by an older run, and no old candidate
+may be relabeled or adopted into a different transaction.

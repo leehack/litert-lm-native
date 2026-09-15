@@ -239,7 +239,9 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         workflow = (root / ".github/workflows/native_release.yml").read_text(
             encoding="utf-8"
         )
-        self.assertGreaterEqual(workflow.count("--allow-published-exact"), 7)
+        self.assertGreaterEqual(workflow.count("--allow-published-exact"), 6)
+        helper = (root / "tools/reconcile_release_tag.py").read_text()
+        self.assertIn("allow_published_exact=True", helper)
         self.assertEqual(
             workflow.count("--workflow-run-id"),
             workflow.count("python3 tools/publication_state.py"),
