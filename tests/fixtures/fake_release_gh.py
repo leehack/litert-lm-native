@@ -87,6 +87,8 @@ if "/releases?per_page=" in endpoint:
         sys.exit(0)
     if s.get("omit_created_from_lists") and s.get("created_in_run"):
         out([[]])
+    if s.get("listed_competing_only") and s.get("created_in_run"):
+        out([[{**s["release"], "id": 999}]])
     if s.get("listed_collision") and s["release"] is not None:
         out([[s["release"], {**s["release"], "id": 999}]])
     out([[s["release"]] if s["release"] else []])

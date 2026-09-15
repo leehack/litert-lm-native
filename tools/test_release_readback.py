@@ -19,6 +19,19 @@ class ReleaseReadbackTest(unittest.TestCase):
                 subject.api("repos/owner/repo/releases/1")
         self.assertEqual(run.call_args.kwargs["timeout"], 10)
 
+    def test_listing_bounds_process_and_sanitizes_timeout(self):
+        with patch.object(
+            subject.subprocess,
+            "run",
+            side_effect=subprocess.TimeoutExpired("signed-secret", 10),
+        ) as run:
+            with self.assertRaisesRegex(
+                subject.PublicationStateError,
+                "GET repos/owner/repo/releases.*request timed out",
+            ):
+                subject.release_list({"GITHUB_REPOSITORY": "owner/repo"})
+        self.assertEqual(run.call_args.kwargs["timeout"], 10)
+
     def test_readback_attempt_and_request_limits(self):
         with patch.object(
             subject, "api", return_value=(404, {"message": "Not Found"})

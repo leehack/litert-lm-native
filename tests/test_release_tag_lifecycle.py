@@ -204,6 +204,55 @@ class DraftTagLifecycleTest(unittest.TestCase):
                     "GET repos/leehack/litert-lm-native/releases/100", result.stderr
                 )
 
+    def test_create_response_identity_is_verified_before_readback(self):
+        for field, value in (
+            ("body", "foreign"),
+            ("name", "foreign"),
+            ("target_commitish", "c" * 40),
+            ("prerelease", True),
+            ("draft", False),
+        ):
+            with self.subTest(field=field):
+                self.state = dict(
+                    release=None, ref=None, template=self.release, calls=[]
+                )
+                result = self.run_shell(
+                    self.writer, create_release_response={field: value}
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.state.get("release_reads", 0), 0)
+                self.assertEqual(len(self.writes()), 1)
+
+    def test_create_requires_http_created_without_retry(self):
+        for status in (200, 202, 401, 403, 429, 500, 502, 503, 504):
+            with self.subTest(status=status):
+                self.state = dict(
+                    release=None, ref=None, template=self.release, calls=[]
+                )
+                result = self.run_shell(self.writer, release_create_status=status)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.state.get("release_reads", 0), 0)
+                self.assertEqual(len(self.writes()), 1)
+
+    def test_prepare_rejects_untrusted_context_before_create(self):
+        original = self.env.copy()
+        for field, value in (
+            ("GITHUB_EVENT_NAME", "push"),
+            ("GITHUB_REF", "refs/heads/other"),
+            ("GITHUB_REPOSITORY", "foreign/repo"),
+            ("GITHUB_SHA", "c" * 40),
+            ("PUBLICATION_APPROVAL", "prepare-only"),
+        ):
+            with self.subTest(field=field):
+                self.env = {**original, field: value}
+                self.state = dict(
+                    release=None, ref=None, template=self.release, calls=[]
+                )
+                result = self.run_shell(self.writer)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.writes(), [])
+        self.env = original
+
     def test_uncertain_create_never_retries_or_mutates_assets(self):
         for failure in ("malformed", "transport"):
             self.state = dict(
@@ -226,7 +275,9 @@ class DraftTagLifecycleTest(unittest.TestCase):
                     release=None, ref=None, template=self.release, calls=[]
                 )
                 result = self.run_shell(
-                    self.writer, create_release_response={"id": value}
+                    self.writer,
+                    create_release_response={"id": value},
+                    omit_created_from_lists=True,
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(self.state["release_posts"], 1)
@@ -240,6 +291,14 @@ class DraftTagLifecycleTest(unittest.TestCase):
         self.assertFalse(
             any(call[:2] == ["release", "upload"] for call in self.writes())
         )
+
+    def test_stale_listing_competitor_cannot_replace_captured_id(self):
+        result = self.run_shell(self.writer, listed_competing_only=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.state["release_posts"], 1)
+        self.assertEqual(self.state.get("release_reads", 0), 0)
+        self.assertEqual(len(self.writes()), 1)
+        self.assertIn("release ID changed", result.stderr)
 
     def test_exact_resume_missing_and_existing_ref(self):
         for ref in (None, self.ref):
