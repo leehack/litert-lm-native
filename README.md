@@ -183,10 +183,30 @@ preparation and the final publication recheck both enforce that provenance. A
 when preparing from another retained source ref.
 
 Release-tooling pull requests automatically run a read-only exact-input
-qualification. It builds all nine targets and requires the pinned ASR
-real-model smoke on Linux x64, Windows x64, and macOS arm64. It uploads the
+qualification. It builds all nine targets and requires checksum-pinned Qwen CPU
+inference and ASR real-model smokes on Linux x64, Windows x64, and macOS arm64. It uploads the
 runtime/evidence artifacts for review but has no publication input or write
 permission.
+
+The v0.17 tokenizer compatibility patch preserves Qwen's single NORMAL NUL
+piece in BPE's length-aware vocabulary. It does not permit NUL trie keys,
+compound-NUL pieces, other piece types, or byte-fallback models. The build
+requires the exact audited SentencePiece 0.2.2 archive and fails for review if
+that dependency changes. This does not change LiteRT-LM's C-string transport
+limitations or modify the model file.
+
+Run the standalone regression qualification in a fresh work directory:
+
+```bash
+ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 \
+  python3 tools/qualify_sentencepiece_bpe_null.py --work-dir /tmp/qwen-qualification --sanitize
+```
+
+It verifies the source and model checksums, reproduces the unpatched failure,
+runs upstream tests, checks every Qwen vocabulary mapping, compares token IDs
+and decoded bytes with SentencePiece 0.2.0 fixtures, and rejects malformed
+variants. The corpus includes multilingual text, whitespace, invalid UTF-8,
+special tokens, and leading, interior, trailing, and repeated NUL bytes.
 
 To prepare a corrected package for existing upstream sources without breaking
 downstream checksum pins, dispatch the workflow with all exact identities:

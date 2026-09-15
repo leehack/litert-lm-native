@@ -10,6 +10,7 @@ on:
       - "native/**"
       - "prebuilt/**"
       - "patches/**"
+      - "tests/**"
 
 concurrency:
   group: pr-release-qualification-${{ github.event.pull_request.number }}
@@ -24,6 +25,23 @@ env:
   QUALIFICATION_UPSTREAM_COMMIT: e9fd8c53ff968071774206163027dd84bedfe925
 
 jobs:
+  tokenizer-compatibility:
+    name: SentencePiece BPE compatibility and sanitizers
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Qualify untouched Qwen tokenizer and malformed-model guards
+        env:
+          CC: clang
+          CXX: clang++
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: halt_on_error=1
+        run: python3 tools/qualify_sentencepiece_bpe_null.py --work-dir tokenizer-qualification --sanitize
+
   build:
     name: Build and smoke (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
@@ -242,3 +260,63 @@ jobs:
               )
           print(f"Verified all nine runtimes and {len(evidence)} real-model smokes")
           PY
+
+      - name: Upload packaged candidates for Qwen inference
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-qwen-candidates
+          path: bin
+          if-no-files-found: error
+
+  qwen-inference:
+    name: Qwen inference (${{ matrix.platform }}-${{ matrix.arch }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, platform: linux, arch: x64}
+          - {os: windows-latest, platform: windows, arch: x64}
+          - {os: macos-latest, platform: macos, arch: arm64}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: packaged-qwen-candidates
+          path: bin
+      - name: Check out pinned Dart consumer for real Qwen inference
+        uses: actions/checkout@v6
+        with:
+          repository: leehack/llamadart
+          ref: 6491e6d5c8ad80be09483861f1b99f84e76e4f11
+          path: consumer-smoke
+          persist-credentials: false
+      - name: Set up consumer SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.1
+          channel: stable
+          cache: true
+      - name: Fetch checksum-pinned Qwen model
+        shell: bash
+        run: |
+          mkdir -p qwen-smoke-assets
+          python3 -c 'import sys; sys.path.insert(0, "tools"); from pathlib import Path; from qualify_sentencepiece_bpe_null import verified_download, MODEL_URL, MODEL_SHA; verified_download(MODEL_URL, Path("qwen-smoke-assets/Qwen3-0.6B.litertlm"), MODEL_SHA)'
+      - name: Run real Qwen CPU inference against candidate runtime
+        shell: bash
+        env:
+          LLAMADART_LITERT_LM_LIB_DIR: ${{ github.workspace }}/bin/${{ matrix.platform }}/${{ matrix.arch }}
+        run: |
+          export LD_LIBRARY_PATH="$LLAMADART_LITERT_LM_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export DYLD_LIBRARY_PATH="$LLAMADART_LITERT_LM_LIB_DIR${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+          export PATH="$LLAMADART_LITERT_LM_LIB_DIR:$PATH"
+          model="$GITHUB_WORKSPACE/qwen-smoke-assets/Qwen3-0.6B.litertlm"
+          cd consumer-smoke
+          dart pub get
+          dart --packages=.dart_tool/package_config.json ../tools/qwen_runtime_preflight.dart
+          dart run tool/litert_lm_engine_smoke.dart "$model" cpu 'What is 2+2? Answer only with the number.' 16 1024
