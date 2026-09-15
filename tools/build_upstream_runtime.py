@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import tarfile
@@ -160,6 +161,7 @@ def download_upstream(
     patch_upstream_workspace(
         source_root,
         patch_ios_framework_paths=has_asr_bridge(compatibility_tag),
+        patch_bpe_null_piece=is_at_least(compatibility_tag, (0, 17, 0)),
     )
     return source_root
 
@@ -168,6 +170,7 @@ def patch_upstream_workspace(
     source_root: Path,
     *,
     patch_ios_framework_paths: bool = True,
+    patch_bpe_null_piece: bool = False,
 ) -> None:
     workspace = source_root / "WORKSPACE"
     text = workspace.read_text(encoding="utf-8")
@@ -197,11 +200,39 @@ def patch_upstream_workspace(
         if litert_archive not in text:
             raise RuntimeError(f"Expected LiteRT archive not found in {workspace}")
         text = text.replace(litert_archive, litert_archive_with_patch, 1)
+    if patch_bpe_null_piece:
+        text = patch_sentencepiece_bpe_null(text)
     workspace.write_text(text, encoding="utf-8")
     print(
         "Patched upstream WORKSPACE dependency URLs and iOS framework paths",
         flush=True,
     )
+
+
+def patch_sentencepiece_bpe_null(text: str) -> str:
+    """Preserve legacy BPE NUL IDs only against the audited SentencePiece archive."""
+    pattern = r'http_archive\(\n    name = "sentencepiece",\n.*?\n\)'
+    matches = list(re.finditer(pattern, text, re.DOTALL))
+    if len(matches) != 1:
+        raise RuntimeError("Expected exactly one SentencePiece archive")
+    match = matches[0]
+    block = match.group()
+    for expected in (
+        'sha256 = "92381f713e094a15a1ccff1ac4a5315a4c4b82a99ac1332d6ac53c9dc8e1bcf1"',
+        'strip_prefix = "sentencepiece-0.2.2"',
+        'url = "https://github.com/google/sentencepiece/archive/refs/tags/v0.2.2.tar.gz"',
+    ):
+        if expected not in block:
+            raise RuntimeError("SentencePiece source changed; requalify BPE NUL compatibility")
+    patch = ('    patch_args = ["-p1"],\n'
+             '    patches = ["@//bridge:sentencepiece_bpe_null.patch"],\n')
+    if patch in block:
+        return text
+    if re.search(r"\b(?:patches|patch_args)\s*=", block):
+        raise RuntimeError("Unexpected SentencePiece patches; requalify compatibility")
+    block = block.replace('    name = "sentencepiece",\n',
+                          '    name = "sentencepiece",\n' + patch, 1)
+    return text[:match.start()] + block + text[match.end():]
 
 
 def patch_upstream_ios_sampler_path(source_root: Path) -> None:

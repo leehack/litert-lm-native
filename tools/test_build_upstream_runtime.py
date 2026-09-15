@@ -9,6 +9,33 @@ import build_upstream_runtime
 
 
 class BuildUpstreamRuntimeTest(unittest.TestCase):
+    def test_download_wires_bpe_compatibility_only_for_v017_and_later(self) -> None:
+        for tag, enabled in [("v0.16.0", False), ("v0.17.0", True)]:
+            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                source = root / "source"
+                source.mkdir()
+                with patch.object(build_upstream_runtime, "download_to_path"), \
+                     patch.object(build_upstream_runtime.tarfile, "open"), \
+                     patch.object(build_upstream_runtime, "patch_upstream_workspace") as apply:
+                    self.assertEqual(build_upstream_runtime.download_upstream(tag, tag, root), source)
+                self.assertEqual(apply.call_args.kwargs["patch_bpe_null_piece"], enabled)
+
+    def test_sentencepiece_patch_is_exact_source_and_idempotent(self) -> None:
+        block = ('http_archive(\n    name = "sentencepiece",\n'
+                 '    sha256 = "92381f713e094a15a1ccff1ac4a5315a4c4b82a99ac1332d6ac53c9dc8e1bcf1",\n'
+                 '    strip_prefix = "sentencepiece-0.2.2",\n'
+                 '    url = "https://github.com/google/sentencepiece/archive/refs/tags/v0.2.2.tar.gz",\n)')
+        patched = build_upstream_runtime.patch_sentencepiece_bpe_null(block)
+        self.assertIn('patches = ["@//bridge:sentencepiece_bpe_null.patch"]', patched)
+        self.assertEqual(build_upstream_runtime.patch_sentencepiece_bpe_null(patched), patched)
+        for invalid in (block.replace('92381f', '000000'),
+                        block.replace('0.2.2', '0.2.3'),
+                        block + '\n' + block,
+                        block.replace('    sha256', '    patches = ["other.patch"],\n    sha256')):
+            with self.subTest(invalid=invalid), self.assertRaises(RuntimeError):
+                build_upstream_runtime.patch_sentencepiece_bpe_null(invalid)
+
     def test_runtime_selects_capabilities_owner_by_upstream_version(self) -> None:
         for tag, expected in [("v0.16.0", False), ("v0.17.0", True)]:
             with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:

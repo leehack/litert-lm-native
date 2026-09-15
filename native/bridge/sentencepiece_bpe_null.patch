@@ -1,0 +1,54 @@
+--- a/src/model_interface.h
++++ b/src/model_interface.h
+@@ -233,7 +233,8 @@
+   // `reserved_id_map_` instead of `pieces_`. This excludes them from the main
+   // vocabulary map, which in turn prevents them from being merged during BPE
+   // segmentation (since BPE merge only looks up in `pieces_`).
+-  void InitializePieces(bool use_reserved_id_map);
++  void InitializePieces(bool use_reserved_id_map,
++                        bool allow_bpe_null_piece = false);
+ 
+   // Non-virtual (inlined) implementation for faster execution.
+   [[nodiscard]] float GetScoreInlined(int id) const {
+--- a/src/model_interface.cc
++++ b/src/model_interface.cc
+@@ -64,7 +64,8 @@
+   return unk_id_;
+ }
+ 
+-void ModelInterface::InitializePieces(bool use_reserved_id_map) {
++void ModelInterface::InitializePieces(bool use_reserved_id_map,
++                                      bool allow_bpe_null_piece) {
+   pieces_.clear();
+   reserved_id_map_.clear();
+   unk_id_ = -1;
+@@ -100,7 +101,16 @@
+       status_ = absl::InternalError("piece must not be empty.");
+       return;
+     }
+-    if (sp.piece().find('\0') != absl::string_view::npos) {
++    // BPE NORMAL pieces use length-aware hash lookup, never the prefix trie.
++    // Preserve legacy single-NUL vocabulary IDs without admitting NUL trie keys.
++    const bool is_bpe_null_piece =
++        allow_bpe_null_piece &&
++        model_proto_->trainer_spec().model_type() == TrainerSpec::BPE &&
++        !model_proto_->trainer_spec().byte_fallback() &&
++        sp.type() == ModelProto::SentencePiece::NORMAL &&
++        sp.piece().size() == 1 && sp.piece()[0] == '\0';
++    if (sp.piece().find('\0') != absl::string_view::npos &&
++        !is_bpe_null_piece) {
+       status_ = absl::InternalError("piece must not include null character.");
+       return;
+     }
+--- a/src/bpe_model.cc
++++ b/src/bpe_model.cc
+@@ -105,7 +105,8 @@
+   // reserved_id_map_ (which BPE merge ignores).
+   // We use PieceToIdNoReserved() during inference to bypass reserved_id_map_
+   // for performance.
+-  InitializePieces(/* use_reserved_id_map= */ false);
++  InitializePieces(/* use_reserved_id_map= */ false,
++                   /* allow_bpe_null_piece= */ true);
+ }
+ 
+ Model::~Model() {}
