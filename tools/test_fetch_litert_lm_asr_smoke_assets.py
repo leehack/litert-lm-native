@@ -14,6 +14,15 @@ import download_utils
 class FetchLiteRtLmAsrSmokeAssetsTest(unittest.TestCase):
     def setUp(self):
         def in_process(url, path, **kwargs):
+            # These small cache tests use an in-memory response after asserting
+            # the real ASR callsite contract. The HTTP suite below separately
+            # executes its supervised worker and actual elapsed deadline.
+            self.assertEqual(kwargs["attempts"], 3)
+            self.assertEqual(kwargs["timeout_seconds"], 30)
+            self.assertEqual(kwargs["deadline_seconds"], 300)
+            self.assertEqual(kwargs["headers"], {"User-Agent": assets.USER_AGENT})
+            self.assertEqual(kwargs["label"], path.name)
+            self.assertEqual(len(kwargs["expected_sha256"]), 64)
             kwargs["deadline_seconds"] = None
             return download_utils.download_to_path(url, path, **kwargs)
 

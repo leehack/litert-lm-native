@@ -4,6 +4,8 @@ import contextlib
 import errno
 import hashlib
 import io
+import json
+import subprocess
 import tempfile
 import threading
 import time
@@ -31,7 +33,11 @@ class DownloadHTTPTest(unittest.TestCase):
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 outer.requests.append(self.path)
-                item = outer.responses.pop(0)
+                item = (
+                    outer.responses.pop(0)
+                    if outer.responses
+                    else {"status": 503, "headers": {"Retry-After": "0"}}
+                )
                 if item.get("slow_headers"):
                     try:
                         for byte in b"HTTP/1.1 200 OK\r\nContent-Length: 20\r\n\r\n":
@@ -40,6 +46,8 @@ class DownloadHTTPTest(unittest.TestCase):
                     except (BrokenPipeError, ConnectionResetError):
                         pass
                     return
+                if item.get("header_stall"):
+                    time.sleep(item["header_stall"])
                 status = item.get("status", 200)
                 self.send_response(status)
                 for name, value in item.get("headers", {}).items():
@@ -99,8 +107,59 @@ class DownloadHTTPTest(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), PAYLOAD)
         self.assertFalse(self.path.with_name("model.tflite.part").exists())
 
+    def test_actual_asr_exhausts_exactly_three_attempts(self):
+        self.responses = [{"status": 429, "headers": {"Retry-After": "0"}}] * 3
+        asset = assets.Asset(
+            "model.tflite", self.url, hashlib.sha256(PAYLOAD).hexdigest()
+        )
+        with self.assertRaisesRegex(RuntimeError, "retry budget exhausted"):
+            assets.fetch_asset(asset, self.root)
+        self.assertEqual(len(self.requests), 3)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_actual_asr_configured_deadline_kills_slow_headers(self):
+        self.responses = [{"slow_headers": True}]
+        asset = assets.Asset(
+            "model.tflite", self.url, hashlib.sha256(PAYLOAD).hexdigest()
+        )
+        original = downloads.download_to_path
+        observed = []
+
+        def shorter_test_budget(url, path, **options):
+            observed.append(dict(options))
+            self.assertEqual(options["attempts"], 3)
+            self.assertEqual(options["timeout_seconds"], 30)
+            self.assertEqual(options["deadline_seconds"], 300)
+            self.assertEqual(options["expected_sha256"], asset.sha256)
+            # Scale time only after validating the production configuration;
+            # the same ASR -> downloader -> supervised worker path remains real.
+            options["timeout_seconds"] = 0.2
+            options["deadline_seconds"] = 0.5
+            return original(url, path, **options)
+
+        started = time.monotonic()
+        with patch.object(
+            assets, "download_to_path", side_effect=shorter_test_budget
+        ), self.assertRaisesRegex(RuntimeError, "deadline"):
+            assets.fetch_asset(asset, self.root)
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(len(self.requests), 1)
+        self.assertLess(time.monotonic() - started, 1.0)
+        self.assertEqual(list(self.root.iterdir()), [])
+        time.sleep(0.2)
+        self.assertEqual(list(self.root.iterdir()), [])
+
     def test_exhausted_attempts_and_permanent_error_are_safe(self):
-        for status, count in ((429, 3), (503, 3), (404, 1), (403, 1), (501, 1)):
+        for status, count in (
+            (429, 3),
+            (500, 3),
+            (502, 3),
+            (503, 3),
+            (504, 3),
+            (404, 1),
+            (403, 1),
+            (501, 1),
+        ):
             with self.subTest(status=status):
                 self.requests.clear()
                 self.responses = [
@@ -159,11 +218,8 @@ class DownloadHTTPTest(unittest.TestCase):
 
     def test_retry_after_cannot_exceed_total_budget(self):
         self.responses = [{"status": 429, "headers": {"Retry-After": "999999999"}}]
-        with patch.object(downloads.time, "sleep") as sleep, self.assertRaisesRegex(
-            RuntimeError, "deadline"
-        ):
+        with self.assertRaisesRegex(RuntimeError, "deadline"):
             self.download(deadline_seconds=0.8)
-        sleep.assert_not_called()
         self.assertEqual(len(self.requests), 1)
 
     def test_socket_stall_and_drip_are_bounded_by_deadline(self):
@@ -177,6 +233,34 @@ class DownloadHTTPTest(unittest.TestCase):
                 self.assertLess(time.monotonic() - started, 1.5)
                 self.assertFalse(self.path.exists())
                 self.assertFalse(self.path.with_name("model.tflite.part").exists())
+
+    def test_initial_response_socket_timeout_is_independent_of_total_deadline(self):
+        self.responses = [{"header_stall": 0.5}]
+        with self.assertRaisesRegex(RuntimeError, "transport failure"):
+            self.download(timeout_seconds=0.1, deadline_seconds=3, attempts=1)
+        self.assertEqual(len(self.requests), 1)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_parent_rejects_overdue_worker_success_without_promoting(self):
+        self.path.write_bytes(b"existing cache")
+
+        def completed_worker(command, **kwargs):
+            request = json.loads(kwargs["input"])
+            staged = Path(request["path"])
+            self.assertNotEqual(staged, self.path)
+            staged.write_bytes(PAYLOAD)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        with patch.object(
+            downloads.subprocess, "run", side_effect=completed_worker
+        ), patch.object(
+            downloads.time, "monotonic", side_effect=[0.0, 0.1, 6.0]
+        ), self.assertRaisesRegex(
+            RuntimeError, "deadline"
+        ):
+            self.download(deadline_seconds=5)
+        self.assertEqual(self.path.read_bytes(), b"existing cache")
+        self.assertEqual(list(self.root.iterdir()), [self.path])
 
     def test_slow_headers_are_killed_before_promotion_and_leave_no_worker_files(self):
         self.responses = [{"slow_headers": True}]
@@ -246,6 +330,27 @@ class RetryHeaderTest(unittest.TestCase):
                 deadline=time.monotonic() + 0.5,
             )
         sleep.assert_not_called()
+
+    def test_shared_urlerror_retries_and_suppresses_signed_url_exception(self):
+        errors = [
+            urllib.error.URLError("https://host.invalid/?signature=DO-NOT-LOG")
+            for _ in range(3)
+        ]
+        stderr = io.StringIO()
+        with patch.object(
+            downloads.urllib.request, "urlopen", side_effect=errors
+        ) as opener, patch.object(downloads.time, "sleep"), contextlib.redirect_stderr(
+            stderr
+        ), self.assertRaises(
+            RuntimeError
+        ) as raised:
+            downloads.fetch_json(
+                "https://host.invalid/?signature=DO-NOT-LOG", headers={}
+            )
+        self.assertEqual(opener.call_count, 3)
+        self.assertNotIn("DO-NOT-LOG", stderr.getvalue() + str(raised.exception))
+        self.assertTrue(raised.exception.__suppress_context__)
+        self.assertIsNone(raised.exception.__cause__)
 
     def test_network_oserror_retries_but_local_disk_error_does_not(self):
         for number, expected in ((errno.ENETUNREACH, 2), (errno.ENOSPC, 1)):
