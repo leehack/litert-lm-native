@@ -21,6 +21,25 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     self.assertEqual(build_upstream_runtime.download_upstream(tag, tag, root), source)
                 self.assertEqual(apply.call_args.kwargs["patch_bpe_null_piece"], enabled)
 
+    def test_workspace_applies_bpe_patch_and_preserves_file_on_rejection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path = root / "WORKSPACE"
+            text = ('http_archive(\n    name = "minizip",\n'
+                    f'    url = "{build_upstream_runtime.ZLIB_URL}",\n)\n'
+                    'http_archive(\n    name = "sentencepiece",\n'
+                    '    sha256 = "92381f713e094a15a1ccff1ac4a5315a4c4b82a99ac1332d6ac53c9dc8e1bcf1",\n'
+                    '    strip_prefix = "sentencepiece-0.2.2",\n'
+                    '    url = "https://github.com/google/sentencepiece/archive/refs/tags/v0.2.2.tar.gz",\n)')
+            path.write_text(text)
+            build_upstream_runtime.patch_upstream_workspace(root, patch_ios_framework_paths=False, patch_bpe_null_piece=True)
+            self.assertIn('patches = ["@//bridge:sentencepiece_bpe_null.patch"]', path.read_text())
+            invalid = text.replace('92381f', '000000')
+            path.write_text(invalid)
+            with self.assertRaisesRegex(RuntimeError, "source changed"):
+                build_upstream_runtime.patch_upstream_workspace(root, patch_ios_framework_paths=False, patch_bpe_null_piece=True)
+            self.assertEqual(path.read_text(), invalid)
+
     def test_sentencepiece_patch_is_exact_source_and_idempotent(self) -> None:
         block = ('http_archive(\n    name = "sentencepiece",\n'
                  '    sha256 = "92381f713e094a15a1ccff1ac4a5315a4c4b82a99ac1332d6ac53c9dc8e1bcf1",\n'
