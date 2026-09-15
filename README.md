@@ -250,6 +250,14 @@ includes the iOS `LiteRtMetalAccelerator` and `LiteRtTopKMetalSampler` modules;
 their framework-relative loader paths avoid flat dylibs that App Store bundles
 cannot ship.
 
+The macOS packager embeds the primary framework's private dylib dependencies
+inside `LiteRtLm.framework/Versions/A/Dependencies` and rewrites their loader
+paths. It rejects missing dependencies or required architecture slices. The
+macOS compatibility shim references the adjacent `LiteRtLm.framework`, so the
+assembled app does not need flat copies of the core or its private dependencies.
+These packaging changes apply to newly built assets; the published v0.17.0
+macOS SPM assets require a corrected release before downstream adoption.
+
 ## Consumer Contract
 
 Downstream packages should read `manifest.json`, choose a target by platform,

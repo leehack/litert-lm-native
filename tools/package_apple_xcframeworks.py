@@ -222,7 +222,9 @@ def make_macos_library_argument(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if len(libraries) == 1:
-        library = next(iter(libraries.values()))
+        source = next(iter(libraries.values()))
+        library = output_dir / source.name
+        shutil.copy2(source, library)
     else:
         library = output_dir / next(iter(libraries.values())).name
         run(
@@ -295,6 +297,78 @@ def make_macos_framework_argument(
     for name in ["Headers", "Modules", "Resources", module_name]:
         (framework / name).symlink_to(Path("Versions") / "Current" / name)
     return ["-framework", str(framework)]
+
+
+def _macho_arches(binary: Path) -> set[str]:
+    return set(subprocess.check_output(["lipo", "-archs", str(binary)], text=True).split())
+
+
+def _macho_dependencies(binary: Path, arch: str | None = None) -> list[str]:
+    arch_args = ["-arch", arch] if arch else []
+    output = subprocess.check_output(["otool", *arch_args, "-L", str(binary)], text=True)
+    return list(dict.fromkeys(
+        line.strip().split(" ", 1)[0]
+        for line in output.splitlines() if line[:1].isspace()
+    ))
+
+
+def complete_macos_primary_framework(
+    framework: Path,
+    libraries_by_name: dict[str, dict[str, Path]],
+    work_root: Path,
+) -> None:
+    """Keep the primary framework's private dylib dependencies self-contained."""
+    binary = framework / "Versions" / "A" / PRIMARY_MODULE
+    dependencies_dir = binary.parent / "Dependencies"
+    staged = {PRIMARY_LIBRARY: binary}
+    pending = [binary]
+    while pending:
+        current = pending.pop()
+        for arch in sorted(_macho_arches(current)):
+            for install_name in _macho_dependencies(current, arch):
+                if install_name.startswith(("/System/Library/", "/usr/lib/")):
+                    continue
+                name = Path(install_name).name
+                if name == PRIMARY_MODULE:
+                    continue  # Primary framework's own LC_ID_DYLIB.
+                if name == current.name and current != binary:
+                    continue  # Embedded dylib's own LC_ID_DYLIB.
+                if name not in staged:
+                    sources = libraries_by_name.get(name)
+                    if not sources:
+                        raise RuntimeError(f"Missing macOS SPM dependency: {install_name}")
+                    args = make_macos_library_argument(
+                        module_name_for_dylib(Path(name)), sources, work_root,
+                        include_headers=False,
+                    )
+                    dependencies_dir.mkdir(parents=True, exist_ok=True)
+                    destination = dependencies_dir / name
+                    shutil.copy2(args[1], destination)
+                    staged[name] = destination
+                    pending.append(destination)
+                if arch not in _macho_arches(staged[name]):
+                    raise RuntimeError(f"macOS SPM dependency {name} lacks required {arch} slice")
+                relative = os.path.relpath(staged[name], current.parent)
+                replacement = f"@loader_path/{relative}"
+                if replacement != install_name:
+                    run(["install_name_tool", "-change", install_name, replacement, str(current)])
+    # install_name_tool invalidates existing signatures. Sign nested dylibs
+    # before the primary binary; raw runtime inputs remain untouched.
+    for current in reversed(list(staged.values())):
+        run(["codesign", "--force", "--sign", "-", str(current)])
+
+
+def retarget_macos_compatibility_shim(args: list[str]) -> None:
+    if not args:
+        return
+    binary = Path(args[1])
+    expected = f"@rpath/{PRIMARY_LIBRARY}"
+    if expected not in _macho_dependencies(binary):
+        raise RuntimeError("macOS compatibility shim does not reexport the primary runtime")
+    run(["install_name_tool", "-change", expected,
+         f"@loader_path/{PRIMARY_MODULE}.framework/Versions/A/{PRIMARY_MODULE}",
+         str(binary)])
+    run(["codesign", "--force", "--sign", "-", str(binary)])
 
 
 def package_macos_companions(
@@ -382,6 +456,11 @@ def package_all(release_tag: str, clean: bool) -> list[Path]:
         macos_libraries_by_name().get(PRIMARY_LIBRARY, {}),
         WORK_DIR,
     )
+    if primary_macos_args:
+        complete_macos_primary_framework(
+            Path(primary_macos_args[1]), macos_libraries_by_name(), WORK_DIR,
+        )
+        retarget_macos_compatibility_shim(macos_companion_args.get("CLiteRTLMMac", []))
     primary = package_ios_framework_module(
         PRIMARY_MODULE,
         WORK_DIR,
