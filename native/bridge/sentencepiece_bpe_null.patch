@@ -1,3 +1,4 @@
+diff --git a/src/model_interface.h b/src/model_interface.h
 --- a/src/model_interface.h
 +++ b/src/model_interface.h
 @@ -233,7 +233,8 @@
@@ -10,6 +11,7 @@
  
    // Non-virtual (inlined) implementation for faster execution.
    [[nodiscard]] float GetScoreInlined(int id) const {
+diff --git a/src/model_interface.cc b/src/model_interface.cc
 --- a/src/model_interface.cc
 +++ b/src/model_interface.cc
 @@ -64,7 +64,8 @@
@@ -40,6 +42,7 @@
        status_ = absl::InternalError("piece must not include null character.");
        return;
      }
+diff --git a/src/bpe_model.cc b/src/bpe_model.cc
 --- a/src/bpe_model.cc
 +++ b/src/bpe_model.cc
 @@ -105,7 +105,8 @@

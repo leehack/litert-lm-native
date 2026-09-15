@@ -36,6 +36,8 @@ jobs:
           persist-credentials: false
       - name: Qualify untouched Qwen tokenizer and malformed-model guards
         env:
+          CC: clang
+          CXX: clang++
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: halt_on_error=1
         run: python3 tools/qualify_sentencepiece_bpe_null.py --work-dir tokenizer-qualification --sanitize

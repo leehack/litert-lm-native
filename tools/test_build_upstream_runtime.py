@@ -9,6 +9,16 @@ import build_upstream_runtime
 
 
 class BuildUpstreamRuntimeTest(unittest.TestCase):
+    def test_sentencepiece_patch_delimits_each_file_for_bazel(self) -> None:
+        lines = (Path(__file__).resolve().parents[1] / "native/bridge/sentencepiece_bpe_null.patch").read_text().splitlines()
+        files = []
+        for index, line in enumerate(lines):
+            if line.startswith("--- a/"):
+                name = line.removeprefix("--- a/")
+                self.assertEqual(lines[index - 1], f"diff --git a/{name} b/{name}")
+                files.append(name)
+        self.assertEqual(set(files), {"src/bpe_model.cc", "src/model_interface.cc", "src/model_interface.h"})
+
     def test_download_wires_bpe_compatibility_only_for_v017_and_later(self) -> None:
         for tag, enabled in [("v0.16.0", False), ("v0.17.0", True)]:
             with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
