@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import time
 
 from publication_state import (
     PublicationStateError,
@@ -25,50 +26,43 @@ class ApiTransportError(PublicationStateError):
     pass
 
 
-def api(endpoint: str, *, payload: dict | None = None) -> tuple[int, object]:
+def api(
+    endpoint: str, *, payload: dict | None = None, timeout: float = 10
+) -> tuple[int, object]:
     command = ["gh", "api", "--include", endpoint]
     if payload is not None:
         command += ["--method", "POST", "--input", "-"]
-    result = subprocess.run(
-        command,
-        input=json.dumps(payload) if payload else None,
-        text=True,
-        capture_output=True,
-    )
+    method = "POST" if payload is not None else "GET"
+    operation = f"{method} {endpoint}"
+    try:
+        result = subprocess.run(
+            command,
+            input=json.dumps(payload) if payload is not None else None,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise ApiTransportError(f"{operation}: request timed out") from None
     # gh --include preserves HTTP status even for non-2xx responses. Neither
     # arbitrary stderr text nor an empty/failed response is evidence of absence.
     match = re.match(r"HTTP/\S+ (\d{3})[^\n]*\n", result.stdout)
     if match is None:
-        raise ApiTransportError("GitHub API returned no HTTP status")
+        raise ApiTransportError(f"{operation}: no HTTP status")
     status = int(match[1])
     try:
         body = json.loads(re.split(r"\r?\n\r?\n", result.stdout, maxsplit=1)[1])
     except (IndexError, json.JSONDecodeError) as error:
-        raise PublicationStateError("GitHub API returned malformed JSON") from error
+        raise PublicationStateError(
+            f"{operation}: HTTP {status}, malformed JSON"
+        ) from None
     if 200 <= status < 300 and result.returncode:
-        raise PublicationStateError("GitHub API failed despite successful HTTP status")
+        raise PublicationStateError(f"{operation}: HTTP {status}, client failure")
     return status, body
 
 
-def exact_release(env: dict[str, str], prerelease: bool) -> dict:
-    result = subprocess.run(
-        [
-            "gh",
-            "api",
-            "--paginate",
-            "--slurp",
-            f"repos/{env['GITHUB_REPOSITORY']}/releases?per_page=100",
-        ],
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    pages = json.loads(result.stdout)
-    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
-        raise PublicationStateError("release pages must be arrays")
-    releases = [release for page in pages for release in page]
-    plan = plan_publication(
-        releases,
+def publication_request(env: dict[str, str], prerelease: bool) -> dict:
+    return dict(
         approval=env["PUBLICATION_APPROVAL"],
         release_tag=env["RELEASE_TAG"],
         upstream_tag=env["UPSTREAM_TAG"] or None,
@@ -80,9 +74,140 @@ def exact_release(env: dict[str, str], prerelease: bool) -> dict:
         prerelease=prerelease,
         allow_published_exact=True,
     )
-    if plan["action"] not in {"resume", "verify-published"}:
+
+
+def release_list(env: dict[str, str]) -> list[dict]:
+    endpoint = f"repos/{env['GITHUB_REPOSITORY']}/releases?per_page=100"
+    try:
+        result = subprocess.run(
+            ["gh", "api", "--paginate", "--slurp", endpoint],
+            text=True,
+            capture_output=True,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        raise PublicationStateError(f"GET {endpoint}: request timed out") from None
+    if result.returncode:
+        raise PublicationStateError(f"GET {endpoint}: release-list request failed")
+    try:
+        pages = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        raise PublicationStateError(f"GET {endpoint}: malformed JSON") from None
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+        raise PublicationStateError("release pages must be arrays")
+    return [release for page in pages for release in page]
+
+
+def require_release_id(value: object) -> int:
+    if type(value) is not int or value <= 0:
+        raise PublicationStateError(
+            "release readback requires a positive numeric release ID"
+        )
+    return value
+
+
+def read_release(env: dict[str, str], prerelease: bool, release_id: int) -> dict:
+    release_id = require_release_id(release_id)
+    endpoint = f"repos/{env['GITHUB_REPOSITORY']}/releases/{release_id}"
+    deadline = time.monotonic() + 30
+    for attempt in range(3):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        status, release = api(endpoint, timeout=min(10, remaining))
+        if time.monotonic() >= deadline:
+            raise PublicationStateError(f"GET {endpoint}: readback deadline exhausted")
+        if status == 200:
+            if not isinstance(release, dict) or release.get("id") != release_id:
+                raise PublicationStateError(
+                    f"GET {endpoint}: HTTP 200, release ID mismatch"
+                )
+            require_release_id(release["id"])
+            try:
+                plan = plan_publication(
+                    [release], **publication_request(env, prerelease)
+                )
+            except PublicationStateError as error:
+                raise PublicationStateError(
+                    f"GET {endpoint}: HTTP 200, {error}"
+                ) from None
+            if plan["action"] not in {"resume", "verify-published"}:
+                raise PublicationStateError(
+                    f"GET {endpoint}: unexpected plan {plan['action']}"
+                )
+            return release
+        # Only a genuine missing-ID readback may be eventually consistent.
+        # Authentication, malformed responses and server errors fail closed.
+        if (
+            status != 404
+            or not isinstance(release, dict)
+            or release.get("message") != "Not Found"
+        ):
+            raise PublicationStateError(
+                f"GET {endpoint}: HTTP {status}, readback rejected"
+            )
+        if attempt < 2:
+            wait = 2**attempt
+            if time.monotonic() + wait >= deadline:
+                break
+            time.sleep(wait)
+    raise PublicationStateError(
+        f"GET {endpoint}: HTTP 404, exact-ID readback budget exhausted"
+    )
+
+
+def exact_release(
+    env: dict[str, str], prerelease: bool, release_id: int | None = None
+) -> dict:
+    if release_id is not None:
+        require_release_id(release_id)
+    releases = release_list(env)
+    # Retain list collision checks, even when its newly created record is not
+    # visible yet. Only the authoritative ID response may fill that omission.
+    listed_plan = plan_publication(releases, **publication_request(env, prerelease))
+    if release_id is not None:
+        if listed_plan["action"] != "create" and listed_plan["releaseId"] != release_id:
+            raise PublicationStateError("release ID changed before tag reconciliation")
+        return read_release(env, prerelease, release_id)
+    if listed_plan["action"] not in {"resume", "verify-published"}:
         raise PublicationStateError("tag reconciliation requires one exact release")
-    return next(item for item in releases if item.get("id") == plan["releaseId"])
+    require_release_id(listed_plan["releaseId"])
+    return next(item for item in releases if item.get("id") == listed_plan["releaseId"])
+
+
+def prepare_release(env: dict[str, str], prerelease: bool) -> dict:
+    validate_context(env)
+    plan = plan_publication(release_list(env), **publication_request(env, prerelease))
+    if plan["action"] == "create":
+        endpoint = f"repos/{env['GITHUB_REPOSITORY']}/releases"
+        status, created = api(
+            endpoint,
+            payload=dict(
+                tag_name=env["RELEASE_TAG"],
+                target_commitish=env["NATIVE_COMMIT"],
+                name=plan["title"],
+                body=plan["notes"],
+                draft=True,
+                prerelease=prerelease,
+            ),
+        )
+        # Never retry a create whose outcome is uncertain. A later separately
+        # authorized attempt must reconcile any retained exact draft first.
+        if status != 201 or not isinstance(created, dict):
+            raise PublicationStateError(
+                f"POST {endpoint}: HTTP {status}, create response rejected"
+            )
+        release_id = require_release_id(created.get("id"))
+        created_plan = plan_publication(
+            [created], **publication_request(env, prerelease)
+        )
+        if created_plan["action"] != "resume":
+            raise PublicationStateError(
+                f"POST {endpoint}: expected exact draft, plan={created_plan['action']}"
+            )
+    else:
+        release_id = require_release_id(plan["releaseId"])
+    return exact_release(env, prerelease, release_id)
 
 
 def validate_resume_assets(release: dict, candidate: Path, env: dict[str, str]) -> None:
@@ -173,7 +298,7 @@ def reconcile(
 ) -> dict:
     if mode == "create" and expected_release_id is None:
         raise PublicationStateError("writer requires the reconciled release ID")
-    release = exact_release(env, prerelease)
+    release = exact_release(env, prerelease, expected_release_id)
     if expected_release_id is not None and release["id"] != expected_release_id:
         raise PublicationStateError("release ID changed before tag reconciliation")
     endpoint = f"repos/{env['GITHUB_REPOSITORY']}/git/ref/tags/{env['RELEASE_TAG']}"
@@ -231,7 +356,7 @@ def reconcile(
         validate_tag_ref(
             ref, release_tag=env["RELEASE_TAG"], native_commit=env["NATIVE_COMMIT"]
         )
-        current = exact_release(env, prerelease)
+        current = exact_release(env, prerelease, expected_release_id)
         invariant_fields = (
             "id",
             "tag_name",
@@ -249,22 +374,32 @@ def reconcile(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("read", "create", "strict"), required=True)
+    parser.add_argument(
+        "--mode",
+        choices=("read", "create", "strict", "prepare", "release"),
+        required=True,
+    )
     parser.add_argument("--prerelease", choices=("true", "false"), required=True)
     parser.add_argument("--expected-release-id", type=int)
     parser.add_argument("--candidate-dir", type=Path, default=Path("candidate"))
     args = parser.parse_args()
-    print(
-        json.dumps(
-            reconcile(
-                mode=args.mode,
-                prerelease=args.prerelease == "true",
-                env=dict(os.environ),
-                candidate=args.candidate_dir,
-                expected_release_id=args.expected_release_id,
-            )
+    env = dict(os.environ)
+    prerelease = args.prerelease == "true"
+    if args.mode == "prepare":
+        result = prepare_release(env, prerelease)
+    elif args.mode == "release":
+        result = exact_release(
+            env, prerelease, require_release_id(args.expected_release_id)
         )
-    )
+    else:
+        result = reconcile(
+            mode=args.mode,
+            prerelease=prerelease,
+            env=env,
+            candidate=args.candidate_dir,
+            expected_release_id=args.expected_release_id,
+        )
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":

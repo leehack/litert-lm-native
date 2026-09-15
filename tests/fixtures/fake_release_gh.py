@@ -20,12 +20,6 @@ def out(value, status=200):
     sys.exit(0 if status < 400 else 1)
 
 
-if a[:2] == ["release", "create"]:
-    s["release"] = s["template"].copy()
-    s["release"]["assets"] = []
-    save()
-    print("draft-created")
-    sys.exit(0)
 if a[:2] == ["release", "edit"]:
     if s.get("fail_promotion"):
         s["fail_promotion"] = False
@@ -65,6 +59,22 @@ if a[:2] == ["release", "upload"]:
     save()
     sys.exit(0)
 endpoint = next((x for x in a if x.startswith("repos/")), "")
+if endpoint.endswith("/releases") and "--method" in a:
+    if a[a.index("--method") + 1] != "POST":
+        out({"message": "Method Not Allowed"}, 405)
+    payload = json.load(sys.stdin)
+    s["release_create_payload"] = payload
+    s["release_posts"] = s.get("release_posts", 0) + 1
+    s["release"] = {**s["template"], **payload, "assets": []}
+    s["created_in_run"] = True
+    if s.get("release_response_failure"):
+        save()
+        if s["release_response_failure"] == "malformed":
+            print("HTTP/2 200 OK\n\nnot-json")
+        sys.exit(1)
+    response = s["release"].copy()
+    response.update(s.get("create_release_response", {}))
+    out(response, s.get("release_create_status", 201))
 if "/releases?per_page=" in endpoint:
     s["lists"] = s.get("lists", 0) + 1
     if s.get("change_id_before_helper") and s["lists"] == 3:
@@ -75,6 +85,10 @@ if "/releases?per_page=" in endpoint:
         save()
         print(s["release"]["id"] if s["release"] else "")
         sys.exit(0)
+    if s.get("omit_created_from_lists") and s.get("created_in_run"):
+        out([[]])
+    if s.get("listed_collision") and s["release"] is not None:
+        out([[s["release"], {**s["release"], "id": 999}]])
     out([[s["release"]] if s["release"] else []])
 if "/git/ref/tags/" in endpoint:
     s["tag_reads"] = s.get("tag_reads", 0) + 1
@@ -122,5 +136,17 @@ if "/releases/assets/" in endpoint:
     s["release"]["assets"] = [x for x in s["release"]["assets"] if x["id"] != aid]
     out({})
 if "/releases/" in endpoint:
-    out(s["release"])
+    s["release_reads"] = s.get("release_reads", 0) + 1
+    if s.get("release_read_status"):
+        out({"message": "Not Found"}, s["release_read_status"])
+    if s["release_reads"] <= s.get("release_read_404_count", 0):
+        out({"message": "Not Found"}, 404)
+    if s.get("release_read_failure"):
+        save()
+        if s["release_read_failure"] == "malformed":
+            print("HTTP/2 200 OK\n\nnot-json")
+        sys.exit(1)
+    response = s["release"].copy()
+    response.update(s.get("release_read_response", {}))
+    out(response)
 raise SystemExit("unhandled fake gh " + repr(a))
