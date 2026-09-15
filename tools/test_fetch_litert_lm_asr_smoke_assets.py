@@ -8,9 +8,28 @@ from pathlib import Path
 from unittest.mock import patch
 
 import fetch_litert_lm_asr_smoke_assets as assets
+import download_utils
 
 
 class FetchLiteRtLmAsrSmokeAssetsTest(unittest.TestCase):
+    def setUp(self):
+        def in_process(url, path, **kwargs):
+            # These small cache tests use an in-memory response after asserting
+            # the real ASR callsite contract. The HTTP suite below separately
+            # executes its supervised worker and actual elapsed deadline.
+            self.assertEqual(kwargs["attempts"], 3)
+            self.assertEqual(kwargs["timeout_seconds"], 30)
+            self.assertEqual(kwargs["deadline_seconds"], 300)
+            self.assertEqual(kwargs["headers"], {"User-Agent": assets.USER_AGENT})
+            self.assertEqual(kwargs["label"], path.name)
+            self.assertEqual(len(kwargs["expected_sha256"]), 64)
+            kwargs["deadline_seconds"] = None
+            return download_utils.download_to_path(url, path, **kwargs)
+
+        patched = patch.object(assets, "download_to_path", side_effect=in_process)
+        patched.start()
+        self.addCleanup(patched.stop)
+
     def test_downloads_and_reuses_verified_asset(self) -> None:
         payload = b"speech-model"
         asset = assets.Asset(
@@ -19,7 +38,7 @@ class FetchLiteRtLmAsrSmokeAssetsTest(unittest.TestCase):
             sha256=hashlib.sha256(payload).hexdigest(),
         )
         with tempfile.TemporaryDirectory() as temp, patch.object(
-            assets.urllib.request, "urlopen", return_value=io.BytesIO(payload)
+            download_utils.urllib.request, "urlopen", return_value=io.BytesIO(payload)
         ) as urlopen:
             output_dir = Path(temp)
             path = assets.fetch_asset(asset, output_dir)
@@ -34,7 +53,7 @@ class FetchLiteRtLmAsrSmokeAssetsTest(unittest.TestCase):
             sha256=hashlib.sha256(b"expected").hexdigest(),
         )
         with tempfile.TemporaryDirectory() as temp, patch.object(
-            assets.urllib.request, "urlopen", return_value=io.BytesIO(b"wrong")
+            download_utils.urllib.request, "urlopen", return_value=io.BytesIO(b"wrong")
         ):
             output_dir = Path(temp)
             with self.assertRaisesRegex(RuntimeError, "Checksum mismatch"):

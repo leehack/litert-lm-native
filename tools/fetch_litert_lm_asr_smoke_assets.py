@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import shutil
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+from download_utils import download_to_path
 
 USER_AGENT = "litert-lm-native-asr-smoke/1"
 
@@ -63,19 +62,16 @@ def fetch_asset(asset: Asset, output_dir: Path) -> Path:
         print(f"Verified cached {destination}", flush=True)
         return destination
 
-    partial = destination.with_suffix(destination.suffix + ".part")
-    partial.unlink(missing_ok=True)
-    request = urllib.request.Request(asset.url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request) as response, partial.open("wb") as output:
-        shutil.copyfileobj(response, output)
-    actual = sha256(partial)
-    if actual != asset.sha256:
-        partial.unlink(missing_ok=True)
-        raise RuntimeError(
-            f"Checksum mismatch for {asset.filename}: expected {asset.sha256}, "
-            f"got {actual}."
-        )
-    partial.replace(destination)
+    download_to_path(
+        asset.url,
+        destination,
+        headers={"User-Agent": USER_AGENT},
+        label=asset.filename,
+        attempts=3,
+        timeout_seconds=30,
+        deadline_seconds=300,
+        expected_sha256=asset.sha256,
+    )
     print(f"Downloaded and verified {destination}", flush=True)
     return destination
 
