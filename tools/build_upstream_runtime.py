@@ -336,7 +336,11 @@ def build_runtime(
         *configs,
         *target.get("bazel_options", []),
         target["bazel_target"],
-        "--define=litert_link_capi_so=true",
+        # Modern desktop accelerators require the shared LiteRT runtime. The
+        # legacy define is ignored by their current dependency selection.
+        ("--define=litert_runtime_link_mode=dynamic"
+         if platform in {"linux", "windows"} and is_at_least(upstream_tag, (0, 16, 0))
+         else "--define=litert_link_capi_so=true"),
         "--define=resolve_symbols_in_exec=false",
     ]
     if uses_stream_chunk_api(upstream_tag):

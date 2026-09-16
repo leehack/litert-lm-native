@@ -126,3 +126,21 @@ Each `artifacts` entry records only the file-level contract:
   `gpu`, `metal`, `opencl`, and `webgpu`
 
 Downstream packages should not infer platform support from filenames alone.
+
+## Desktop WebGPU runtime linkage
+
+For Linux and Windows builds using LiteRT-LM v0.16 or newer, pass
+`--define=litert_runtime_link_mode=dynamic` so the host uses the same shared
+LiteRT runtime as its prebuilt accelerators. `litert_link_capi_so=true` is a
+legacy setting and does not select the modern runtime dependency path. Keep
+`resolve_symbols_in_exec=false` for the shared-library host. Older versions and
+Apple/Android build configurations are outside this desktop correction.
+
+This follows the pinned [v0.17 build instructions](https://github.com/google-ai-edge/LiteRT-LM/blob/v0.17.0/docs/getting-started/build-and-run.md)
+and the independently reported [Windows configuration repair](https://github.com/google-ai-edge/LiteRT-LM/issues/2957#issuecomment-5289900291).
+It is a candidate correction for [native issue #47](https://github.com/leehack/litert-lm-native/issues/47), not evidence that every desktop GPU/model works.
+Before publishing or removing a consumer GPU gate, inspect the rebuilt host's
+shared-runtime dependency and run real GPU generation on Linux Vulkan and
+Windows D3D12, alongside CPU controls. Preserve driver/backend identity and
+streaming/disposal evidence. Never infer hardware support merely from successful
+library registration or a CPU-only hosted CI smoke.
