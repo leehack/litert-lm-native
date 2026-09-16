@@ -95,6 +95,33 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     self.assertEqual("--define=litert_link_capi_so=true" in command, not dynamic)
                     self.assertIn("--define=resolve_symbols_in_exec=false", command)
 
+    def test_linux_stages_matching_prebuilt_core_even_over_stale_copy(self) -> None:
+        for arch, target in (("x64", "linux_x86_64"), ("arm64", "linux_arm64")):
+            with self.subTest(arch=arch), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                stage = root / "bin" / "linux" / arch
+                stage.mkdir(parents=True)
+                host = stage / "libLiteRtLm.so"
+                host.write_bytes(b"\x7fELFhost")
+                core = stage / "libLiteRt.so"
+                core.write_bytes(b"stale source-built core")
+                prebuilt = root / "source" / "prebuilt" / target / "libLiteRt.so"
+                prebuilt.parent.mkdir(parents=True)
+                prebuilt.write_bytes(b"\x7fELFmatching upstream core")
+                with patch.object(build_upstream_runtime, "BIN_DIR", root / "bin"), \
+                     patch.object(build_upstream_runtime, "elf_needed_libraries", side_effect=lambda p: ["libLiteRt.so"] if p.name == "libLiteRtLm.so" else []), \
+                     patch.object(build_upstream_runtime, "find_runtime_dependency") as fallback:
+                    build_upstream_runtime.stage_runtime_dependencies(host, root / "source", "linux", arch)
+                    self.assertEqual(core.read_bytes(), b"\x7fELFmatching upstream core")
+                    fallback.assert_not_called()
+                    prebuilt.write_bytes(b"version https://git-lfs.github.com/spec/v1")
+                    with self.assertRaisesRegex(RuntimeError, "Matching upstream Linux"):
+                        build_upstream_runtime.stage_runtime_dependencies(host, root / "source", "linux", arch)
+                    prebuilt.unlink()
+                    with self.assertRaisesRegex(RuntimeError, "Matching upstream Linux"):
+                        build_upstream_runtime.stage_runtime_dependencies(host, root / "source", "linux", arch)
+                    fallback.assert_not_called()
+
     def test_workspace_accepts_upstream_v017_zlib_mirrors(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

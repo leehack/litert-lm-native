@@ -144,3 +144,9 @@ shared-runtime dependency and run real GPU generation on Linux Vulkan and
 Windows D3D12, alongside CPU controls. Preserve driver/backend identity and
 streaming/disposal evidence. Never infer hardware support merely from successful
 library registration or a CPU-only hosted CI smoke.
+
+Linux packaging must also retain `prebuilt/<target>/libLiteRt.so` from the same
+upstream snapshot as the accelerator. A source-built core with the same SONAME
+is not ABI-equivalent evidence: the L4 control still crashed with that core and
+passed after replacing only it with the matching prebuilt. Missing matching
+prebuilts fail the build instead of falling back to an arbitrary Bazel output.
