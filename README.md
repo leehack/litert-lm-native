@@ -80,6 +80,9 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
 - `docs/platform_strategy.md`: platform and distribution strategy.
 - `third_party/LiteRT-LM`: optional upstream source checkout or submodule.
 
+For the pinned Qwen3 bundle's garbled Unicode output, see the explicit
+[model tokenizer repair](docs/qwen3_tokenizer_repair.md).
+
 ## Local Workflow
 
 Inspect the latest upstream release:
