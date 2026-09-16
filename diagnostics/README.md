@@ -1,3 +1,9 @@
+# Diagnostics
+
+For the explicit Qwen3 model repair, see
+[Qwen3 tokenizer repair](../docs/qwen3_tokenizer_repair.md). It is separate from
+the runner download workflow below and is never run automatically.
+
 # Runner download diagnostic
 
 This manual-only workflow screens the acquisition failures observed in native
