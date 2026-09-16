@@ -134,7 +134,13 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         self.assertIn(
             "ref: ${{ github.event.pull_request.head.sha }}", workflow
         )
-        self.assertEqual(workflow.count("platform:"), 9)
+        build_job = workflow.split("\n  build:\n", 1)[1].split("\n  verify:\n", 1)[0]
+        self.assertEqual(build_job.count("platform:"), 9)
+        qwen_job = workflow.split("\n  qwen-inference:\n", 1)[1]
+        self.assertEqual(qwen_job.count("platform:"), 3)
+        self.assertIn("needs: verify", qwen_job)
+        self.assertIn("../tools/qwen_runtime_preflight.dart", qwen_job)
+        self.assertLess(qwen_job.index("qwen_runtime_preflight.dart"), qwen_job.index("litert_lm_engine_smoke.dart"))
         self.assertIn("Verify nine-platform candidate", workflow)
         build_job, verify_job = workflow.split("\n  verify:", 1)
         expected_invocation = (
