@@ -75,6 +75,24 @@ class RepairTest(unittest.TestCase):
                 repair.repair(self.model, self.tokenizer, self.output)
         self.assertFalse(self.output.exists())
 
+    def test_header_is_read_from_verified_copy_not_racing_source(self):
+        real_hash = repair.sha256
+        real_copy = repair.shutil.copyfile
+        def hash_then_mutate(path):
+            result = real_hash(path)
+            if path == self.model:
+                mutated = bytearray(self.original)
+                mutated[40] = 99
+                path.write_bytes(mutated)
+            return result
+        def copy_restored_source(src, dst):
+            src.write_bytes(self.original)
+            return real_copy(src, dst)
+        with mock.patch.object(repair, 'sha256', side_effect=hash_then_mutate), \
+             mock.patch.object(repair.shutil, 'copyfile', side_effect=copy_restored_source):
+            repair.repair(self.model, self.tokenizer, self.output)
+        self.assertEqual(self.output.read_bytes()[40], self.original[40])
+
     def test_concurrent_output_is_not_overwritten(self):
         real_link = repair.os.link
         def racing_link(src, dst):

@@ -47,14 +47,6 @@ def repair(model: Path, tokenizer: Path, output: Path) -> dict[str, str]:
     payload = struct.pack("<Q", len(tokenizer_bytes)) + zlib.compress(tokenizer_bytes)
     if len(payload) > TOKENIZER_END - TOKENIZER_BEGIN:
         raise ValueError("Compressed tokenizer exceeds the reserved section")
-    with model.open("rb") as source:
-        header = bytearray(source.read(HEADER_SIZE))
-    if (len(header) != HEADER_SIZE or header[:8] != b"LITERTLM"
-            or model.stat().st_size != MODEL_SIZE or header[TYPE_FIELD] != 4
-            or struct.unpack_from("<Q", header, END_FIELD)[0] != TOKENIZER_END):
-        raise ValueError("Pinned model layout mismatch")
-    header[TYPE_FIELD] = 6  # HF_Tokenizer_Zlib in the upstream schema.
-    struct.pack_into("<Q", header, END_FIELD, TOKENIZER_BEGIN + len(payload))
     # Stage beside the destination. Publish exclusively and atomically so a
     # race cannot overwrite another file or expose a partially written model.
     with tempfile.TemporaryDirectory(prefix="qwen-tokenizer-", dir=output.parent) as tmp:
@@ -62,6 +54,14 @@ def repair(model: Path, tokenizer: Path, output: Path) -> dict[str, str]:
         shutil.copyfile(model, staged)
         if sha256(staged) != MODEL_SHA256:
             raise ValueError("Model changed while preparing repair")
+        with staged.open("rb") as source:
+            header = bytearray(source.read(HEADER_SIZE))
+        if (len(header) != HEADER_SIZE or header[:8] != b"LITERTLM"
+                or staged.stat().st_size != MODEL_SIZE or header[TYPE_FIELD] != 4
+                or struct.unpack_from("<Q", header, END_FIELD)[0] != TOKENIZER_END):
+            raise ValueError("Pinned model layout mismatch")
+        header[TYPE_FIELD] = 6  # HF_Tokenizer_Zlib in the upstream schema.
+        struct.pack_into("<Q", header, END_FIELD, TOKENIZER_BEGIN + len(payload))
         with staged.open("r+b") as stream:
             stream.write(header)
             stream.seek(TOKENIZER_BEGIN)
