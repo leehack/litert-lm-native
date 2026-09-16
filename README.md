@@ -151,6 +151,15 @@ same checksum-pinned Dawn rollback: the tagged Android arm64 binary reproduced
 while the rollback completed the same Gemma 4 GPU workload and exact-answer
 gate. The v0.16 sampler binaries do not require the v0.15 sampler override.
 
+Upstream `v0.17.0` also requires the same Dawn correction. Without it,
+Qwen3 0.6B and Gemma 4 E2B reproduce Vulkan device loss on Pixel 9 Pro;
+changing only `libwebgpu_dawn.so` to the pinned binary restores both GPU
+workloads with the v0.17 runtime. See [Android GPU qualification](docs/android_gpu_qualification.md)
+for the controlled comparison and coverage limits. Android x64 uses the
+corresponding checksum-pinned library, but physical-device evidence is arm64
+only. This correction does not claim to fix OpenCL, Qwen3.5 GPU memory failures,
+or Apple simulator shader limitations.
+
 ## Native Version Management
 
 The published native release tag is the version contract consumed by downstream

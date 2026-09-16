@@ -65,12 +65,12 @@ class PrebuiltOverridesTest(unittest.TestCase):
             },
         )
 
-    def test_v016_keeps_the_validated_android_dawn_rollback(self) -> None:
-        for tag in ("v0.16.0", "v0.16.1"):
+    def test_supported_versions_keep_the_validated_android_dawn_rollback(self) -> None:
+        for tag in ("v0.16.0", "v0.16.1", "v0.17.0"):
             with self.subTest(tag=tag):
-                self._assert_v016_dawn_rollback(tag)
+                self._assert_dawn_rollback(tag)
 
-    def _assert_v016_dawn_rollback(self, tag: str) -> None:
+    def _assert_dawn_rollback(self, tag: str) -> None:
         overrides = prebuilt_overrides(tag)
 
         self.assertEqual(

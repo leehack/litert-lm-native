@@ -113,6 +113,44 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
         self.assertEqual(selected.platform, "android")
         self.assertEqual(selected.arch, "arm64")
 
+    def test_v017_override_is_applied_only_to_requested_android_target(self) -> None:
+        for arch in ("arm64", "x64"):
+            with self.subTest(arch=arch), patch.object(
+                package_upstream_prebuilts, "apply_prebuilt_override"
+            ) as apply_override:
+                count = package_upstream_prebuilts.apply_prebuilt_overrides(
+                    "v0.17.0", platform="android", arch=arch
+                )
+                self.assertEqual(count, 1)
+                apply_override.assert_called_once()
+                selected = apply_override.call_args.args[0]
+                self.assertEqual(selected.target_path, f"bin/android/{arch}/libwebgpu_dawn.so")
+
+        with patch.object(package_upstream_prebuilts, "apply_prebuilt_override") as apply_override:
+            self.assertEqual(package_upstream_prebuilts.apply_prebuilt_overrides(
+                "v0.17.0", platform="macos", arch="arm64"
+            ), 0)
+            apply_override.assert_not_called()
+
+    def test_v017_bad_override_checksum_preserves_existing_library(self) -> None:
+        override = package_upstream_prebuilts.prebuilt_overrides("v0.17.0")[0]
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            target = output / override.platform / override.arch / override.filename
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"original library")
+
+            def bad_download(url, staged, **kwargs):
+                staged.write_bytes(b"corrupt download")
+
+            with patch.object(package_upstream_prebuilts, "BIN_DIR", output), patch.object(
+                package_upstream_prebuilts, "download_to_path", side_effect=bad_download
+            ):
+                with self.assertRaisesRegex(RuntimeError, "checksum mismatch"):
+                    package_upstream_prebuilts.apply_prebuilt_override(override)
+            self.assertEqual(target.read_bytes(), b"original library")
+            self.assertFalse(target.with_name(target.name + ".override").exists())
+
     def test_release_applies_overrides_after_runtime_artifact_merge(self) -> None:
         workflow = (
             package_upstream_prebuilts.REPO_ROOT

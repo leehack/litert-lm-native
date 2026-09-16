@@ -85,6 +85,9 @@ PREBUILT_OVERRIDES: dict[str, tuple[PrebuiltOverride, ...]] = {
     # Development builds using it as their compatibility baseline keep the
     # validated Dawn correction until new device evidence retires it.
     "v0.16.1": ANDROID_DAWN_ROLLBACKS,
+    # v0.17 still loses the Vulkan device on Pixel Mali-G715. Keep the
+    # checksum-pinned correction; do not retire it without device evidence.
+    "v0.17.0": ANDROID_DAWN_ROLLBACKS,
 }
 
 

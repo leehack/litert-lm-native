@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import build_upstream_runtime
+import package_upstream_prebuilts
 
 
 class BuildUpstreamRuntimeTest(unittest.TestCase):
@@ -205,6 +206,16 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             self.assertFalse(
                 (output / "windows" / "x64" / "LiteRt.lib").exists()
             )
+
+    def test_v017_source_build_stages_the_pinned_dawn_correction(self) -> None:
+        with patch.object(
+            package_upstream_prebuilts, "apply_prebuilt_override"
+        ) as apply_override:
+            build_upstream_runtime.stage_runtime_overrides("v0.17.0", "android", "arm64")
+        apply_override.assert_called_once()
+        selected = apply_override.call_args.args[0]
+        self.assertEqual(selected.target_path, "bin/android/arm64/libwebgpu_dawn.so")
+        self.assertEqual(selected.sha256, "7282aacdb076ce89f0c9d93107a145b991b99eb1dfbd5b5746dd0d99466ab3c3")
 
     def test_runtime_override_is_filtered_to_the_target(self) -> None:
         with patch.object(
