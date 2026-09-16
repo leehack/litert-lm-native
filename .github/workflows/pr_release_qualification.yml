@@ -25,7 +25,23 @@ env:
   QUALIFICATION_UPSTREAM_COMMIT: e9fd8c53ff968071774206163027dd84bedfe925
 
 jobs:
+  preflight:
+    name: Qualification tooling checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Validate tooling and workflow policies
+        run: |
+          python3 -m unittest discover -s tools -p 'test_*.py'
+          python3 -m unittest discover -s diagnostics -p 'test_*.py'
+          python3 tests/test_release_tag_lifecycle.py
+
   tokenizer-compatibility:
+    needs: preflight
     name: SentencePiece BPE compatibility and sanitizers
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -43,6 +59,7 @@ jobs:
         run: python3 tools/qualify_sentencepiece_bpe_null.py --work-dir tokenizer-qualification --sanitize
 
   build:
+    needs: [preflight, tokenizer-compatibility]
     name: Build and smoke (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
@@ -181,9 +198,20 @@ jobs:
 
   verify:
     name: Verify nine-platform candidate
-    needs: build
+    needs: [preflight, tokenizer-compatibility, build]
+    if: always()
     runs-on: macos-latest
     steps:
+      - name: Require successful qualification prerequisites
+        shell: bash
+        env:
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+          TOKENIZER_RESULT: ${{ needs.tokenizer-compatibility.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          test "$PREFLIGHT_RESULT" = success
+          test "$TOKENIZER_RESULT" = success
+          test "$BUILD_RESULT" = success
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
