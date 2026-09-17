@@ -464,8 +464,12 @@ def normalize_linux_runtime_metadata(platform: str, arch: str) -> None:
             try:
                 # Bazel outputs retain read-only permissions through copy2.
                 library.chmod(original_mode | 0o200)
-                run(["patchelf", "--set-soname", library.name,
-                     "--set-rpath", "$ORIGIN", str(library)], cwd=library.parent)
+                command = ["patchelf", "--set-rpath", "$ORIGIN"]
+                # Only Dawn needs a new identity. Adding a SONAME to the host
+                # relocates ELF notes and breaks its LLVM profiling shutdown.
+                if library.name == "libwebgpu_dawn.so":
+                    command.extend(["--set-soname", library.name])
+                run([*command, str(library)], cwd=library.parent)
             finally:
                 library.chmod(original_mode)
 

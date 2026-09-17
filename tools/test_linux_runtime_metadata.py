@@ -31,6 +31,8 @@ class LinuxRuntimeMetadataTest(unittest.TestCase):
             host.chmod(0o444)
             def normalize(command, cwd):
                 self.assertTrue(Path(command[-1]).stat().st_mode & 0o200)
+                if Path(command[-1]).name == host.name:
+                    self.assertNotIn('--set-soname', command)
                 Path(command[-1]).write_bytes(b'\x7fELFnormalized')
             with patch.object(build, 'BIN_DIR', root/'bin'), \
                  patch.object(build, 'elf_needed_libraries', return_value=[]), \
@@ -54,8 +56,8 @@ class LinuxRuntimeMetadataTest(unittest.TestCase):
             bundle.mkdir(parents=True)
             (root / 'dep.c').write_text('int answer(void) { return 42; }')
             (root / 'host.c').write_text('extern int answer(void); int result(void) { return answer(); }')
-            subprocess.run(['cc', '-shared', '-fPIC', str(root/'dep.c'), '-o', str(bundle/'libdep.so')], check=True)
-            subprocess.run(['cc', '-shared', '-fPIC', str(root/'host.c'), '-L'+str(bundle), '-ldep', '-Wl,-rpath,/missing/bazel/tree', '-o', str(bundle/'libhost.so')], check=True)
+            subprocess.run(['cc', '-shared', '-fPIC', str(root/'dep.c'), '-o', str(bundle/'libwebgpu_dawn.so')], check=True)
+            subprocess.run(['cc', '-shared', '-fPIC', str(root/'host.c'), '-L'+str(bundle), '-lwebgpu_dawn', '-Wl,-rpath,/missing/bazel/tree', '-o', str(bundle/'libhost.so')], check=True)
             env = {k:v for k,v in os.environ.items() if k not in ('LD_LIBRARY_PATH', 'LD_PRELOAD')}
             code = 'import ctypes,sys; lib=ctypes.CDLL(sys.argv[1]); assert lib.result()==42'
             command = [sys.executable, '-c', code, str(bundle/'libhost.so')]
@@ -67,6 +69,7 @@ class LinuxRuntimeMetadataTest(unittest.TestCase):
             with patch.object(build, 'BIN_DIR', root):
                 build.normalize_linux_runtime_metadata('linux', 'x64')
             subprocess.run(command, env=env, check=True)
-            for name in ('libdep.so','libhost.so'):
-                self.assertEqual(subprocess.check_output(['patchelf','--print-soname',str(bundle/name)],text=True).strip(),name)
+            for name in ('libwebgpu_dawn.so','libhost.so'):
+                expected_soname = name if name == 'libwebgpu_dawn.so' else ''
+                self.assertEqual(subprocess.check_output(['patchelf','--print-soname',str(bundle/name)],text=True).strip(),expected_soname)
                 self.assertEqual(subprocess.check_output(['patchelf','--print-rpath',str(bundle/name)],text=True).strip(),'$ORIGIN')
