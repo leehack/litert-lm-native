@@ -336,7 +336,11 @@ def build_runtime(
         *configs,
         *target.get("bazel_options", []),
         target["bazel_target"],
-        "--define=litert_link_capi_so=true",
+        # Modern desktop accelerators require the shared LiteRT runtime. The
+        # legacy define is ignored by their current dependency selection.
+        ("--define=litert_runtime_link_mode=dynamic"
+         if platform in {"linux", "windows"} and is_at_least(upstream_tag, (0, 16, 0))
+         else "--define=litert_link_capi_so=true"),
         "--define=resolve_symbols_in_exec=false",
     ]
     if uses_stream_chunk_api(upstream_tag):
@@ -412,7 +416,15 @@ def stage_runtime_dependencies(
             if is_system_needed(platform, library_name):
                 continue
             destination = stage_dir / library_name
-            if not destination.exists():
+            if platform == "linux" and library_name == "libLiteRt.so":
+                # Prebuilt GPU accelerators require their matching upstream core;
+                # a same-named source-built runtime can have incompatible ABI flags.
+                prebuilt_target = PREBUILT_TARGETS[(platform, arch)]
+                dependency = source_root / "prebuilt" / prebuilt_target / library_name
+                if not dependency.is_file() or not is_elf(dependency):
+                    raise RuntimeError("Matching upstream Linux libLiteRt.so is missing or not ELF")
+                copy_artifact(dependency, destination)
+            elif not destination.exists():
                 dependency = find_runtime_dependency(
                     source_root,
                     output,

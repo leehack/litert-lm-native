@@ -78,6 +78,50 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 command = run.call_args.args[0]
                 self.assertEqual("--define=litert_lm_capabilities_in_c_engine=true" in command, expected)
 
+    def test_desktop_gpu_build_selects_shared_runtime_without_legacy_define(self) -> None:
+        for platform, arch in build_upstream_runtime.RUNTIME_TARGETS:
+            for tag in ("v0.15.0", "v0.16.0", "v0.17.0"):
+                with self.subTest(platform=platform, arch=arch, tag=tag), tempfile.TemporaryDirectory() as temp:
+                    root = Path(temp)
+                    with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
+                         patch.object(build_upstream_runtime, "patch_upstream_ios_sampler_path"), \
+                         patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]), \
+                         patch.object(build_upstream_runtime, "run", side_effect=RuntimeError("captured build")) as run:
+                        with self.assertRaisesRegex(RuntimeError, "captured build"):
+                            build_upstream_runtime.build_runtime(root, platform, arch, tag, "3")
+                    command = run.call_args.args[0]
+                    dynamic = platform in {"linux", "windows"} and tag != "v0.15.0"
+                    self.assertEqual("--define=litert_runtime_link_mode=dynamic" in command, dynamic)
+                    self.assertEqual("--define=litert_link_capi_so=true" in command, not dynamic)
+                    self.assertIn("--define=resolve_symbols_in_exec=false", command)
+
+    def test_linux_stages_matching_prebuilt_core_even_over_stale_copy(self) -> None:
+        for arch, target in (("x64", "linux_x86_64"), ("arm64", "linux_arm64")):
+            with self.subTest(arch=arch), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                stage = root / "bin" / "linux" / arch
+                stage.mkdir(parents=True)
+                host = stage / "libLiteRtLm.so"
+                host.write_bytes(b"\x7fELFhost")
+                core = stage / "libLiteRt.so"
+                core.write_bytes(b"stale source-built core")
+                prebuilt = root / "source" / "prebuilt" / target / "libLiteRt.so"
+                prebuilt.parent.mkdir(parents=True)
+                prebuilt.write_bytes(b"\x7fELFmatching upstream core")
+                with patch.object(build_upstream_runtime, "BIN_DIR", root / "bin"), \
+                     patch.object(build_upstream_runtime, "elf_needed_libraries", side_effect=lambda p: ["libLiteRt.so"] if p.name == "libLiteRtLm.so" else []), \
+                     patch.object(build_upstream_runtime, "find_runtime_dependency") as fallback:
+                    build_upstream_runtime.stage_runtime_dependencies(host, root / "source", "linux", arch)
+                    self.assertEqual(core.read_bytes(), b"\x7fELFmatching upstream core")
+                    fallback.assert_not_called()
+                    prebuilt.write_bytes(b"version https://git-lfs.github.com/spec/v1")
+                    with self.assertRaisesRegex(RuntimeError, "Matching upstream Linux"):
+                        build_upstream_runtime.stage_runtime_dependencies(host, root / "source", "linux", arch)
+                    prebuilt.unlink()
+                    with self.assertRaisesRegex(RuntimeError, "Matching upstream Linux"):
+                        build_upstream_runtime.stage_runtime_dependencies(host, root / "source", "linux", arch)
+                    fallback.assert_not_called()
+
     def test_workspace_accepts_upstream_v017_zlib_mirrors(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
