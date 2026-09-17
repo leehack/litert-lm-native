@@ -460,8 +460,14 @@ def normalize_linux_runtime_metadata(platform: str, arch: str) -> None:
         if library.is_file() and is_elf(library):
             # Normalize packaged copies only, before smoke hashes are recorded.
             # Upstream Dawn lacks SONAME and accelerator RUNPATHs name Bazel dirs.
-            run(["patchelf", "--set-soname", library.name,
-                 "--set-rpath", "$ORIGIN", str(library)], cwd=library.parent)
+            original_mode = library.stat().st_mode
+            try:
+                # Bazel outputs retain read-only permissions through copy2.
+                library.chmod(original_mode | 0o200)
+                run(["patchelf", "--set-soname", library.name,
+                     "--set-rpath", "$ORIGIN", str(library)], cwd=library.parent)
+            finally:
+                library.chmod(original_mode)
 
 
 def stage_runtime_overrides(upstream_tag: str, platform: str, arch: str) -> None:

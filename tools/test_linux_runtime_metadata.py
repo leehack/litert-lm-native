@@ -28,7 +28,9 @@ class LinuxRuntimeMetadataTest(unittest.TestCase):
             prebuilt = source / 'prebuilt' / build.PREBUILT_TARGETS[('linux', 'x64')]
             prebuilt.mkdir(parents=True)
             (prebuilt / 'libdlopen_only.so').write_bytes(b'\x7fELFraw')
+            host.chmod(0o444)
             def normalize(command, cwd):
+                self.assertTrue(Path(command[-1]).stat().st_mode & 0o200)
                 Path(command[-1]).write_bytes(b'\x7fELFnormalized')
             with patch.object(build, 'BIN_DIR', root/'bin'), \
                  patch.object(build, 'elf_needed_libraries', return_value=[]), \
@@ -36,6 +38,7 @@ class LinuxRuntimeMetadataTest(unittest.TestCase):
                  patch.object(build, 'run', side_effect=normalize):
                 build.stage_runtime_dependencies(host, source, 'linux', 'x64')
                 build.normalize_linux_runtime_metadata('linux', 'x64')
+            self.assertEqual(host.stat().st_mode & 0o777, 0o444)
             # The package workflow stages raw prebuilts then overlays build output.
             merged = root / 'merged'
             shutil.copytree(prebuilt, merged)
