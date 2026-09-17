@@ -150,3 +150,10 @@ upstream snapshot as the accelerator. A source-built core with the same SONAME
 is not ABI-equivalent evidence: the L4 control still crashed with that core and
 passed after replacing only it with the matching prebuilt. Missing matching
 prebuilts fail the build instead of falling back to an arbitrary Bazel output.
+
+Linux flat runtime bundles normalize the packaged Dawn SONAME and use `$ORIGIN`
+for dependency lookup, after dependency staging and before model smoke hashes.
+Upstream build-tree RUNPATHs and a missing Dawn SONAME must not require callers
+to configure `LD_LIBRARY_PATH`. Only packaged copies are normalized; upstream
+sources remain unchanged. Linux packaging requires `patchelf`, and qualification
+runs a real-loader regression without loader environment overrides.

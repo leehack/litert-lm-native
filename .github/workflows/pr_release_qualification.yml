@@ -34,6 +34,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+      - name: Install ELF regression tools
+        run: sudo apt-get update && sudo apt-get install -y patchelf
       - name: Validate tooling and workflow policies
         run: |
           python3 -m unittest discover -s tools -p 'test_*.py'
@@ -93,6 +95,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/verify_qualification_source.py --tag "$QUALIFICATION_UPSTREAM_TAG" --commit "$QUALIFICATION_UPSTREAM_COMMIT"
+
+      - name: Install Linux ELF packaging tools
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y patchelf
 
       - name: Set up Node.js for Bazelisk fallback
         uses: actions/setup-node@v4

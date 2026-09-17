@@ -401,6 +401,15 @@ def stage_runtime_dependencies(
 
     stage_dir = BIN_DIR / platform / arch
     staged = stage_dir / RUNTIME_TARGETS[(platform, arch)]["library"]
+    if platform == "linux":
+        # Include dlopen-only accelerators as well as the host DT_NEEDED closure.
+        # These copies overlay the raw prebuilt inventory in the package job.
+        prebuilt_dir = source_root / "prebuilt" / PREBUILT_TARGETS[(platform, arch)]
+        for dependency in sorted(prebuilt_dir.glob("*.so*")):
+            if dependency.is_file() and dependency.name != staged.name:
+                if not is_elf(dependency):
+                    raise RuntimeError(f"Matching upstream Linux prebuilt is not ELF: {dependency.name}")
+                copy_artifact(dependency, stage_dir / dependency.name)
     queued = [staged]
     seen = set()
     dependency_cache: dict[str, Path | None] = {}
@@ -439,6 +448,30 @@ def stage_runtime_dependencies(
                 copy_artifact(dependency, destination)
                 print(f"Staged runtime dependency {destination}", flush=True)
             queued.append(destination)
+
+
+def normalize_linux_runtime_metadata(platform: str, arch: str) -> None:
+    """Make the final flat ELF bundle resolve its own dependencies."""
+    if platform != "linux":
+        return
+    if shutil.which("patchelf") is None:
+        raise RuntimeError("Linux runtime packaging requires patchelf")
+    for library in sorted((BIN_DIR / platform / arch).glob("*.so*")):
+        if library.is_file() and is_elf(library):
+            # Normalize packaged copies only, before smoke hashes are recorded.
+            # Upstream Dawn lacks SONAME and accelerator RUNPATHs name Bazel dirs.
+            original_mode = library.stat().st_mode
+            try:
+                # Bazel outputs retain read-only permissions through copy2.
+                library.chmod(original_mode | 0o200)
+                command = ["patchelf", "--set-rpath", "$ORIGIN"]
+                # Only Dawn needs a new identity. Adding a SONAME to the host
+                # relocates ELF notes and breaks its LLVM profiling shutdown.
+                if library.name == "libwebgpu_dawn.so":
+                    command.extend(["--set-soname", library.name])
+                run([*command, str(library)], cwd=library.parent)
+            finally:
+                library.chmod(original_mode)
 
 
 def stage_runtime_overrides(upstream_tag: str, platform: str, arch: str) -> None:
@@ -629,6 +662,7 @@ def main() -> int:
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)
+        normalize_linux_runtime_metadata(args.platform, args.arch)
         return 0
 
     tmp_parent = None
@@ -657,6 +691,7 @@ def main() -> int:
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)
+        normalize_linux_runtime_metadata(args.platform, args.arch)
     return 0
 
 
