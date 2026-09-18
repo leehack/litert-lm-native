@@ -13,6 +13,12 @@ from litert_lm_symbols import (
 
 
 class LiteRtLmSymbolsTest(unittest.TestCase):
+    def test_v0171_keeps_stream_and_asr_abi_requirements(self) -> None:
+        self.assertEqual(required_c_api_symbols("v0.17.1"), required_c_api_symbols("v0.17.0"))
+        self.assertEqual(required_bridge_symbols("v0.17.1"), required_bridge_symbols("v0.17.0"))
+        self.assertTrue(has_asr_bridge("v0.17.1"))
+        self.assertTrue(uses_stream_chunk_api("v0.17.1"))
+
     def test_stream_chunk_symbols_start_at_v015(self) -> None:
         v014_symbols = required_c_api_symbols("v0.14.0-native.2")
         v015_symbols = required_c_api_symbols("v0.15.0")

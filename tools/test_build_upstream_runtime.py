@@ -21,7 +21,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
         self.assertEqual(set(files), {"src/bpe_model.cc", "src/model_interface.cc", "src/model_interface.h"})
 
     def test_download_wires_bpe_compatibility_only_for_v017_and_later(self) -> None:
-        for tag, enabled in [("v0.16.0", False), ("v0.17.0", True)]:
+        for tag, enabled in [("v0.16.0", False), ("v0.17.0", True), ("v0.17.1", True)]:
             with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 source = root / "source"
@@ -67,7 +67,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 build_upstream_runtime.patch_sentencepiece_bpe_null(invalid)
 
     def test_runtime_selects_capabilities_owner_by_upstream_version(self) -> None:
-        for tag, expected in [("v0.16.0", False), ("v0.17.0", True)]:
+        for tag, expected in [("v0.16.0", False), ("v0.17.0", True), ("v0.17.1", True)]:
             with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
@@ -80,7 +80,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
 
     def test_desktop_gpu_build_selects_shared_runtime_without_legacy_define(self) -> None:
         for platform, arch in build_upstream_runtime.RUNTIME_TARGETS:
-            for tag in ("v0.15.0", "v0.16.0", "v0.17.0"):
+            for tag in ("v0.15.0", "v0.16.0", "v0.17.0", "v0.17.1"):
                 with self.subTest(platform=platform, arch=arch, tag=tag), tempfile.TemporaryDirectory() as temp:
                     root = Path(temp)
                     with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
