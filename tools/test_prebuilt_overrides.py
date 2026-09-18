@@ -66,7 +66,7 @@ class PrebuiltOverridesTest(unittest.TestCase):
         )
 
     def test_supported_versions_keep_the_validated_android_dawn_rollback(self) -> None:
-        for tag in ("v0.16.0", "v0.16.1", "v0.17.0"):
+        for tag in ("v0.16.0", "v0.16.1", "v0.17.0", "v0.17.1"):
             with self.subTest(tag=tag):
                 self._assert_dawn_rollback(tag)
 
@@ -92,6 +92,11 @@ class PrebuiltOverridesTest(unittest.TestCase):
             {entry["sourceCommit"] for entry in manifest},
             {ANDROID_DAWN_ROLLBACK_COMMIT},
         )
+
+    def test_v0171_preserves_exact_v0170_override_provenance(self) -> None:
+        self.assertEqual(prebuilt_override_manifest("v0.17.1"),
+                         prebuilt_override_manifest("v0.17.0"))
+        self.assertEqual(prebuilt_overrides("v0.17.2"), ())
 
     def test_other_versions_have_no_override(self) -> None:
         self.assertEqual(prebuilt_overrides("v0.14.0"), ())
