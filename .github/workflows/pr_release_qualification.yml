@@ -2,15 +2,6 @@ name: PR Release Qualification
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/auto_upstream_release.yml"
-      - ".github/workflows/native_release.yml"
-      - ".github/workflows/pr_release_qualification.yml"
-      - "tools/**"
-      - "native/**"
-      - "prebuilt/**"
-      - "patches/**"
-      - "tests/**"
 
 concurrency:
   group: pr-release-qualification-${{ github.event.pull_request.number }}
@@ -26,24 +17,32 @@ env:
 
 jobs:
   preflight:
-    name: Qualification tooling checks
+    name: Shared tooling validation
+    uses: ./.github/workflows/validate.yml
+
+  scope:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    outputs:
+      native: ${{ steps.select.outputs.native }}
+      full: ${{ steps.select.outputs.full }}
+      matrix: ${{ steps.select.outputs.matrix }}
+      qwen: ${{ steps.select.outputs.qwen }}
+      qwen_matrix: ${{ steps.select.outputs.qwen_matrix }}
+      platforms: ${{ steps.select.outputs.platforms }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
           persist-credentials: false
-      - name: Install ELF regression tools
-        run: sudo apt-get update && sudo apt-get install -y patchelf
-      - name: Validate tooling and workflow policies
-        run: |
-          python3 -m unittest discover -s tools -p 'test_*.py'
-          python3 -m unittest discover -s diagnostics -p 'test_*.py'
-          python3 tests/test_release_tag_lifecycle.py
+      - id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 tools/qualification_scope.py
 
   tokenizer-compatibility:
-    needs: preflight
+    needs: [preflight, scope]
+    if: needs.scope.outputs.native == 'true'
     name: SentencePiece BPE compatibility and sanitizers
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -61,23 +60,14 @@ jobs:
         run: python3 tools/qualify_sentencepiece_bpe_null.py --work-dir tokenizer-qualification --sanitize
 
   build:
-    needs: [preflight, tokenizer-compatibility]
+    needs: [preflight, scope, tokenizer-compatibility]
+    if: needs.scope.outputs.native == 'true'
     name: Build and smoke (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - {os: ubuntu-latest, platform: linux, arch: x64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 90}
-          - {os: ubuntu-24.04-arm, platform: linux, arch: arm64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 90}
-          - {os: windows-latest, platform: windows, arch: x64, jobs: "3", bazel_output_root: "C:/bzl", timeout_minutes: 120}
-          - {os: ubuntu-latest, platform: android, arch: arm64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 90}
-          - {os: ubuntu-latest, platform: android, arch: x64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 90}
-          - {os: macos-latest, platform: ios, arch: arm64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 120}
-          - {os: macos-latest, platform: ios, arch: arm64-sim, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 120}
-          - {os: macos-latest, platform: macos, arch: arm64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 120}
-          - {os: macos-latest, platform: macos, arch: x64, jobs: "3", bazel_output_root: .bazel-output-root, timeout_minutes: 120}
+      matrix: ${{ fromJSON(needs.scope.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -203,9 +193,9 @@ jobs:
           retention-days: 14
 
   verify:
-    name: Verify nine-platform candidate
-    needs: [preflight, tokenizer-compatibility, build]
-    if: always()
+    name: ${{ needs.scope.outputs.full == 'true' && 'Verify nine-platform candidate' || 'Verify affected-platform candidate' }}
+    needs: [preflight, scope, tokenizer-compatibility, build]
+    if: always() && needs.scope.outputs.native == 'true'
     runs-on: macos-latest
     steps:
       - name: Require successful qualification prerequisites
@@ -246,11 +236,23 @@ jobs:
             --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
             --overrides-only
 
-      - name: Package source-built Apple runtimes
+      # Partial candidates must not qualify untouched upstream Apple prebuilts.
+      - name: Exclude unselected iOS prebuilts
+        if: needs.scope.outputs.full != 'true' && !contains(fromJSON(needs.scope.outputs.platforms), 'ios')
+        run: rm -rf bin/ios
+      - name: Exclude unselected macOS prebuilts
+        if: needs.scope.outputs.full != 'true' && !contains(fromJSON(needs.scope.outputs.platforms), 'macos')
+        run: rm -rf bin/macos
+
+      - name: Package source-built iOS runtimes
+        if: contains(fromJSON(needs.scope.outputs.platforms), 'ios')
         run: |
           python3 tools/package_ios_runtime.py \
             --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
             --clean
+      - name: Package source-built macOS runtimes
+        if: contains(fromJSON(needs.scope.outputs.platforms), 'macos')
+        run: |
           python3 tools/package_macos_runtime.py \
             --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
             --clean
@@ -268,6 +270,7 @@ jobs:
         run: python3 tools/verify_qualification_source.py --tag "$QUALIFICATION_UPSTREAM_TAG" --commit "$QUALIFICATION_UPSTREAM_COMMIT"
 
       - name: Validate runtime matrix and real-model evidence
+        if: needs.scope.outputs.full == 'true'
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -295,6 +298,14 @@ jobs:
           print(f"Verified all nine runtimes and {len(evidence)} real-model smokes")
           PY
 
+      - name: Validate affected platform runtime inventory
+        if: needs.scope.outputs.full != 'true'
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SELECTED_MATRIX: ${{ needs.scope.outputs.matrix }}
+          SELECTED_PLATFORMS: ${{ needs.scope.outputs.platforms }}
+        run: python3 tools/validate_affected_candidate.py
+
       - name: Upload packaged candidates for Qwen inference
         uses: actions/upload-artifact@v4
         with:
@@ -304,16 +315,13 @@ jobs:
 
   qwen-inference:
     name: Qwen inference (${{ matrix.platform }}-${{ matrix.arch }})
-    needs: verify
+    needs: [scope, verify]
+    if: needs.scope.outputs.qwen == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - {os: ubuntu-latest, platform: linux, arch: x64}
-          - {os: windows-latest, platform: windows, arch: x64}
-          - {os: macos-latest, platform: macos, arch: arm64}
+      matrix: ${{ fromJSON(needs.scope.outputs.qwen_matrix) }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -354,3 +362,17 @@ jobs:
           dart pub get
           dart --packages=.dart_tool/package_config.json ../tools/qwen_runtime_preflight.dart
           dart run tool/litert_lm_engine_smoke.dart "$model" cpu 'What is 2+2? Answer only with the number.' 16 1024
+
+  qualification-result:
+    if: always()
+    needs: [scope, preflight, tokenizer-compatibility, build, verify, qwen-inference]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Require success for all selected qualification lanes
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 tools/qualification_scope.py --check-results

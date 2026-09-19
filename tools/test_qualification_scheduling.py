@@ -9,8 +9,8 @@ import unittest
 from pathlib import Path
 
 
-WORKFLOW = (Path(__file__).resolve().parents[1] /
-            '.github/workflows/pr_release_qualification.yml').read_text()
+WORKFLOW_PATH = Path(__file__).resolve().parents[1] / '.github/workflows/pr_release_qualification.yml'
+WORKFLOW = WORKFLOW_PATH.read_text()
 
 
 def job(name: str) -> str:
@@ -23,27 +23,32 @@ class QualificationSchedulingTest(unittest.TestCase):
         # GitHub's default job condition is success(): failed, cancelled or
         # skipped dependencies cannot start these jobs. Guard against bypasses.
         for name, needs in (
-            ('tokenizer-compatibility', 'preflight'),
-            ('build', '[preflight, tokenizer-compatibility]'),
+            ('tokenizer-compatibility', '[preflight, scope]'),
+            ('build', '[preflight, scope, tokenizer-compatibility]'),
         ):
             with self.subTest(job=name):
                 metadata = job(name).split('    steps:', 1)[0]
                 self.assertIn(f'    needs: {needs}\n', metadata)
-                self.assertNotRegex(metadata, re.compile(r'^    if:', re.M), msg='Keep default success() gating')
+                self.assertIn("if: needs.scope.outputs.native == 'true'", metadata)
+                self.assertNotIn('always()', metadata)
                 self.assertNotIn('continue-on-error:', metadata)
         preflight = job('preflight')
+        self.assertIn('uses: ./.github/workflows/validate.yml', preflight)
+        shared = WORKFLOW_PATH.parent.joinpath('validate.yml').read_text()
+        self.assertIn('  workflow_call:', shared)
+        self.assertNotIn('  pull_request:', shared)
+        self.assertEqual(shared.count("unittest discover -s tools -p 'test_*.py'"), 1)
+        self.assertEqual(shared.count("unittest discover -s diagnostics -p 'test_*.py'"), 1)
+        self.assertEqual(shared.count('python3 tests/test_release_tag_lifecycle.py'), 1)
+        self.assertIn('test_linux_runtime_metadata.py', shared)
         self.assertNotIn('continue-on-error:', preflight)
-        self.assertIn('ref: ${{ github.event.pull_request.head.sha }}', preflight)
-        self.assertIn("python3 -m unittest discover -s tools -p 'test_*.py'", preflight)
-        self.assertIn("python3 -m unittest discover -s diagnostics -p 'test_*.py'", preflight)
-        self.assertIn('python3 tests/test_release_tag_lifecycle.py', preflight)
 
     def test_candidate_check_reports_every_unsuccessful_prerequisite(self) -> None:
         verify = job('verify')
         metadata, steps = verify.split('    steps:\n', 1)
-        self.assertIn('name: Verify nine-platform candidate', metadata)
-        self.assertIn('needs: [preflight, tokenizer-compatibility, build]', metadata)
-        self.assertIn('    if: always()\n', metadata)
+        self.assertIn('Verify nine-platform candidate', metadata)
+        self.assertIn('needs: [preflight, scope, tokenizer-compatibility, build]', metadata)
+        self.assertIn("    if: always() && needs.scope.outputs.native == 'true'\n", metadata)
         self.assertNotIn('continue-on-error:', verify)
         guard = steps.split('\n      - uses:', 1)[0]
         self.assertTrue(guard.startswith('      - name: Require successful qualification prerequisites\n'))
@@ -63,7 +68,7 @@ class QualificationSchedulingTest(unittest.TestCase):
                     capture_output=True, text=True,
                 )
                 self.assertEqual(process.returncode == 0, states == ('success',) * 3)
-        self.assertIn('    needs: verify\n', job('qwen-inference'))
+        self.assertIn('    needs: [scope, verify]\n', job('qwen-inference'))
 
 
 if __name__ == '__main__':
