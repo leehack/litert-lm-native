@@ -135,10 +135,10 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
             "ref: ${{ github.event.pull_request.head.sha }}", workflow
         )
         build_job = workflow.split("\n  build:\n", 1)[1].split("\n  verify:\n", 1)[0]
-        self.assertEqual(build_job.count("platform:"), 9)
+        self.assertIn("fromJSON(needs.scope.outputs.matrix)", build_job)
         qwen_job = workflow.split("\n  qwen-inference:\n", 1)[1]
-        self.assertEqual(qwen_job.count("platform:"), 3)
-        self.assertIn("needs: verify", qwen_job)
+        self.assertIn("fromJSON(needs.scope.outputs.qwen_matrix)", qwen_job)
+        self.assertIn("needs: [scope, verify]", qwen_job)
         self.assertIn("../tools/qwen_runtime_preflight.dart", qwen_job)
         self.assertLess(qwen_job.index("qwen_runtime_preflight.dart"), qwen_job.index("litert_lm_engine_smoke.dart"))
         self.assertIn("Verify nine-platform candidate", workflow)
@@ -179,7 +179,7 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         workflow = (
             root / ".github/workflows/pr_release_qualification.yml"
         ).read_text(encoding="utf-8")
-        verify = workflow[workflow.index("  verify:") :]
+        verify = workflow[workflow.index("  verify:") :].split("\n  qwen-inference:", 1)[0]
 
         self.assertIn("runs-on: macos-latest", verify)
         self.assertNotIn("runs-on: ubuntu-latest", verify)

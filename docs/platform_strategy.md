@@ -157,3 +157,29 @@ Upstream build-tree RUNPATHs and a missing Dawn SONAME must not require callers
 to configure `LD_LIBRARY_PATH`. Only packaged copies are normalized; upstream
 sources remain unchanged. Linux packaging requires `patchelf`, and qualification
 runs a real-loader regression without loader environment overrides.
+
+## Pull-request qualification selection
+
+Every pull request runs the shared `Validate` workflow once, including tooling,
+metadata compatibility fixtures, release lifecycle checks, and Linux loader
+regressions. The `v0.12.0` metadata fixture is historical compatibility coverage;
+it does not select or qualify the runtime release.
+
+`tools/qualification_scope.py` uses an explicit allowlist for documentation and
+existing tooling tests. Unknown paths, shared build/packaging inputs, native
+sources, workflow changes, and missing comparison data retain all nine targets.
+Renames and deletions consider both sides of the change.
+
+Changes confined to the macOS packager or identity helper select both macOS
+architectures; iOS packager changes select both supported iOS targets. These
+candidates retain the real Apple XCFramework packaging gate, with unselected
+Apple prebuilts excluded first. Artifact/dependency checks and real-model evidence
+must match the selected targets; macOS also retains its Qwen inference gate.
+Partial validation does not claim a full release candidate. Shared changes still
+run the complete nine-target inventory and all three desktop model gates.
+
+`qualification-result` always reports the selected job results and fails for
+missing, failed, cancelled, or unexpectedly skipped work. Only superseded PR runs
+are cancelled; main and manual `Validate` runs are independent. Publication,
+release evidence requirements, and runtime pins are unchanged. See
+[llamadart issue #532](https://github.com/leehack/llamadart/issues/532).
