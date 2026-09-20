@@ -151,6 +151,19 @@ is not ABI-equivalent evidence: the L4 control still crashed with that core and
 passed after replacing only it with the matching prebuilt. Missing matching
 prebuilts fail the build instead of falling back to an arbitrary Bazel output.
 
+Windows packaging stages the pinned DirectX Shader Compiler pair
+(`dxil.dll`, `dxcompiler.dll`) beside the runtime DLLs, because Dawn's D3D12
+backend opens both by name through its own module directory and otherwise fails
+engine creation with `DynamicLib.Open: dxil.dll`. `tools/windows_dxc.py` holds
+the single pin: the official Microsoft archive URL, its SHA-256, and a digest
+per extracted file. The archive's `LICENSE-LLVM.txt`, `LICENSE-MIT.txt`, and
+`LICENSE-MS.txt` ship as `DXC-LICENSE-*.txt` in the same directory;
+`dxcompiler.dll` is LLVM/NCSA plus MIT, and `dxil.dll` is a Microsoft-signed
+redistributable governed by the Microsoft terms. Releases from upstream v0.17.0
+onward require the pair and the licences; already-published v0.16 bundles
+predate it. Placement is not by itself GPU evidence: qualify real Windows D3D12
+generation without runtime directories on `PATH`.
+
 Linux flat runtime bundles normalize the packaged Dawn SONAME and use `$ORIGIN`
 for dependency lookup, after dependency staging and before model smoke hashes.
 Upstream build-tree RUNPATHs and a missing Dawn SONAME must not require callers

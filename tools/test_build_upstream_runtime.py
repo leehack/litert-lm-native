@@ -237,7 +237,8 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             (source_dir / "LiteRt.lib").write_bytes(b"link-library")
             output = root / "bin"
 
-            with patch.object(build_upstream_runtime, "BIN_DIR", output):
+            with patch.object(build_upstream_runtime, "BIN_DIR", output), \
+                 patch.object(build_upstream_runtime, "stage_windows_dxc"):
                 build_upstream_runtime.stage_windows_runtime_dependencies(
                     root / "source",
                     "x64",

@@ -28,6 +28,7 @@ from runtime_dependency_utils import (
     is_elf,
     is_system_needed,
 )
+from windows_dxc import stage_windows_dxc
 from upstream_archive import github_source_archive_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -499,6 +500,8 @@ def stage_windows_runtime_dependencies(source_root: Path, arch: str) -> None:
         destination = stage_dir / source.name
         copy_artifact(source, destination)
         print(f"Staged runtime dependency {destination}", flush=True)
+    # Dawn's D3D12 backend loads the DXC pair from its own module directory.
+    stage_windows_dxc(stage_dir)
 
 
 def stage_macho_runtime_dependencies(
