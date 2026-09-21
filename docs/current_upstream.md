@@ -23,8 +23,9 @@ These are upstream asset identities, not evidence of a qualified bridge-enabled
 native release. The read-only PR qualification workflow now targets this exact
 commit. All nine runtime builds, aggregate packaging, required exports, and
 Linux x64 / Windows x64 / macOS arm64 real-model ASR evidence must pass before
-calling the candidate qualified. Downstream consumers remain on
-`v0.16.0-native.2`; this qualification does not publish artifacts or update pins.
+calling the candidate qualified. At that date downstream consumers were on
+`v0.16.0-native.2`. Native `v0.17.0` was published from this commit on
+2026-09-15, and rebuilds `v0.17.0-1` through `v0.17.0-6` followed.
 
 The `c/engine.h` and `c/conversation.h` changes from v0.16.0 are additive:
 the unspecified sampler enum value, maximum vision-token setting, and Metal
