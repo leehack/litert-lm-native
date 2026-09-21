@@ -100,7 +100,6 @@ class WindowsDxcTest(unittest.TestCase):
                 windows_dxc.DXC_ARCHIVE_SHA256,
             )
             self.assertEqual(extract.call_args.args, (archive, stage_dir))
-            # The archive is downloaded into a temporary directory only.
             self.assertFalse(archive.exists())
 
     def test_windows_staging_adds_dxc_beside_the_upstream_runtime(self) -> None:
@@ -121,7 +120,6 @@ class WindowsDxcTest(unittest.TestCase):
             stage.assert_called_once_with(output / "windows" / "x64")
 
     def test_release_validation_requires_the_dxc_pair_and_licences(self) -> None:
-        # Published v0.16 bundles predate DXC packaging and stay valid.
         for tag, expected in (("v0.16.0", False), ("v0.17.0", True), ("v0.17.1", True)):
             with self.subTest(tag=tag):
                 required = {
