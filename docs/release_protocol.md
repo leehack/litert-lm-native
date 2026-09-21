@@ -158,8 +158,10 @@ As of 2026-08-22, upstream `v0.16.1` and `v0.16.0` resolve to the same commit,
 `924e79c91542761242244e4f1651851f822e4cbb`. The `v0.16.1` release publishes
 only `litert_lm_main.macos_arm64`; it does not publish the required official C
 runtime XCFramework assets. It is therefore not a new consumable native source
-line. The latest consumable native artifact remains the immutable legacy release
-`v0.16.0-native.2` until a separately approved release is built and validated.
+line. `v0.16.0-native.2` stayed the latest consumable native artifact until
+`v0.17.0` was published on 2026-09-15 from upstream `v0.17.0`
+(`e9fd8c53ff968071774206163027dd84bedfe925`), followed by rebuilds `v0.17.0-1`
+through `v0.17.0-6` of the same upstream commit.
 
 ### Draft tags and interrupted publication
 
