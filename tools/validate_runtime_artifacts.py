@@ -45,8 +45,6 @@ def required_runtime_artifacts(
     if is_at_least(upstream_tag, (0, 16, 0)):
         required.extend(V0_16_IOS_GPU_ARTIFACTS)
     if requires_dxc(upstream_tag):
-        # Dawn's D3D12 backend loads this pair by name; without it Windows GPU
-        # engine creation fails before any adapter work.
         required.extend(dxc_runtime_paths())
     if include_official_assets:
         required.extend(
@@ -75,8 +73,6 @@ def main() -> int:
     required = required_runtime_artifacts(
         args.upstream_tag, include_official_assets=include_official_assets
     )
-    # DXC licence texts ship in the runtime archive but are not native
-    # artifacts, so the manifest never records them; check them here.
     required_with_licences = required + (
         dxc_license_paths() if requires_dxc(args.upstream_tag) else []
     )

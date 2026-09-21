@@ -500,7 +500,6 @@ def stage_windows_runtime_dependencies(source_root: Path, arch: str) -> None:
         destination = stage_dir / source.name
         copy_artifact(source, destination)
         print(f"Staged runtime dependency {destination}", flush=True)
-    # Dawn's D3D12 backend loads the DXC pair from its own module directory.
     stage_windows_dxc(stage_dir)
 
 

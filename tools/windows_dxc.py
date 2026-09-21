@@ -22,7 +22,6 @@ USER_AGENT = "litert-lm-native-windows-dxc/1"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WINDOWS_RUNTIME_DIR = Path("bin/windows/x64")
 
-# Official Microsoft release archive; the pinned digest is the published zip.
 DXC_RELEASE_TAG = "v1.9.2602"
 DXC_ARCHIVE_URL = (
     "https://github.com/microsoft/DirectXShaderCompiler/releases/download/"
@@ -42,9 +41,6 @@ class DxcFile:
         return WINDOWS_RUNTIME_DIR / self.filename
 
 
-# dxil.dll signs compiled shaders and dxcompiler.dll refuses to emit them
-# without it, so both ship. Per-member digests fail closed if the pinned
-# archive is ever republished.
 DXC_RUNTIME_FILES = (
     DxcFile(
         member="bin/x64/dxil.dll",
@@ -58,8 +54,6 @@ DXC_RUNTIME_FILES = (
     ),
 )
 
-# dxcompiler.dll is LLVM/NCSA plus MIT; dxil.dll is Microsoft-signed and
-# governed by the Microsoft redistribution terms. Ship all three texts.
 DXC_LICENSE_FILES = (
     DxcFile(
         member="LICENSE-LLVM.txt",
