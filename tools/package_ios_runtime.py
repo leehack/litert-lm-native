@@ -11,6 +11,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+from ios_framework_metadata import framework_minimum_os, validate_framework_metadata
 from litert_lm_symbols import (
     BRIDGE_SYMBOLS,
     has_asr_bridge,
@@ -250,10 +251,13 @@ def write_framework_info_plist(
         "CFBundleShortVersionString": "1.0",
         "CFBundleSupportedPlatforms": [supported_platform],
         "CFBundleVersion": "1",
-        "MinimumOSVersion": DEFAULT_IOS_MINIMUM_OS,
+        "MinimumOSVersion": framework_minimum_os(
+            framework_dir / executable, supported_platform, DEFAULT_IOS_MINIMUM_OS
+        ),
     }
     with (framework_dir / "Info.plist").open("wb") as file:
         plistlib.dump(plist, file)
+    validate_framework_metadata(framework_dir, supported_platform)
 
 
 def copy_framework_info_plist(
@@ -264,6 +268,11 @@ def copy_framework_info_plist(
     if not source_plist.is_file():
         raise RuntimeError(f"Missing framework Info.plist: {source_plist}")
     shutil.copy2(source_plist, target_framework_dir / "Info.plist")
+    metadata = plistlib.loads(source_plist.read_bytes())
+    platforms = metadata.get("CFBundleSupportedPlatforms")
+    if platforms not in (["iPhoneOS"], ["iPhoneSimulator"]):
+        raise RuntimeError(f"Invalid upstream iOS framework platform: {source_plist}")
+    validate_framework_metadata(target_framework_dir, platforms[0])
 
 
 def copy_framework_executable(source: Path, destination: Path) -> None:

@@ -240,6 +240,10 @@ def validate_macho_dependencies(root: Path) -> int:
     errors: list[str] = []
     for library in iter_macho_libraries(root):
         checked += 1
+        relative = library.relative_to(root)
+        if relative.parts[:2] == ("bin", "ios") and library.parent.suffix == ".framework":
+            platform = "iPhoneSimulator" if relative.parts[2].endswith("-sim") else "iPhoneOS"
+            validate_framework_metadata(library.parent, platform)
         for needed in macho_needed_libraries(library):
             if is_system_macho_needed(needed):
                 continue
@@ -305,3 +309,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+from ios_framework_metadata import validate_framework_metadata

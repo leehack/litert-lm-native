@@ -20,7 +20,9 @@ class PackageIosRuntimeTest(unittest.TestCase):
             for library_name in package_ios_runtime.IOS_DLOPEN_DEPENDENCIES:
                 (target_dir / library_name).write_bytes(b"gpu")
 
-            with patch.object(package_ios_runtime, "macho_needed_libraries", return_value=[]):
+            with patch.object(package_ios_runtime, "macho_needed_libraries", return_value=[]), \
+                 patch.object(package_ios_runtime, "framework_minimum_os", return_value="15.0"), \
+                 patch.object(package_ios_runtime, "validate_framework_metadata"):
                 with patch.object(package_ios_runtime, "run"):
                     package_ios_runtime.stage_source_built_dependency_frameworks(
                         {"sdk": "iphoneos"},
