@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import json
+import os
 import plistlib
 import subprocess
 import sys
@@ -17,6 +19,9 @@ import package_apple_xcframeworks as apple
 import package_ios_runtime as ios
 import package_release as release
 import validate_runtime_dependencies as dependencies
+import validate_affected_candidate as affected
+from litert_lm_symbols import APPLE_METAL_ACCELERATOR_SYMBOLS, APPLE_METAL_SAMPLER_SYMBOLS
+from qualification_scope import MATRIX
 
 
 class IosSourcePolicyTest(unittest.TestCase):
@@ -57,10 +62,12 @@ class IosSourcePolicyTest(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "darwin", "requires Apple Mach-O tools")
 class IosBinaryPolicyTest(unittest.TestCase):
-    def build(self, root: Path, name: str, *, symbol: bool = False, link: Path | None = None, minimum: str = "16.4", simulator: bool = False) -> Path:
+    def build(self, root: Path, name: str, *, symbol: bool = False, link: Path | None = None, minimum: str = "16.4", simulator: bool = False, exports: list[str] | None = None) -> Path:
         root.mkdir(parents=True, exist_ok=True)
         source = root / f"{name}.c"
         source.write_text("extern void LiteRtLmGemmaModelConstraintProvider_Create(void); void fixture(void) { LiteRtLmGemmaModelConstraintProvider_Create(); }" if symbol else "void LiteRtLmGemmaModelConstraintProvider_Create(void) {}" if "Provider" in name else "void fixture(void) {}")
+        if exports:
+            source.write_text("\n".join(f"void {symbol}(void) {{}}" for symbol in exports))
         binary = root / f"lib{name}.dylib"
         args = ["xcrun", "--sdk", "iphonesimulator" if simulator else "iphoneos", "clang", "-dynamiclib", "-arch", "arm64", f"-mios-simulator-version-min={minimum}" if simulator else f"-miphoneos-version-min={minimum}", "-install_name", f"@rpath/{binary.name}", str(source), "-o", str(binary)]
         if symbol and link is None:
@@ -196,6 +203,52 @@ class IosBinaryPolicyTest(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "inventory"):
                     release.build_manifest(upstream_tag="v0.17.0", upstream_commit="a" * 40, compatibility_tag="v0.17.0", release_tag="v0.17.0-7", native_commit="b" * 40, official_upstream_assets=True)
             self.assertTrue(provider.exists())
+
+    def test_partial_qualification_cli_applies_candidate_policy_and_preserves_legacy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rows = [row for row in MATRIX if row["platform"] == "ios"]
+            for simulator in (False, True):
+                arch = "arm64-sim" if simulator else "arm64"
+                for module, exports in (("LiteRtLm", []), ("CLiteRTLM", []), ("LiteRtMetalAccelerator", APPLE_METAL_ACCELERATOR_SYMBOLS), ("LiteRtTopKMetalSampler", APPLE_METAL_SAMPLER_SYMBOLS)):
+                    binary = self.build(root / "inputs" / arch, module, simulator=simulator, exports=exports)
+                    ios.stage_dependency_framework({"sdk": "iphonesimulator" if simulator else "iphoneos"}, root / "bin/ios" / arch, binary)
+
+            def run(tag: str = "v0.17.0") -> subprocess.CompletedProcess:
+                environment = dict(os.environ, SELECTED_MATRIX=json.dumps({"include": rows}), QUALIFICATION_UPSTREAM_TAG=tag, QUALIFICATION_UPSTREAM_COMMIT="a" * 40, PR_HEAD_SHA="b" * 40, QUALIFICATION_RELEASE_TAG=tag)
+                return subprocess.run([sys.executable, affected.__file__], cwd=root, env=environment, capture_output=True, text=True)
+
+            healthy = run()
+            self.assertEqual(healthy.returncode, 0, healthy.stderr)
+            self.assertIn("Validated affected platforms", healthy.stdout)
+            high = self.build(root / "inputs/arm64", "LiteRtMetalAccelerator", minimum="26.4", exports=APPLE_METAL_ACCELERATOR_SYMBOLS)
+            ios.stage_dependency_framework({"sdk": "iphoneos"}, root / "bin/ios/arm64", high)
+            rejected = run()
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("above 16.4", rejected.stderr)
+            self.assertNotIn("Validated affected platforms", rejected.stdout)
+            historical = run("v0.16.0")
+            self.assertEqual(historical.returncode, 0, historical.stderr)
+            low = self.build(root / "inputs/arm64", "LiteRtMetalAccelerator", exports=APPLE_METAL_ACCELERATOR_SYMBOLS)
+            ios.stage_dependency_framework({"sdk": "iphoneos"}, root / "bin/ios/arm64", low)
+            archive_root = root / "dist/spm/v0.17.0"
+            archive_root.mkdir(parents=True)
+            with zipfile.ZipFile(archive_root / "Provider.zip", "w") as file:
+                provider = self.build(root / "inputs/provider", "GemmaModelConstraintProvider")
+                framework = root / "staged/GemmaModelConstraintProvider.framework"
+                framework.mkdir(parents=True)
+                (framework / framework.stem).write_bytes(provider.read_bytes())
+                ios.write_framework_info_plist(framework, executable=framework.stem, bundle_identifier="dev.leehack.litertlm.provider.fixture", supported_platform="iPhoneOS")
+                file.writestr("GemmaModelConstraintProvider.xcframework/Info.plist", plistlib.dumps({"AvailableLibraries": [{"SupportedPlatform": "ios", "LibraryIdentifier": "custom-device", "LibraryPath": framework.name, "SupportedArchitectures": ["arm64"]}]}))
+                prefix = "GemmaModelConstraintProvider.xcframework/custom-device/GemmaModelConstraintProvider.framework/"
+                file.writestr(prefix + "Info.plist", (framework / "Info.plist").read_bytes())
+                file.writestr(prefix + framework.stem, provider.read_bytes())
+            rejected = run()
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("archive contains", rejected.stderr)
+            self.assertNotIn("Validated affected platforms", rejected.stdout)
+            historical = run("v0.16.0")
+            self.assertEqual(historical.returncode, 0, historical.stderr)
 
     def test_production_cli_validates_real_platform_before_macos_exemption(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
