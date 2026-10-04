@@ -71,6 +71,25 @@ runtime archives as the source of truth, and only wire SPM dependencies in
 downstream packages when the required binary targets cover the selected
 architecture and deployment target.
 
+### iOS deployment floors
+
+Generated framework plists declare the greater of the packaging baseline
+(iOS 15.0) and the executable's actual Mach-O deployment target. Device and
+simulator slices are checked separately; merged simulator frameworks retain the
+highest minimum across their slices. Official framework metadata, final runtime
+frameworks, and SwiftPM inputs must never declare a lower minimum than their
+executables require. Missing, ambiguous, or wrong-platform targets fail
+packaging rather than falling back to the baseline.
+
+This metadata rule does not make an upstream prebuilt compatible with older
+iOS versions. In the `v0.17.0-6` release, the device Gemma constraint provider
+requires iOS 26.4 despite its generated plist declaring 15.0. Because the runtime
+links that provider, downstream apps embedding it cannot claim iOS 16.4 support
+from the primary runtime or wrapper's lower deployment target. A compatible
+upstream provider or an explicitly adopted higher app deployment floor is
+required before consumer qualification. Do not lower a prebuilt's Mach-O target
+or overwrite an immutable published release to hide this requirement.
+
 Initial native targets:
 
 | Platform | Arch | Tier | Expected path |

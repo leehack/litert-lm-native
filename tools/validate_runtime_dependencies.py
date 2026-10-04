@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from ios_framework_metadata import validate_framework_metadata
 from runtime_dependency_utils import (
     elf_exported_symbols,
     elf_has_global_flag,
@@ -109,7 +110,7 @@ def validate_elf_dependencies(root: Path) -> int:
 
 def iter_macho_libraries(root: Path) -> list[Path]:
     bin_dir = root / "bin"
-    if not bin_dir.exists() or shutil.which("otool") is None:
+    if not bin_dir.exists():
         return []
     libraries = {
         path
@@ -125,6 +126,13 @@ def iter_macho_libraries(root: Path) -> list[Path]:
             binary = framework / framework.stem
             if binary.is_file():
                 libraries.add(binary)
+    if libraries:
+        missing_tools = [tool for tool in ("otool", "nm") if shutil.which(tool) is None]
+        if missing_tools:
+            raise RuntimeError(
+                "Apple runtime validation requires " + ", ".join(missing_tools)
+                + "; install/select the Xcode command-line tools before qualifying Apple artifacts."
+            )
     return sorted(libraries)
 
 
@@ -240,6 +248,10 @@ def validate_macho_dependencies(root: Path) -> int:
     errors: list[str] = []
     for library in iter_macho_libraries(root):
         checked += 1
+        relative = library.relative_to(root)
+        if relative.parts[:2] == ("bin", "ios") and library.parent.suffix == ".framework":
+            platform = "iPhoneSimulator" if relative.parts[2].endswith("-sim") else "iPhoneOS"
+            validate_framework_metadata(library.parent, platform)
         for needed in macho_needed_libraries(library):
             if is_system_macho_needed(needed):
                 continue

@@ -217,7 +217,8 @@ class RuntimeDependencyUtilsTest(unittest.TestCase):
             )
             library.parent.mkdir(parents=True)
             library.write_bytes(b"macho")
-            with patch("validate_runtime_dependencies.shutil.which", return_value="nm"):
+            with patch("validate_runtime_dependencies.shutil.which", return_value="nm"), \
+                 patch("validate_runtime_dependencies.validate_framework_metadata"):
                 with patch(
                     "validate_runtime_dependencies.macho_needed_libraries",
                     return_value=[],

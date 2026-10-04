@@ -10,6 +10,9 @@ import subprocess
 import zipfile
 from pathlib import Path
 
+from ios_framework_metadata import (
+    update_framework_minimum_os, validate_framework_metadata, version_tuple,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
@@ -115,6 +118,9 @@ def merge_simulator_frameworks(
     if not sim_frameworks:
         return None
 
+    for _, framework in sim_frameworks:
+        validate_framework_metadata(framework, "iPhoneSimulator")
+
     base_arch, base_framework = sim_frameworks[0]
     output = prepare_framework(
         base_framework,
@@ -134,6 +140,12 @@ def merge_simulator_frameworks(
             str(output / module_name),
         ]
     )
+    minimum = max(
+        (plistlib.loads((framework / "Info.plist").read_bytes())["MinimumOSVersion"]
+         for _, framework in sim_frameworks),
+        key=version_tuple,
+    )
+    update_framework_minimum_os(output, "iPhoneSimulator", minimum)
     return output
 
 
@@ -182,6 +194,8 @@ def package_ios_framework_module(
     frameworks = existing_ios_frameworks(module_name)
     if "arm64" not in frameworks:
         return None
+
+    validate_framework_metadata(frameworks["arm64"], "iPhoneOS")
 
     args: list[str] = []
     device = prepare_framework(
