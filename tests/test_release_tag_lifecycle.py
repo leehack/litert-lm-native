@@ -526,6 +526,14 @@ class DraftTagLifecycleTest(unittest.TestCase):
                 self.assertEqual(self.writes(), [])
 
     def prepare_full_candidate(self):
+        def check_ios_directory(path):
+            self.assertEqual(path, fixture.package_release.BIN_DIR / "ios")
+
+        def check_ios_archives(path):
+            self.assertEqual(
+                path, fixture.package_release.DIST_DIR / "spm" / "v0.17.0"
+            )
+
         with patch.multiple(
             fixture,
             UPSTREAM_TAG="v0.17.0",
@@ -533,9 +541,13 @@ class DraftTagLifecycleTest(unittest.TestCase):
             UPSTREAM_COMMIT=UPSTREAM,
             NATIVE_COMMIT=NATIVE,
         ), patch.object(
-            fixture.package_release, "validate_ios_directory"
+            fixture.package_release,
+            "validate_ios_directory",
+            side_effect=check_ios_directory,
         ) as validate_ios, patch.object(
-            fixture.package_release, "validate_ios_archives"
+            fixture.package_release,
+            "validate_ios_archives",
+            side_effect=check_ios_archives,
         ) as validate_archives:
             # These payloads are synthetic metadata fixtures, not Mach-O or ZIP
             # artifacts. Isolate real inspection here while checking that the
@@ -543,11 +555,6 @@ class DraftTagLifecycleTest(unittest.TestCase):
             manifest = fixture.generate_manifest()
             validate_ios.assert_called_once()
             validate_archives.assert_called_once()
-            ios_directory = validate_ios.call_args.args[0]
-            self.assertEqual(ios_directory.parts[-2:], ("bin", "ios"))
-            validate_archives.assert_called_once_with(
-                ios_directory.parent.parent / "dist" / "spm" / "v0.17.0"
-            )
             smoke = copy.deepcopy(manifest["realModelSmokes"][0])
             library = next(
                 a
