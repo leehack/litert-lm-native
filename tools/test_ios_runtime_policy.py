@@ -204,9 +204,36 @@ class IosBinaryPolicyTest(unittest.TestCase):
             dist = root / "dist"
             dist.mkdir()
             archive = dist / "LiteRtLm.zip"
-            with zipfile.ZipFile(archive, "w") as file:
-                file.writestr("LiteRtLm.xcframework/Info.plist", plistlib.dumps({"AvailableLibraries": [{"SupportedPlatform": "ios", "LibraryIdentifier": "custom-device"}]}))
-                file.writestr("LiteRtLm.xcframework/custom-device/LiteRtLm.framework/LiteRtLm", binary.read_bytes())
+            healthy = self.build(root / "healthy", "LiteRtLm")
+            framework = root / "staged/LiteRtLm.framework"
+            framework.mkdir(parents=True)
+
+            def write_archive(source: Path) -> None:
+                (framework / "LiteRtLm").write_bytes(source.read_bytes())
+                ios.write_framework_info_plist(
+                    framework,
+                    executable="LiteRtLm",
+                    bundle_identifier="dev.leehack.litertlm.fixture",
+                    supported_platform="iPhoneOS",
+                )
+                with zipfile.ZipFile(archive, "w") as file:
+                    file.writestr("LiteRtLm.xcframework/Info.plist", plistlib.dumps({
+                        "CFBundlePackageType": "XFWK",
+                        "XCFrameworkFormatVersion": "1.0",
+                        "AvailableLibraries": [{
+                            "SupportedPlatform": "ios",
+                            "LibraryIdentifier": "custom-device",
+                            "LibraryPath": "LiteRtLm.framework",
+                            "SupportedArchitectures": ["arm64"],
+                        }],
+                    }))
+                    prefix = "LiteRtLm.xcframework/custom-device/LiteRtLm.framework/"
+                    file.writestr(prefix + "Info.plist", (framework / "Info.plist").read_bytes())
+                    file.writestr(prefix + "LiteRtLm", source.read_bytes())
+
+            write_archive(healthy)
+            policy.validate_ios_archives(dist)
+            write_archive(binary)
             with self.assertRaisesRegex(RuntimeError, "still requires"):
                 policy.validate_ios_archives(dist)
             archive.unlink()
