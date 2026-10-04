@@ -9,6 +9,7 @@ import subprocess
 
 from litert_lm_symbols import has_asr_bridge, uses_stream_chunk_api
 from prebuilt_overrides import prebuilt_override_manifest
+from ios_runtime_policy import provider_free_ios, validate_ios_directory, validate_ios_archives
 from release_version_policy import parse_upstream, validate_pair
 
 
@@ -225,6 +226,10 @@ def build_manifest(
             "official_upstream_assets must be true for stable releases and false "
             "for development releases"
         )
+
+    if provider_free_ios(compatibility_tag):
+        validate_ios_directory(BIN_DIR / "ios")
+        validate_ios_archives(DIST_DIR / "spm" / release_tag)
 
     entries: list[dict] = []
     sums: list[str] = []

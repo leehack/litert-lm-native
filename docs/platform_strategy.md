@@ -215,3 +215,51 @@ missing, failed, cancelled, or unexpectedly skipped work. Only superseded PR run
 are cancelled; main and manual `Validate` runs are independent. Publication,
 release evidence requirements, and runtime pins are unchanged. See
 [llamadart issue #532](https://github.com/leehack/llamadart/issues/532).
+
+## Provider-free iOS source-build candidate
+
+New owner source builds using the v0.17.0 or later compatibility baseline disable
+Gemma FST constraints **only on iOS**, with upstream's existing
+`--define=LITERT_LM_FST_CONSTRAINTS_DISABLED=1`. The builder verifies the selected
+source's Gemma3, FunctionGemma, and Gemma4 BUILD gates before invoking Bazel; a
+changed or absent gate fails the build. Older baselines and non-iOS builds keep
+their existing options. Preserved official upstream archives remain unchanged
+provenance inputs, separate from the source-built candidate runtime.
+
+Gemma FST constrained decoding is unavailable in these candidate iOS artifacts.
+Ordinary inference, thinking, and generic function calling (tool formatting and
+parsing) are not disabled by this option. For upstream Gemma3, FunctionGemma,
+and Gemma4, requesting `enable_constrained_decoding=true` reaches an upstream
+C++ `FailedPrecondition` with a build-time-disabled diagnostic. The C API exposes
+this as failed conversation creation (`nullptr`) and logs the diagnostic; it
+does not directly return that typed C++ status. Consumers should request
+constrained decoding false for these affected Gemma conversations, regardless
+of whether a tool or response schema was requested. The C API setter and
+exports remain available; true still fails conversation creation. This repository does not add a consumer API or
+change its pins.
+
+Source staging and iOS framework packaging validate every surviving dylib and
+framework for provider load commands and **all** undefined provider symbols,
+then remove unused flat/provider framework inputs. SwiftPM packaging rejects
+provider-contaminated iOS inventories. Dependency and final manifest guards
+inspect iOS archive members and embedded Mach-O binaries too; macOS-only
+provider XCFramework slices remain valid. Production CLIs require the selected
+upstream compatibility tag, including development releases. Release archives
+receive a final validation after creation. Schema 2 capability keys remain
+unchanged: they do not promise Gemma FST constraints. The existing exact native
+commit provenance identifies this build policy.
+
+Candidate validation also rejects any iOS Mach-O architecture requiring above
+16.4, any wrong/missing/ambiguous platform target, and framework declarations
+above 16.4. This is an artifact condition, not old-OS runtime proof.
+
+The candidate does not yet restore or qualify the consumer's advertised iOS
+16.4 floor. Framework deployment metadata remains derived from actual Mach-O
+slices; no metadata lowering is permitted. Local SDK-compiled fixtures validate
+packaging and fail-closed controls, not LiteRT execution. Before publishing or
+changing consumer pins, qualify the rebuilt device/simulator archives and real
+Metal exports, run the closest affected Gemma family with constrained decoding
+false and true, and establish the actual minimum OS on supported devices. The
+shared owner change retains the full nine-platform build qualification and
+three Qwen smoke jobs. Gemma4 weights are available locally for later testing;
+rebuilt iOS artifacts and an iOS 16.4 environment remain required.

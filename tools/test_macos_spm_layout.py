@@ -91,7 +91,8 @@ class MacOsSpmPackagingWiringTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             order = []
-            with mock.patch.object(package, "WORK_DIR", root / "work"), \
+            with mock.patch.object(package, "BIN_DIR", root / "bin"), \
+                 mock.patch.object(package, "WORK_DIR", root / "work"), \
                  mock.patch.object(package, "DIST_DIR", root / "dist"), \
                  mock.patch.object(package, "ios_framework_module_names", return_value=[]), \
                  mock.patch.object(package, "macos_libraries_by_name", return_value={}), \
@@ -102,7 +103,7 @@ class MacOsSpmPackagingWiringTest(unittest.TestCase):
                  mock.patch.object(package, "package_ios_framework_module", side_effect=lambda *a, **k: order.append("archive") or root / "result.zip"), \
                  mock.patch.object(package, "package_ios_companions", return_value=([], set())), \
                  mock.patch.object(package, "package_macos_companions", return_value=[]):
-                package.package_all("v0.17.0-1", clean=False)
+                package.package_all("v0.17.0-1", clean=False, compatibility_tag="v0.17.0")
             self.assertEqual(order[:3], ["core", "shim", "archive"])
 
 

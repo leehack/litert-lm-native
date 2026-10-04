@@ -301,3 +301,10 @@ Where upstream source exposes a needed engine but its released C ABI does not,
 this repository may add a narrow, independently versioned bridge after runtime
 and packaging validation. The LiteRT-LM 0.16+ ASR bridge is the first such
 exception; high-level model selection and download policy remain downstream.
+
+New source-built iOS runtimes at the v0.17.0+ compatibility baseline use the
+upstream provider-free FST build option. Gemma FST constrained decoding is
+unavailable in these candidate artifacts; ordinary inference and generic
+function calling remain enabled. Artifact, model, and minimum-OS qualification
+is still required before claiming iOS 16.4 compatibility or updating consumers.
+See [the precise platform restriction and qualification gates](docs/platform_strategy.md#provider-free-ios-source-build-candidate).

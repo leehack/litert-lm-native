@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from ios_runtime_policy import provider_free_ios, validate_ios_directory, validate_ios_archives
 from ios_framework_metadata import validate_framework_metadata
 from runtime_dependency_utils import (
     elf_exported_symbols,
@@ -303,9 +304,14 @@ def main() -> int:
         )
     )
     parser.add_argument("--root", type=Path, default=REPO_ROOT)
+    parser.add_argument("--upstream-tag", required=True, help="Selected upstream API compatibility tag.")
+    parser.add_argument("--archive-root", type=Path, help="Produced archive directory; preserved official inputs are excluded.")
     args = parser.parse_args()
 
     root = args.root.resolve()
+    if provider_free_ios(args.upstream_tag):
+        validate_ios_directory(root / "bin" / "ios")
+        validate_ios_archives(args.archive_root or root / "dist" / "spm")
     checked_elf = validate_elf_dependencies(root)
     checked_macho = validate_macho_dependencies(root)
     print(
