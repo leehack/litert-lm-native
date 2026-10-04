@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from ios_framework_metadata import validate_framework_metadata
 from runtime_dependency_utils import (
     elf_exported_symbols,
     elf_has_global_flag,
@@ -309,4 +310,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-from ios_framework_metadata import validate_framework_metadata

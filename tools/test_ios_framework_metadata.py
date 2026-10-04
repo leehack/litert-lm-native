@@ -143,6 +143,20 @@ class IosMetadataPackagingTest(unittest.TestCase):
                     writer.assert_not_called()
                 with self.assertRaises(RuntimeError):
                     dependencies.validate_macho_dependencies(root)
+                result = subprocess.run([
+                    sys.executable, str(Path(dependencies.__file__).resolve()), "--root", str(root)
+                ], capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("NameError", result.stderr)
+                self.assertNotIn("validate_framework_metadata' is not defined", result.stderr)
+            info["MinimumOSVersion"] = "26.4"
+            (framework / "Info.plist").write_bytes(plistlib.dumps(info))
+            result = subprocess.run([
+                sys.executable, str(Path(dependencies.__file__).resolve()), "--root", str(root)
+            ], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            info["MinimumOSVersion"] = "15.0"
+            (framework / "Info.plist").write_bytes(plistlib.dumps(info))
             # Official-archive imports must reject the same drift before reuse.
             destination = root / framework.name
             destination.mkdir()
