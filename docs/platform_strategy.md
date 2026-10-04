@@ -243,7 +243,9 @@ framework for provider load commands and **all** undefined provider symbols,
 then remove unused flat/provider framework inputs. SwiftPM packaging rejects
 provider-contaminated iOS inventories. Dependency and final manifest guards
 inspect iOS archive members and embedded Mach-O binaries too; macOS-only
-provider XCFramework slices remain valid. Production CLIs require the selected
+provider XCFramework slices remain valid after every actual Mach-O architecture
+is verified against recognized XCFramework platform/variant metadata. Missing,
+unknown, or inconsistent slice metadata fails closed. Production CLIs require the selected
 upstream compatibility tag, including development releases. Release archives
 receive a final validation after creation. Schema 2 capability keys remain
 unchanged: they do not promise Gemma FST constraints. The existing exact native

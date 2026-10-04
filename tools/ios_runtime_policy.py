@@ -122,6 +122,46 @@ def _validate_member(name: str, data: bytes, archive: Path, platform: str, frame
                 _validate_declared_floor(framework_plist, archive)
 
 
+
+def _validate_archive_platform(data: bytes, platform: str, archive: Path) -> None:
+    """Verify actual slice platforms before granting any macOS exemption."""
+    with tempfile.TemporaryDirectory(prefix="apple-slice-platform-") as tmp:
+        binary = Path(tmp) / "binary"
+        binary.write_bytes(data)
+        if platform != "MacOSX":
+            binary_minimum_os(binary, platform)
+            return
+        arches = subprocess.run(
+            ["xcrun", "lipo", "-archs", str(binary)],
+            check=True, capture_output=True, text=True,
+        ).stdout.split()
+        if not arches or len(arches) != len(set(arches)):
+            raise RuntimeError(f"Missing or ambiguous XCFramework Mach-O architectures: {archive}")
+        for arch in arches:
+            output = subprocess.run(
+                ["xcrun", "vtool", "-arch", arch, "-show-build", str(binary)],
+                check=True, capture_output=True, text=True,
+            ).stdout
+            targets = []
+            for command in re.split(r"Load command \d+\s*\n", output)[1:]:
+                if re.search(r"\bcmd LC_BUILD_VERSION\b", command):
+                    actual = re.search(r"^\s*platform (\S+)\s*$", command, re.MULTILINE)
+                    minimum = re.search(r"^\s*minos (\S+)\s*$", command, re.MULTILINE)
+                    if actual is None or actual.group(1) != "MACOS" or minimum is None:
+                        raise RuntimeError(f"XCFramework macos metadata disagrees with actual Mach-O platform: {archive} ({arch})")
+                    targets.append(minimum.group(1))
+                elif re.search(r"\bcmd LC_VERSION_MIN_MACOSX\b", command):
+                    minimum = re.search(r"^\s*version (\S+)\s*$", command, re.MULTILINE)
+                    if minimum is None:
+                        raise RuntimeError(f"Missing legacy macOS deployment target: {archive} ({arch})")
+                    targets.append(minimum.group(1))
+                elif re.search(r"\bcmd LC_VERSION_MIN_IPHONEOS\b", command):
+                    raise RuntimeError(f"XCFramework macos metadata disagrees with actual Mach-O platform: {archive} ({arch})")
+            if len(targets) != 1:
+                raise RuntimeError(f"Missing or ambiguous XCFramework macOS deployment target: {archive} ({arch})")
+            version_tuple(targets[0])
+
+
 def validate_ios_archives(dist_dir: Path) -> None:
     """Inspect produced iOS tarballs and iOS slices inside SwiftPM ZIPs."""
     if not dist_dir.exists():
@@ -132,7 +172,7 @@ def validate_ios_archives(dist_dir: Path) -> None:
             continue
         if archive.suffix == ".zip":
             with zipfile.ZipFile(archive) as file:
-                ios_prefixes: dict[str, str] = {}
+                slice_prefixes: dict[str, str] = {}
                 xcframeworks = {str(PurePosixPath(name).parents[index])
                                for name in file.namelist()
                                for index in range(len(PurePosixPath(name).parents))
@@ -142,15 +182,46 @@ def validate_ios_archives(dist_dir: Path) -> None:
                     if metadata not in file.namelist():
                         raise RuntimeError(f"XCFramework archive is missing platform metadata: {archive}")
                     info = plistlib.loads(file.read(metadata))
-                    for library in info["AvailableLibraries"]:
-                        if library["SupportedPlatform"] == "ios":
-                            ios_prefixes[framework + "/" + library["LibraryIdentifier"] + "/"] = ("iPhoneSimulator" if library.get("SupportedPlatformVariant") == "simulator" else "iPhoneOS")
+                    libraries = info.get("AvailableLibraries")
+                    if not isinstance(libraries, list) or not libraries:
+                        raise RuntimeError(f"XCFramework archive is missing slice metadata: {archive}")
+                    for library in libraries:
+                        platform = library.get("SupportedPlatform")
+                        variant = library.get("SupportedPlatformVariant")
+                        identifier = library.get("LibraryIdentifier")
+                        if (platform not in {"ios", "macos"}
+                                or variant not in ({None, "simulator"} if platform == "ios" else {None})
+                                or not isinstance(identifier, str) or not identifier):
+                            raise RuntimeError(f"Unsupported XCFramework platform/variant metadata: {archive}")
+                        prefix = framework + "/" + identifier + "/"
+                        if prefix in slice_prefixes:
+                            raise RuntimeError(f"Ambiguous XCFramework slice metadata: {archive}")
+                        slice_prefixes[prefix] = ("MacOSX" if platform == "macos" else "iPhoneSimulator" if variant == "simulator" else "iPhoneOS")
+                checked_slices = dict.fromkeys(slice_prefixes, 0)
                 for member in file.infolist():
-                    is_ios = _ios_member(member.filename, archive) or any(member.filename.startswith(prefix) for prefix in ios_prefixes)
+                    if member.is_dir():
+                        continue
+                    with file.open(member) as stream:
+                        magic = stream.read(4)
+                    if magic not in MACHO_MAGIC:
+                        continue
+                    matches = [prefix for prefix in slice_prefixes if member.filename.startswith(prefix)]
+                    if any(member.filename.startswith(framework + "/") for framework in xcframeworks):
+                        if len(matches) != 1:
+                            raise RuntimeError(f"Missing or ambiguous XCFramework slice metadata for Mach-O binary: {archive} ({member.filename})")
+                        prefix = matches[0]
+                        _validate_archive_platform(file.read(member), slice_prefixes[prefix], archive)
+                        checked_slices[prefix] += 1
+                for prefix, checked in checked_slices.items():
+                    if not checked:
+                        raise RuntimeError(f"XCFramework slice has no inspectable Mach-O binary: {archive} ({prefix})")
+                for member in file.infolist():
+                    declared_platform = next((platform for prefix, platform in slice_prefixes.items() if member.filename.startswith(prefix)), None)
+                    is_ios = declared_platform != "MacOSX" if declared_platform is not None else _ios_member(member.filename, archive)
                     if is_ios and contains_provider(member.filename):
                         raise RuntimeError(f"Provider-free iOS archive contains {member.filename}: {archive}")
                     if not member.is_dir() and is_ios:
-                        platform = next((value for prefix, value in ios_prefixes.items() if member.filename.startswith(prefix)), "iPhoneSimulator" if "simulator" in member.filename else "iPhoneOS")
+                        platform = declared_platform or ("iPhoneSimulator" if "simulator" in member.filename else "iPhoneOS")
                         metadata = str(PurePosixPath(member.filename).parent / "Info.plist")
                         plist = file.read(metadata) if metadata in file.namelist() else None
                         _validate_member(member.filename, file.read(member), archive, platform, plist)

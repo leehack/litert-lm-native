@@ -197,6 +197,47 @@ class IosBinaryPolicyTest(unittest.TestCase):
                     release.build_manifest(upstream_tag="v0.17.0", upstream_commit="a" * 40, compatibility_tag="v0.17.0", release_tag="v0.17.0-7", native_commit="b" * 40, official_upstream_assets=True)
             self.assertTrue(provider.exists())
 
+    def test_production_cli_validates_real_platform_before_macos_exemption(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "provider.c"
+            source.write_text("void fixture(void) {}")
+            macos = root / "provider.dylib"
+            subprocess.run(["xcrun", "--sdk", "macosx", "clang", "-dynamiclib", "-arch", "arm64", str(source), "-o", str(macos)], check=True, capture_output=True)
+            ios_binary = self.build(root / "ios", "GemmaModelConstraintProvider", minimum="26.4")
+            dist = root / "dist"
+            dist.mkdir()
+            archive = dist / "GemmaModelConstraintProvider.zip"
+            module = "GemmaModelConstraintProvider"
+            for label, variant, binary, expected, identifier in (
+                ("macos", None, macos, None, "custom-slice"),
+                ("macos", None, macos, None, "ios-custom"),
+                ("macos", None, ios_binary, "disagrees with actual Mach-O platform", "custom-slice"),
+                ("unknown", None, ios_binary, "Unsupported XCFramework", "custom-slice"),
+                (None, None, ios_binary, "Unsupported XCFramework", "custom-slice"),
+                ("macos", "simulator", macos, "Unsupported XCFramework", "custom-slice"),
+                ("ios", "unknown", ios_binary, "Unsupported XCFramework", "custom-slice"),
+            ):
+                with self.subTest(label=label, variant=variant, identifier=identifier):
+                    library = {"LibraryIdentifier": identifier, "LibraryPath": module + ".framework", "SupportedArchitectures": ["arm64"]}
+                    if label is not None:
+                        library["SupportedPlatform"] = label
+                    if variant is not None:
+                        library["SupportedPlatformVariant"] = variant
+                    with zipfile.ZipFile(archive, "w") as file:
+                        file.writestr(module + ".xcframework/Info.plist", plistlib.dumps({"AvailableLibraries": [library]}))
+                        prefix = module + ".xcframework/" + identifier + "/" + module + ".framework/"
+                        file.writestr(prefix + "Info.plist", plistlib.dumps({"CFBundleExecutable": module, "CFBundleSupportedPlatforms": ["MacOSX"], "MinimumOSVersion": "16.4"}))
+                        file.writestr(prefix + module, binary.read_bytes())
+                    result = subprocess.run([sys.executable, dependencies.__file__, "--root", str(root), "--upstream-tag", "v0.17.0", "--archive-root", str(dist)], capture_output=True, text=True)
+                    if expected is None:
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertIn("Validated runtime dependencies", result.stdout)
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn(expected, result.stderr)
+                        self.assertNotIn("Validated runtime dependencies", result.stdout)
+
     def test_real_archive_binary_dependencies_and_provider_members_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -246,7 +287,3 @@ class IosBinaryPolicyTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "archive contains"):
                 policy.validate_ios_archives(dist)
             archive.unlink()
-            with zipfile.ZipFile(dist / "GemmaModelConstraintProvider.zip", "w") as file:
-                file.writestr("GemmaModelConstraintProvider.xcframework/Info.plist", plistlib.dumps({"AvailableLibraries": [{"SupportedPlatform": "macos", "LibraryIdentifier": "macos-arm64"}]}))
-                file.writestr("GemmaModelConstraintProvider.xcframework/macos-arm64/GemmaModelConstraintProvider.framework/GemmaModelConstraintProvider", binary.read_bytes())
-            policy.validate_ios_archives(dist)
