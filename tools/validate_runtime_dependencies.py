@@ -110,7 +110,7 @@ def validate_elf_dependencies(root: Path) -> int:
 
 def iter_macho_libraries(root: Path) -> list[Path]:
     bin_dir = root / "bin"
-    if not bin_dir.exists() or shutil.which("otool") is None:
+    if not bin_dir.exists():
         return []
     libraries = {
         path
@@ -126,6 +126,13 @@ def iter_macho_libraries(root: Path) -> list[Path]:
             binary = framework / framework.stem
             if binary.is_file():
                 libraries.add(binary)
+    if libraries:
+        missing_tools = [tool for tool in ("otool", "nm") if shutil.which(tool) is None]
+        if missing_tools:
+            raise RuntimeError(
+                "Apple runtime validation requires " + ", ".join(missing_tools)
+                + "; install/select the Xcode command-line tools before qualifying Apple artifacts."
+            )
     return sorted(libraries)
 
 

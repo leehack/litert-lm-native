@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import plistlib
 import shutil
 import subprocess
@@ -17,6 +18,29 @@ import validate_runtime_dependencies as dependencies
 
 
 class IosMetadataParserTest(unittest.TestCase):
+    def test_cli_requires_apple_tools_only_when_apple_inputs_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = dict(os.environ, PATH="/nonexistent")
+            command = [sys.executable, str(Path(dependencies.__file__).resolve()), "--root", str(root)]
+            absent = subprocess.run(command, env=environment, capture_output=True, text=True)
+            self.assertEqual(absent.returncode, 0, absent.stderr)
+            framework = root / "bin/ios/arm64/Provider.framework"
+            framework.mkdir(parents=True)
+            (framework / "Provider").write_bytes(b"Apple runtime input")
+            required = subprocess.run(command, env=environment, capture_output=True, text=True)
+            self.assertNotEqual(required.returncode, 0)
+            self.assertIn("Apple runtime validation requires otool, nm", required.stderr)
+            self.assertNotIn("Validated runtime dependencies", required.stdout)
+            # Plain macOS dylibs require the same production inspection tools.
+            shutil.rmtree(root / "bin/ios")
+            library = root / "bin/macos/arm64/libLiteRtLm.dylib"
+            library.parent.mkdir(parents=True)
+            library.write_bytes(b"Apple runtime input")
+            required = subprocess.run(command, env=environment, capture_output=True, text=True)
+            self.assertNotEqual(required.returncode, 0)
+            self.assertIn("Apple runtime validation requires otool, nm", required.stderr)
+
     def parse(self, outputs: list[str], platform: str = "iPhoneSimulator") -> str:
         results = [subprocess.CompletedProcess([], 0, "arm64 x86_64\n")]
         results.extend(subprocess.CompletedProcess([], 0, output) for output in outputs)
