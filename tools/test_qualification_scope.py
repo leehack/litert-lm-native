@@ -78,6 +78,17 @@ class ScopeTest(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):changed_paths('bad-ref')
             finally:os.chdir(old)
 
+    def test_non_ios_partial_retains_its_existing_policy(self):
+        rows=[row for row in MATRIX if row['platform']=='macos']
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            paths=[Path('bin/macos')/row['arch']/'libLiteRtLm.dylib' for row in rows]
+            for path in paths:
+                file=root/path;file.parent.mkdir(parents=True);file.write_bytes(b'fixture')
+            with patch('validate_affected_candidate.required_runtime_artifacts',return_value=paths), patch('validate_affected_candidate.load_smoke_evidence',return_value=[{'platform':'macos','arch':'arm64'}]), patch('validate_affected_candidate.validate_elf_dependencies'), patch('validate_affected_candidate.validate_macho_dependencies') as macho, patch('validate_affected_candidate.validate_ios_directory') as ios, patch('validate_affected_candidate.validate_ios_archives') as archives:
+                validate(root,rows,'v0.17.0','upstream','native','v0.17.0')
+                macho.assert_called_once();ios.assert_not_called();archives.assert_not_called()
+
     def test_partial_artifact_and_smoke_contract_rejects_omissions(self):
         rows=[row for row in MATRIX if row['platform']=='ios']
         with tempfile.TemporaryDirectory() as temp:
@@ -85,9 +96,13 @@ class ScopeTest(unittest.TestCase):
             for path in required_runtime_artifacts('v0.17.0',include_official_assets=False):
                 if path.parts[1]=='ios':
                     file=root/path;file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(b'fixture')
-            with patch('validate_affected_candidate.load_smoke_evidence',return_value=[]), patch('validate_affected_candidate.validate_elf_dependencies') as elf, patch('validate_affected_candidate.validate_macho_dependencies') as macho:
+            with patch('validate_affected_candidate.load_smoke_evidence',return_value=[]), patch('validate_affected_candidate.validate_elf_dependencies') as elf, patch('validate_affected_candidate.validate_macho_dependencies') as macho, patch('validate_affected_candidate.validate_ios_directory') as ios, patch('validate_affected_candidate.validate_ios_archives') as archives:
                 validate(root,rows,'v0.17.0','upstream','native','v0.17.0')
                 elf.assert_called_once();macho.assert_called_once()
+                ios.assert_called_once();archives.assert_called_once_with(root/'dist/spm/v0.17.0')
+                ios.reset_mock();archives.reset_mock()
+                validate(root,rows,'v0.16.0','upstream','native','v0.16.0')
+                ios.assert_not_called();archives.assert_not_called()
                 for bad in ([],rows[:1],rows+rows, [{'platform':'unknown'}]):
                     with self.assertRaises(ValueError):validate(root,bad,'v0.17.0','upstream','native','v0.17.0')
                 missing=root/'bin/ios/arm64/LiteRtLm.framework/LiteRtLm';missing.unlink()

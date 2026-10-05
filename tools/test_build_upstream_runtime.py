@@ -83,6 +83,9 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             for tag in ("v0.15.0", "v0.16.0", "v0.17.0", "v0.17.1"):
                 with self.subTest(platform=platform, arch=arch, tag=tag), tempfile.TemporaryDirectory() as temp:
                     root = Path(temp)
+                    gate = root / "runtime/conversation/model_data_processor/BUILD"
+                    gate.parent.mkdir(parents=True)
+                    gate.write_bytes((Path(__file__).parent / "fixtures/ios_fst_gate.BUILD").read_bytes())
                     with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
                          patch.object(build_upstream_runtime, "patch_upstream_ios_sampler_path"), \
                          patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]), \
@@ -90,6 +93,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                         with self.assertRaisesRegex(RuntimeError, "captured build"):
                             build_upstream_runtime.build_runtime(root, platform, arch, tag, "3")
                     command = run.call_args.args[0]
+                    self.assertEqual("--define=LITERT_LM_FST_CONSTRAINTS_DISABLED=1" in command, platform == "ios" and tag in {"v0.17.0", "v0.17.1"})
                     dynamic = platform in {"linux", "windows"} and tag != "v0.15.0"
                     self.assertEqual("--define=litert_runtime_link_mode=dynamic" in command, dynamic)
                     self.assertEqual("--define=litert_link_capi_so=true" in command, not dynamic)

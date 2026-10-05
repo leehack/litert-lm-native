@@ -485,6 +485,7 @@ jobs:
             --clean
           python3 tools/package_apple_xcframeworks.py \
             --release-tag "$RELEASE_TAG" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
             --clean
 
       - name: Generate and validate provenance manifest
@@ -505,7 +506,7 @@ jobs:
             runtime_args+=(--allow-missing-official-assets)
           fi
           python3 tools/validate_runtime_artifacts.py "${runtime_args[@]}"
-          python3 tools/validate_runtime_dependencies.py
+          python3 tools/validate_runtime_dependencies.py --upstream-tag "$COMPATIBILITY_TAG"
           python3 tools/package_release.py "${manifest_args[@]}"
           python3 tools/validate_artifacts.py
 
@@ -538,6 +539,7 @@ jobs:
             tar -czf "release/litert-lm-native-official-assets-${RELEASE_TAG}.tar.gz" dist
           fi
           cp "dist/spm/${RELEASE_TAG}"/*.zip release/
+          python3 tools/validate_runtime_dependencies.py --upstream-tag "$COMPATIBILITY_TAG" --archive-root release
 
       - name: Write machine-readable preparation result
         run: |

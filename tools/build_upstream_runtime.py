@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
 from litert_lm_symbols import (
@@ -353,6 +354,9 @@ def build_runtime(
     if platform == "macos":
         command.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
     if platform == "ios":
+        if provider_free_ios(upstream_tag):
+            verify_upstream_fst_gate(source_root)
+            command.append(FST_DEFINE)
         command.append("--ios_minimum_os=13.0")
     if jobs:
         command.append(f"--jobs={jobs}")
@@ -664,6 +668,8 @@ def main() -> int:
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)
+        if args.platform == "ios" and provider_free_ios(args.upstream_tag):
+            validate_ios_directory(BIN_DIR / "ios" / args.arch, remove_unused_provider=True)
         normalize_linux_runtime_metadata(args.platform, args.arch)
         return 0
 
@@ -693,6 +699,8 @@ def main() -> int:
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)
+        if args.platform == "ios" and provider_free_ios(args.upstream_tag):
+            validate_ios_directory(BIN_DIR / "ios" / args.arch, remove_unused_provider=True)
         normalize_linux_runtime_metadata(args.platform, args.arch)
     return 0
 

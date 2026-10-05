@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from ios_runtime_policy import provider_free_ios, validate_ios_directory, validate_ios_archives
+
 import argparse
 import os
 import plistlib
@@ -450,7 +452,9 @@ def package_ios_companions(
     return packaged, packaged_modules
 
 
-def package_all(release_tag: str, clean: bool) -> list[Path]:
+def package_all(release_tag: str, clean: bool, compatibility_tag: str) -> list[Path]:
+    if provider_free_ios(compatibility_tag):
+        validate_ios_directory(BIN_DIR / "ios")
     output_dir = DIST_DIR / release_tag
     if clean and WORK_DIR.exists():
         shutil.rmtree(WORK_DIR)
@@ -534,13 +538,16 @@ def main() -> int:
         "--upstream-tag",
         help="Deprecated alias for --release-tag.",
     )
+    parser.add_argument("--compatibility-tag", required=True, help="Selected upstream API compatibility tag (including development builds).")
     parser.add_argument("--clean", action="store_true")
     args = parser.parse_args()
 
     release_tag = args.release_tag or args.upstream_tag
     if not release_tag:
         parser.error("--release-tag is required")
-    packaged = package_all(release_tag, clean=args.clean)
+    packaged = package_all(release_tag, clean=args.clean, compatibility_tag=args.compatibility_tag)
+    if provider_free_ios(args.compatibility_tag):
+        validate_ios_archives(DIST_DIR / release_tag)
     if not packaged:
         raise RuntimeError("No Apple XCFramework zips were produced")
     for path in packaged:

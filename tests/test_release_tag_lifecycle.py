@@ -526,14 +526,35 @@ class DraftTagLifecycleTest(unittest.TestCase):
                 self.assertEqual(self.writes(), [])
 
     def prepare_full_candidate(self):
+        def check_ios_directory(path):
+            self.assertEqual(path, fixture.package_release.BIN_DIR / "ios")
+
+        def check_ios_archives(path):
+            self.assertEqual(
+                path, fixture.package_release.DIST_DIR / "spm" / "v0.17.0"
+            )
+
         with patch.multiple(
             fixture,
             UPSTREAM_TAG="v0.17.0",
             RELEASE_TAG="v0.17.0",
             UPSTREAM_COMMIT=UPSTREAM,
             NATIVE_COMMIT=NATIVE,
-        ):
+        ), patch.object(
+            fixture.package_release,
+            "validate_ios_directory",
+            side_effect=check_ios_directory,
+        ) as validate_ios, patch.object(
+            fixture.package_release,
+            "validate_ios_archives",
+            side_effect=check_ios_archives,
+        ) as validate_archives:
+            # These payloads are synthetic metadata fixtures, not Mach-O or ZIP
+            # artifacts. Isolate real inspection here while checking that the
+            # production manifest builder still invokes both selected guards.
             manifest = fixture.generate_manifest()
+            validate_ios.assert_called_once()
+            validate_archives.assert_called_once()
             smoke = copy.deepcopy(manifest["realModelSmokes"][0])
             library = next(
                 a
@@ -725,6 +746,31 @@ class DraftTagLifecycleTest(unittest.TestCase):
                     for x in self.writes()
                 )
             )
+
+
+class SyntheticCandidateFixtureTest(unittest.TestCase):
+    def test_fixture_generation_needs_no_apple_tools_and_restores_real_guards(self):
+        # Exercise only the Python fixture setup on Linux-like hosts. The
+        # separate publication lifecycle suite still requires real Bash 4+.
+        with tempfile.TemporaryDirectory() as temp:
+            case = DraftTagLifecycleTest(
+                "test_full_qualification_failure_has_zero_mutations"
+            )
+            case.root = Path(temp)
+            case.env = {"GITHUB_REPOSITORY": "leehack/litert-lm-native"}
+            (case.root / "candidate/release").mkdir(parents=True)
+            real_ios_guard = fixture.package_release.validate_ios_directory
+            real_archive_guard = fixture.package_release.validate_ios_archives
+            with patch("ios_runtime_policy.shutil.which", return_value=None), patch(
+                "ios_runtime_policy.subprocess.run",
+                side_effect=AssertionError("Synthetic fixture invoked Apple tools"),
+            ):
+                manifest = case.prepare_full_candidate()
+            self.assertEqual(len(manifest["platforms"]), 9)
+            self.assertEqual(len(manifest["realModelSmokes"]), 3)
+            self.assertEqual(manifest["upstream"]["compatibilityTag"], "v0.17.0")
+            self.assertIs(fixture.package_release.validate_ios_directory, real_ios_guard)
+            self.assertIs(fixture.package_release.validate_ios_archives, real_archive_guard)
 
 
 if __name__ == "__main__":

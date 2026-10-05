@@ -261,6 +261,7 @@ jobs:
         run: |
           python3 tools/package_apple_xcframeworks.py \
             --release-tag "$QUALIFICATION_RELEASE_TAG" \
+            --compatibility-tag "$QUALIFICATION_UPSTREAM_TAG" \
             --clean
 
       - name: Verify pinned upstream tag identity
@@ -277,7 +278,7 @@ jobs:
           python3 tools/validate_runtime_artifacts.py \
             --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" \
             --allow-missing-official-assets
-          python3 tools/validate_runtime_dependencies.py
+          python3 tools/validate_runtime_dependencies.py --upstream-tag "$QUALIFICATION_UPSTREAM_TAG"
           PYTHONPATH=tools python3 - <<'PY'
           import os
           from pathlib import Path

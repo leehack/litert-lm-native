@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import tempfile
 
+from ios_runtime_policy import provider_free_ios, validate_ios_directory, validate_ios_archives
 from package_release import load_smoke_evidence
 from qualification_scope import MATRIX
 from validate_runtime_artifacts import required_runtime_artifacts
@@ -34,6 +35,9 @@ def validate(root, rows, upstream_tag, upstream_commit, native_commit, release_t
         isolated=Path(temp)
         for platform in platforms:
             shutil.copytree(root/'bin'/platform, isolated/'bin'/platform, symlinks=True)
+        if "ios" in platforms and provider_free_ios(upstream_tag):
+            validate_ios_directory(isolated / "bin" / "ios")
+            validate_ios_archives(root / "dist" / "spm" / release_tag)
         validate_elf_dependencies(isolated)
         validate_macho_dependencies(isolated)
     print(f'Validated affected platforms {sorted(platforms)}; not a full release candidate')

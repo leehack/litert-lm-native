@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from ios_runtime_policy import provider_free_ios, validate_ios_directory
+
 import argparse
 import hashlib
 import plistlib
@@ -370,6 +372,8 @@ def stage_slice(spec: dict, clean: bool, upstream_tag: str) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     if clean:
         clean_staged_frameworks(target_dir)
+    if provider_free_ios(upstream_tag):
+        validate_ios_directory(target_dir, remove_unused_provider=True)
     supported_platform = (
         "iPhoneOS" if spec["sdk"] == "iphoneos" else "iPhoneSimulator"
     )
@@ -445,6 +449,8 @@ def stage_source_built_slice(spec: dict, clean: bool, upstream_tag: str) -> Path
     target_dir = BIN_DIR / "ios" / arch
     if clean:
         clean_staged_frameworks(target_dir)
+    if provider_free_ios(upstream_tag):
+        validate_ios_directory(target_dir, remove_unused_provider=True)
     supported_platform = (
         "iPhoneOS" if spec["sdk"] == "iphoneos" else "iPhoneSimulator"
     )
@@ -480,6 +486,8 @@ def stage_source_built_slice(spec: dict, clean: bool, upstream_tag: str) -> Path
         supported_platform=supported_platform,
     )
 
+    if provider_free_ios(upstream_tag):
+        validate_ios_directory(target_dir)
     print(f"Staged {litertlm}", flush=True)
     print(f"Staged {clitertlm}", flush=True)
     return litertlm

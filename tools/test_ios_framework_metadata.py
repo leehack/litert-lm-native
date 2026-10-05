@@ -22,7 +22,7 @@ class IosMetadataParserTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             environment = dict(os.environ, PATH="/nonexistent")
-            command = [sys.executable, str(Path(dependencies.__file__).resolve()), "--root", str(root)]
+            command = [sys.executable, str(Path(dependencies.__file__).resolve()), "--root", str(root), "--upstream-tag", "v0.16.0"]
             absent = subprocess.run(command, env=environment, capture_output=True, text=True)
             self.assertEqual(absent.returncode, 0, absent.stderr)
             framework = root / "bin/ios/arm64/Provider.framework"
@@ -168,7 +168,7 @@ class IosMetadataPackagingTest(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     dependencies.validate_macho_dependencies(root)
                 result = subprocess.run([
-                    sys.executable, str(Path(dependencies.__file__).resolve()), "--root", str(root)
+                    sys.executable, str(Path(dependencies.__file__).resolve()), "--root", str(root), "--upstream-tag", "v0.16.0"
                 ], capture_output=True, text=True)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn("NameError", result.stderr)
@@ -176,7 +176,7 @@ class IosMetadataPackagingTest(unittest.TestCase):
             info["MinimumOSVersion"] = "26.4"
             (framework / "Info.plist").write_bytes(plistlib.dumps(info))
             result = subprocess.run([
-                sys.executable, str(Path(dependencies.__file__).resolve()), "--root", str(root)
+                sys.executable, str(Path(dependencies.__file__).resolve()), "--root", str(root), "--upstream-tag", "v0.16.0"
             ], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             info["MinimumOSVersion"] = "15.0"
