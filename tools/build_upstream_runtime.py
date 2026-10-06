@@ -44,6 +44,13 @@ ZLIB_GITHUB_MIRROR_URL = (
     "zlib-1.3.1.tar.gz"
 )
 
+# LiteRT commits whose GpuEnvironment::Initialize returns on an OpenCL load
+# failure before it records the environment options, so the WebGPU destroy
+# callback is lost. LiteRT 9c8ae4e0fc records the options first.
+LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING = frozenset(
+    {"9fe5be45564c868408e6514c8aabb83e211a0911"}
+)
+
 RUNTIME_TARGETS = {
     ("android", "arm64"): {
         "bazel_target": "//bridge:libLiteRtLm.so",
@@ -164,8 +171,28 @@ def download_upstream(
         source_root,
         patch_ios_framework_paths=has_asr_bridge(compatibility_tag),
         patch_bpe_null_piece=is_at_least(compatibility_tag, (0, 17, 0)),
+        patch_gpu_environment_teardown=needs_gpu_environment_teardown_patch(
+            (source_root / "WORKSPACE").read_text(encoding="utf-8"),
+            compatibility_tag,
+        ),
     )
     return source_root
+
+
+def needs_gpu_environment_teardown_patch(
+    workspace_text: str, compatibility_tag: str
+) -> bool:
+    # The decision follows the pinned LiteRT commit, not the LiteRT-LM version:
+    # a development build of a later upstream commit keeps the 0.17
+    # compatibility tag but already pins a LiteRT with the reordering.
+    match = re.search(
+        r'^LITERT_REF = "([0-9a-f]{40})"$', workspace_text, re.MULTILINE
+    )
+    if match is None:
+        if is_at_least(compatibility_tag, (0, 17, 0)):
+            raise RuntimeError("Expected a pinned LITERT_REF in the upstream WORKSPACE")
+        return False
+    return match.group(1) in LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING
 
 
 def patch_upstream_workspace(
@@ -173,6 +200,7 @@ def patch_upstream_workspace(
     *,
     patch_ios_framework_paths: bool = True,
     patch_bpe_null_piece: bool = False,
+    patch_gpu_environment_teardown: bool = False,
 ) -> None:
     workspace = source_root / "WORKSPACE"
     text = workspace.read_text(encoding="utf-8")
@@ -191,16 +219,24 @@ def patch_upstream_workspace(
             raise RuntimeError(f"Expected zlib URL not found in {workspace}")
     else:
         text = text.replace(needle, replacement)
+    litert_patches = []
+    if patch_ios_framework_paths:
+        litert_patches.append("litert_ios_framework_paths.patch")
+    if patch_gpu_environment_teardown:
+        litert_patches.append("litert_gpu_environment_destroy_callback.patch")
     litert_archive = 'http_archive(\n    name = "litert",\n'
     litert_archive_with_patch = (
-        'http_archive(\n'
-        '    name = "litert",\n'
-        '    patch_args = ["-p1"],\n'
-        '    patches = ["@//bridge:litert_ios_framework_paths.patch"],\n'
+        litert_archive
+        + '    patch_args = ["-p1"],\n'
+        + "    patches = ["
+        + ", ".join(f'"@//bridge:{name}"' for name in litert_patches)
+        + "],\n"
     )
-    if patch_ios_framework_paths and litert_archive_with_patch not in text:
+    if litert_patches and litert_archive_with_patch not in text:
         if litert_archive not in text:
             raise RuntimeError(f"Expected LiteRT archive not found in {workspace}")
+        if litert_archive + "    patch_args" in text:
+            raise RuntimeError(f"Unexpected LiteRT patches in {workspace}")
         text = text.replace(litert_archive, litert_archive_with_patch, 1)
     if patch_bpe_null_piece:
         text = patch_sentencepiece_bpe_null(text)

@@ -21,16 +21,19 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
         self.assertEqual(set(files), {"src/bpe_model.cc", "src/model_interface.cc", "src/model_interface.h"})
 
     def test_download_wires_bpe_compatibility_only_for_v017_and_later(self) -> None:
-        for tag, enabled in [("v0.16.0", False), ("v0.17.0", True), ("v0.17.1", True)]:
+        affected = 'LITERT_REF = "9fe5be45564c868408e6514c8aabb83e211a0911"\n'
+        for tag, workspace, enabled in [("v0.16.0", "", False), ("v0.17.0", affected, True), ("v0.17.1", affected, True)]:
             with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 source = root / "source"
                 source.mkdir()
+                (source / "WORKSPACE").write_text(workspace, encoding="utf-8")
                 with patch.object(build_upstream_runtime, "download_to_path"), \
                      patch.object(build_upstream_runtime.tarfile, "open"), \
                      patch.object(build_upstream_runtime, "patch_upstream_workspace") as apply:
                     self.assertEqual(build_upstream_runtime.download_upstream(tag, tag, root), source)
                 self.assertEqual(apply.call_args.kwargs["patch_bpe_null_piece"], enabled)
+                self.assertEqual(apply.call_args.kwargs["patch_gpu_environment_teardown"], enabled)
 
     def test_workspace_applies_bpe_patch_and_preserves_file_on_rejection(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -185,6 +188,59 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 build_upstream_runtime.ZLIB_GITHUB_MIRROR_URL,
                 patched,
             )
+
+    def test_workspace_adds_gpu_environment_teardown_patch_for_v017(self) -> None:
+        needs = build_upstream_runtime.needs_gpu_environment_teardown_patch
+        affected = 'LITERT_REF = "9fe5be45564c868408e6514c8aabb83e211a0911"\n'
+        reordered = 'LITERT_REF = "86112a3263efdbcf2183c48580c9aa1b89850c98"\n'
+        self.assertTrue(needs(affected, "v0.17.0"))
+        self.assertTrue(needs(affected, "v0.17.1"))
+        # A development build keeps the stable compatibility tag.
+        self.assertFalse(needs(reordered, "v0.17.1"))
+        self.assertFalse(needs("", "v0.16.1"))
+        with self.assertRaisesRegex(RuntimeError, "LITERT_REF"):
+            needs("", "v0.17.0")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "WORKSPACE"
+            workspace.write_text(
+                f'http_archive(\n    name = "minizip",\n    url = "{build_upstream_runtime.ZLIB_URL}",\n)\n'
+                'http_archive(\n    name = "litert",\n)\n',
+                encoding="utf-8",
+            )
+
+            for _ in range(2):
+                build_upstream_runtime.patch_upstream_workspace(
+                    root, patch_gpu_environment_teardown=True)
+
+            patched = workspace.read_text(encoding="utf-8")
+            self.assertEqual(
+                patched.count(
+                    '    patches = ["@//bridge:litert_ios_framework_paths.patch", '
+                    '"@//bridge:litert_gpu_environment_destroy_callback.patch"],\n'
+                ),
+                1,
+            )
+            with self.assertRaisesRegex(RuntimeError, "Unexpected LiteRT patches"):
+                build_upstream_runtime.patch_upstream_workspace(root)
+
+    def test_gpu_environment_teardown_patch_records_callback_before_opencl(self) -> None:
+        patch = (
+            build_upstream_runtime.BRIDGE_PACKAGE_ROOT
+            / "bridge"
+            / "litert_gpu_environment_destroy_callback.patch"
+        ).read_text(encoding="utf-8")
+        added = patch.index("+  options_ = CreateGpuEnvironmentOptions(environment_options);")
+        opencl = patch.index("LITERT_RETURN_IF_ERROR(tflite::gpu::cl::LoadOpenCL().ok())")
+        removed = patch.index("-  options_ = CreateGpuEnvironmentOptions(environment_options);")
+        self.assertLess(added, opencl)
+        self.assertLess(opencl, removed)
+        self.assertIn(
+            '"litert_gpu_environment_destroy_callback.patch"',
+            (build_upstream_runtime.BRIDGE_PACKAGE_ROOT / "bridge" / "BUILD.bazel").read_text(
+                encoding="utf-8"
+            ),
+        )
 
     def test_legacy_workspace_keeps_litert_archive_unpatched(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
