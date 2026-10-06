@@ -1,0 +1,23 @@
+diff --git a/litert/runtime/gpu_environment.cc b/litert/runtime/gpu_environment.cc
+--- a/litert/runtime/gpu_environment.cc
++++ b/litert/runtime/gpu_environment.cc
+@@ -200,6 +200,9 @@
+ 
+ Expected<void> GpuEnvironment::Initialize(
+     const LiteRtEnvironmentOptionsT& environment_options) {
++  // Set up options.
++  options_ = CreateGpuEnvironmentOptions(environment_options);
++
+ #if LITERT_HAS_OPENCL_SUPPORT
+   // Set up OpenCL.
+   LITERT_RETURN_IF_ERROR(tflite::gpu::cl::LoadOpenCL().ok())
+@@ -207,9 +210,6 @@
+   properties_.is_opencl_available = true;
+ #endif  // LITERT_HAS_OPENCL_SUPPORT
+ 
+-  // Set up options.
+-  options_ = CreateGpuEnvironmentOptions(environment_options);
+-
+ #if LITERT_HAS_OPENCL_SUPPORT
+   // Set up device.
+   if (options_.device_id && options_.platform_id) {

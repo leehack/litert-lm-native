@@ -1,0 +1,60 @@
+
+/private/tmp/claude-501/-opt-UnitySrc-personal-llama-llamadart--claude-worktrees-llamadart-media-generation-1efede/924b3d1a-6cd6-41cb-9696-55fcbe1f7f20/scratchpad/chk/out/x64-patched.so:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000001af470c <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT>:
+ 1af470c:      	pushq	%rbp
+ 1af470d:      	pushq	%r15
+ 1af470f:      	pushq	%r14
+ 1af4711:      	pushq	%r13
+ 1af4713:      	pushq	%r12
+ 1af4715:      	pushq	%rbx
+ 1af4716:      	subq	$0x768, %rsp            # imm = 0x768
+ 1af471d:      	movq	%rsi, %r14
+ 1af4720:      	movq	%rdi, %rbx
+ 1af4723:      	leaq	0x88(%rsp), %r15
+ 1af472b:      	movq	%r15, %rdi
+ 1af472e:      	movq	%rdx, %rsi
+ 1af4731:      	callq	0x1c31770 <_ZN6litert8internal27CreateGpuEnvironmentOptionsERK25LiteRtEnvironmentOptionsT@plt>
+ 1af4736:      	leaq	0x3a0(%r14), %rdi
+ 1af473d:      	pushq	$0xb
+ 1af473f:      	popq	%rcx
+ 1af4740:      	movq	%r15, %rsi
+ 1af4743:      	rep		movsq	(%rsi), %es:(%rdi)
+ 1af4746:      	leaq	0x88(%rsp), %r15
+ 1af474e:      	movq	%r15, %rdi
+ 1af4751:      	callq	0x1c2ec90 <_ZN6tflite3gpu2cl10LoadOpenCLEv@plt>
+ 1af4756:      	movq	(%r15), %r12
+ 1af4759:      	movq	%r15, %rdi
+ 1af475c:      	callq	0xabeb8a <_ZN4absl12lts_202605266StatusD2Ev>
+ 1af4761:      	cmpq	$0x1, %r12
+ 1af4765:      	sete	0x30(%rsp)
+ 1af476a:      	jne	0x1af47e7 <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0xdb>
+ 1af476c:      	movb	$0x1, 0x3f8(%r14)
+ 1af4774:      	movq	0x3b0(%r14), %rsi
+ 1af477b:      	testq	%rsi, %rsi
+ 1af477e:      	je	0x1af481c <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0x110>
+ 1af4784:      	movq	0x3b8(%r14), %rdx
+ 1af478b:      	testq	%rdx, %rdx
+ 1af478e:      	je	0x1af481c <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0x110>
+ 1af4794:      	leaq	0x88(%rsp), %r15
+ 1af479c:      	movq	%r15, %rdi
+ 1af479f:      	callq	0x1c317c0 <_ZN6tflite3gpu2cl8CLDeviceC1EP13_cl_device_idP15_cl_platform_id@plt>
+ 1af47a4:      	leaq	0x8(%r14), %rdi
+ 1af47a8:      	movq	%r15, %rsi
+ 1af47ab:      	callq	0x1c317d0 <_ZN6tflite3gpu2cl8CLDeviceaSEOS2_@plt>
+ 1af47b0:      	leaq	0x88(%rsp), %rdi
+ 1af47b8:      	callq	0x1af5792 <_ZN6tflite3gpu7GpuInfoD2Ev>
+ 1af47bd:      	callq	0x1c0cf90 <LiteRtGetDefaultLogger@plt>
+ 1af47c2:      	leaq	0x88(%rsp), %rsi
+ 1af47ca:      	movq	%rax, %rdi
+ 1af47cd:      	callq	0x1c0d0f0 <LiteRtGetMinLoggerSeverity@plt>
+ 1af47d2:      	testl	%eax, %eax
+ 1af47d4:      	je	0x1af497c <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0x270>
+ 1af47da:      	movb	$0x0, 0x88(%rsp)
+ 1af47e2:      	jmp	0x1af498a <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0x27e>
+ 1af47e7:      	leaq	-0x159db3e(%rip), %rdx  # 0x556cb0 <_ZZN4absl12lts_2026052618debugging_internalL30IdentifierIsAnonymousNamespaceEPNS1_5StateEmE11anon_prefix+0x13ae2>
+ 1af47ee:      	leaq	0x88(%rsp), %r14
+ 1af47f6:      	leaq	0x30(%rsp), %rsi
+ 1af47fb:      	movq	%r14, %rdi

@@ -1,6 +1,7 @@
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "litert_gpu_environment_destroy_callback.patch",
     "litert_ios_framework_paths.patch",
     "sentencepiece_bpe_null.patch",
 ])
