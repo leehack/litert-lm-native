@@ -58,29 +58,47 @@ a future release or authorize consumer PR #503 to merge unchanged.
 ## GPU environment teardown patch
 
 LiteRT `9fe5be45`, pinned by LiteRT-LM 0.17.x, loads OpenCL before it records
-the GPU environment options. When OpenCL cannot be loaded (an Android app that
-does not declare `libOpenCL.so`, or Linux without an OpenCL loader), the WebGPU
-delegate's destroy callback is never recorded, so deleting an engine never
-destroys its Dawn device and the driver keeps the engine's graphics memory.
+the GPU environment options. When OpenCL cannot be loaded, as in an Android app
+that does not declare `libOpenCL.so`, the WebGPU delegate's destroy callback is
+never recorded, so deleting an engine never destroys its Dawn device and the
+driver keeps the engine's graphics memory.
 `native/bridge/litert_gpu_environment_destroy_callback.patch` applies the
 ordering of LiteRT `9c8ae4e0fc` to the source-built runtime.
 
+Only the Android libraries change. Upstream's `linux` and `windows` Bazel
+configurations define `LITERT_DISABLE_OPENCL_SUPPORT`, and Apple builds default
+to no OpenCL support, so the early return is not compiled there and the patch
+moves a statement between two points with nothing in between.
+
 `tools/build_upstream_runtime.py` selects the patch by the `LITERT_REF` pinned in
-the upstream `WORKSPACE`, so a later pin that already contains the reordering
-builds without it; Bazel fails the build if the patch stops applying to a
-listed commit. Remove the patch and its list entry once no supported upstream
-line pins a listed commit.
+the upstream `WORKSPACE`. The listed commits are the ones the patch has been
+matched against (LiteRT-LM v0.15.0, v0.16.x, v0.17.x and one development pin
+share the same `gpu_environment.cc`); the list is not the proof. Every Android
+build then disassembles `GpuEnvironment::Initialize` in the built library with
+the NDK's `llvm-objdump` and fails unless the call that records the options
+precedes the OpenCL setup, so an unlisted pin with the old ordering, a patch
+that silently stops taking effect, or a build without the function cannot
+produce an artifact. The same check runs on any library:
+
+```sh
+python3 tools/gpu_environment_teardown.py path/to/libLiteRtLm.so
+```
+
+A later pin that already contains the reordering builds without the patch and
+passes the check. Remove the patch and its list entries once no supported
+upstream line pins a listed commit.
 
 Galaxy S24 (`SC-51E`, Android 16, Adreno 750), Qwen3 0.6B on WebGPU/Vulkan,
 engine create, 32-token generation and delete in one process, measured with
-`dumpsys meminfo` on 2026-10-06:
+`dumpsys meminfo` on 2026-10-06. The two runs used different physical devices
+of the same model and build:
 
-| Runtime | Graphics before / engine alive / after delete | Outcome |
-| --- | --- | --- |
-| Published `v0.17.0-7` | 55 / 2058 / 2058 MB | Killed by lmkd during the second engine |
-| `v0.17.0-7` with only `libLiteRtLm.so` rebuilt with the patch | 55 / 2017 to 2058 / 55 MB | Four engines, no growth |
+| Runtime | Sequence | Graphics before / engine alive / after delete | Outcome |
+| --- | --- | --- | --- |
+| Published `v0.17.0-7` | four CPU engines, then GPU engines | 55 / 2058 / 2058 MB | Killed by lmkd during the second GPU engine |
+| `v0.17.0-7` with only `libLiteRtLm.so` rebuilt with the patch | four GPU engines | 55 / 2017 to 2058 / 55 MB | Passed, no growth |
 
 The published runtime never logs `Destroyed WebGPU delegate environment.`; the
 patched one logs it once per delete. The patched library was a local
-android-arm64 build, not a packaged release artifact. Linux, which shares the
-OpenCL default, and other Android GPUs are untested.
+android-arm64 build with NDK r28c, not a packaged release artifact; release
+builds use r28b. Other Android GPUs and Android x64 are untested on hardware.
