@@ -12,6 +12,7 @@ import subprocess
 import zipfile
 from pathlib import Path
 
+from apple_privacy_manifest import MANIFEST_NAME, manifest_bytes, validate_archive
 from ios_framework_metadata import (
     update_framework_minimum_os, validate_framework_metadata, version_tuple,
 )
@@ -81,6 +82,7 @@ def prepare_framework(source: Path, destination: Path, module_name: str) -> Path
         destination / "Headers" / "module.modulemap",
         modules_dir / "module.modulemap",
     )
+    (destination / MANIFEST_NAME).write_bytes(manifest_bytes(module_name, "ios"))
     return destination
 
 
@@ -308,6 +310,9 @@ def make_macos_framework_argument(
     }
     with (resources_dir / "Info.plist").open("wb") as file:
         plistlib.dump(info_plist, file)
+    # In the root of a versioned framework the manifest would be unsealed
+    # content and fail code signing.
+    (resources_dir / MANIFEST_NAME).write_bytes(manifest_bytes(module_name, "macos"))
 
     (framework / "Versions" / "Current").symlink_to("A")
     for name in ["Headers", "Modules", "Resources", module_name]:
@@ -526,6 +531,16 @@ def package_all(release_tag: str, clean: bool, compatibility_tag: str) -> list[P
     return packaged
 
 
+def validate_privacy_manifests(archives: list[Path]) -> None:
+    errors = [
+        f"{archive.name}: {error}"
+        for archive in archives
+        for error in validate_archive(archive, audit_imports=True)
+    ]
+    if errors:
+        raise RuntimeError("Apple privacy manifest validation failed:\n" + "\n".join(errors))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Package Apple LiteRT-LM runtimes as SPM-compatible XCFramework zips."
@@ -550,6 +565,7 @@ def main() -> int:
         validate_ios_archives(DIST_DIR / release_tag)
     if not packaged:
         raise RuntimeError("No Apple XCFramework zips were produced")
+    validate_privacy_manifests(packaged)
     for path in packaged:
         print(path.relative_to(REPO_ROOT).as_posix(), flush=True)
     return 0
