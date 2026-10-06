@@ -1,0 +1,56 @@
+# buildifier: disable=load-on-top
+
+workspace(name = "litert_lm")
+
+# UPDATED = 2026-08-27
+LITERT_REF = "9fe5be45564c868408e6514c8aabb83e211a0911"
+
+LITERT_SHA256 = "5dbb113744e103f899c7b1b7c5479126b36a0b7414c3d971185c1f02041bfa39"
+
+TENSORFLOW_REF = "d9a8da74b4c3de28a39ab34ad007838d6bc30c67"
+
+TENSORFLOW_SHA256 = "cd46b37c0f722d5a48c0accc9618cc5684c553332b913091023703461f318d9b"
+
+# Same one downloaded by tensorflow, but refer contrib/minizip.
+http_archive(
+    name = "minizip",
+    add_prefix = "minizip",
+    build_file = "@//:BUILD.minizip",
+    sha256 = "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
+    strip_prefix = "zlib-1.3.1/contrib/minizip",
+    urls = [
+        "https://storage.googleapis.com/mirror.tensorflow.org/zlib.net/fossils/zlib-1.3.1.tar.gz",
+        "https://mirror.bazel.build/zlib.net/fossils/zlib-1.3.1.tar.gz",
+        "https://zlib.net/fossils/zlib-1.3.1.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "sentencepiece",
+    build_file = "@//:BUILD.sentencepiece",
+    patch_cmds = [
+        "printf '#ifndef CONFIG_H_\\n#define CONFIG_H_\\n#define VERSION \"0.2.2\"\\n#define PACKAGE \"sentencepiece\"\\n#define PACKAGE_STRING \"sentencepiece\"\\n#define INSTALL_DATADIR \"\"\\n#endif\\n' > config.h",
+        "mv src/* .",
+        # Replace third_party/absl/ with absl/ in *.h and *.cc files.
+        "sed -i -e 's|#include \"third_party/absl/|#include \"absl/|g' *.h *.cc",
+        # Replace third_party/protobuf-lite/ with google/protobuf/ in *.h and *.cc files.
+        "sed -i -e 's|#include \"third_party/protobuf-lite/google/protobuf/|#include \"google/protobuf/|g' *.h *.cc",
+        "sed -i -e 's|#include \"third_party/protobuf/|#include \"google/protobuf/|g' *.h *.cc",
+        "rm -rf third_party/protobuf-lite third_party/protobuf third_party/absl third_party/abseil-cpp",
+    ],
+    sha256 = "92381f713e094a15a1ccff1ac4a5315a4c4b82a99ac1332d6ac53c9dc8e1bcf1",
+    strip_prefix = "sentencepiece-0.2.2",
+    url = "https://github.com/google/sentencepiece/archive/refs/tags/v0.2.2.tar.gz",
+)
+
+http_archive(
+    name = "litert",
+    patch_cmds = [
+        # Replace @//third_party with @litert//third_party in files under third_party/.
+        "sed -i -e 's|\"@//third_party/|\"@litert//third_party/|g' third_party/*/*",
+    ],
+    sha256 = LITERT_SHA256,
+    strip_prefix = "LiteRT-" + LITERT_REF,
+    url = "https://github.com/google-ai-edge/LiteRT/archive/" + LITERT_REF + ".tar.gz",
+)
+

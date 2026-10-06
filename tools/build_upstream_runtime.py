@@ -14,6 +14,7 @@ from pathlib import Path
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
+from gpu_environment_teardown import find_ndk_llvm_objdump, validate_library
 from litert_lm_symbols import (
     has_asr_bridge,
     is_at_least,
@@ -44,11 +45,20 @@ ZLIB_GITHUB_MIRROR_URL = (
     "zlib-1.3.1.tar.gz"
 )
 
-# LiteRT commits whose GpuEnvironment::Initialize returns on an OpenCL load
-# failure before it records the environment options, so the WebGPU destroy
-# callback is lost. LiteRT 9c8ae4e0fc records the options first.
+# LiteRT commits known to need litert_gpu_environment_destroy_callback.patch:
+# GpuEnvironment::Initialize returns on an OpenCL load failure before it
+# records the environment options, so the WebGPU destroy callback is lost.
+# LiteRT 9c8ae4e0fc records the options first. All four pin the same
+# gpu_environment.cc. This is the set the patch has been matched against, not
+# every affected commit: validate_android_gpu_environment_teardown fails an
+# Android build of any other pin that still has the old ordering.
 LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING = frozenset(
-    {"9fe5be45564c868408e6514c8aabb83e211a0911"}
+    {
+        "3cb830ad9c94f9922f0a88dd431b005413628919",  # LiteRT-LM v0.15.0
+        "0ff28117f1cb5556d0e015bf80b773f74e2bee51",  # LiteRT-LM v0.16.0, v0.16.1
+        "761d99cb90e20c67efcb3fe1119a60c92381bd1a",  # upstream development commits
+        "9fe5be45564c868408e6514c8aabb83e211a0911",  # LiteRT-LM v0.17.0, v0.17.1
+    }
 )
 
 RUNTIME_TARGETS = {
@@ -664,6 +674,13 @@ def validate_android_global_visibility(output: Path, platform: str) -> None:
     print(f"Validated Android global symbol visibility in {output}", flush=True)
 
 
+def validate_android_gpu_environment_teardown(output: Path, platform: str) -> None:
+    if platform != "android":
+        return
+    validate_library(output, find_ndk_llvm_objdump(os.environ.get("ANDROID_NDK_HOME")))
+    print(f"Validated WebGPU teardown ordering in {output}", flush=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=f"Build the upstream {UPSTREAM_REPO} C runtime library."
@@ -701,6 +718,7 @@ def main() -> int:
         )
         validate_exported_symbols(output, args.upstream_tag)
         validate_android_global_visibility(output, args.platform)
+        validate_android_gpu_environment_teardown(output, args.platform)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)
@@ -732,6 +750,7 @@ def main() -> int:
         )
         validate_exported_symbols(output, args.upstream_tag)
         validate_android_global_visibility(output, args.platform)
+        validate_android_gpu_environment_teardown(output, args.platform)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)

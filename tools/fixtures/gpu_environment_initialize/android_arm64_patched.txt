@@ -1,0 +1,60 @@
+
+libLiteRtLm.so:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+00000000017fcad8 <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT>:
+ 17fcad8:      	stp	x29, x30, [sp, #-0x30]!
+ 17fcadc:      	stp	x22, x21, [sp, #0x10]
+ 17fcae0:      	stp	x20, x19, [sp, #0x20]
+ 17fcae4:      	sub	sp, sp, #0x750
+ 17fcae8:      	mov	x20, x0
+ 17fcaec:      	mov	x19, x8
+ 17fcaf0:      	add	x8, sp, #0x3e0
+ 17fcaf4:      	mov	x0, x1
+ 17fcaf8:      	bl	0x193af40 <_ZN6litert8internal27CreateGpuEnvironmentOptionsERK25LiteRtEnvironmentOptionsT@plt>
+ 17fcafc:      	add	x0, x20, #0x3a0
+ 17fcb00:      	add	x1, sp, #0x3e0
+ 17fcb04:      	mov	w2, #0x58               // =88
+ 17fcb08:      	bl	0x190ad90 <memcpy@plt>
+ 17fcb0c:      	add	x8, sp, #0x3e0
+ 17fcb10:      	bl	0x1936af0 <_ZN6tflite3gpu2cl10LoadOpenCLEv@plt>
+ 17fcb14:      	ldr	x21, [sp, #0x3e0]
+ 17fcb18:      	add	x0, sp, #0x3e0
+ 17fcb1c:      	bl	0xa6a5bc <_ZN4absl12lts_202605266StatusD2Ev>
+ 17fcb20:      	cmp	x21, #0x1
+ 17fcb24:      	cset	w8, eq
+ 17fcb28:      	strb	w8, [sp, #0x3b8]
+ 17fcb2c:      	b.ne	0x17fcb7c <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0xa4>
+ 17fcb30:      	ldr	x1, [x20, #0x3b0]
+ 17fcb34:      	mov	w8, #0x1                // =1
+ 17fcb38:      	add	x21, sp, #0x390
+ 17fcb3c:      	strb	w8, [x20, #0x3f8]
+ 17fcb40:      	cbz	x1, 0x17fcb9c <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0xc4>
+ 17fcb44:      	ldr	x2, [x20, #0x3b8]
+ 17fcb48:      	cbz	x2, 0x17fcb9c <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0xc4>
+ 17fcb4c:      	add	x0, sp, #0x3e0
+ 17fcb50:      	bl	0x193af90 <_ZN6tflite3gpu2cl8CLDeviceC1EP13_cl_device_idP15_cl_platform_id@plt>
+ 17fcb54:      	add	x0, x20, #0x8
+ 17fcb58:      	add	x1, sp, #0x3e0
+ 17fcb5c:      	bl	0x193afa0 <_ZN6tflite3gpu2cl8CLDeviceaSEOS2_@plt>
+ 17fcb60:      	add	x0, sp, #0x3e0
+ 17fcb64:      	bl	0x17fd5e8 <_ZN6tflite3gpu7GpuInfoD2Ev>
+ 17fcb68:      	bl	0x190b340 <LiteRtGetDefaultLogger@plt>
+ 17fcb6c:      	bl	0x17fd7a0 <OUTLINED_FUNCTION_8>
+ 17fcb70:      	cbz	w0, 0x17fcc58 <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0x180>
+ 17fcb74:      	strb	wzr, [sp, #0x3e0]
+ 17fcb78:      	b	0x17fcc60 <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0x188>
+ 17fcb7c:      	bl	0x17fd740 <OUTLINED_FUNCTION_0>
+ 17fcb80:      	mov	w3, #0xd0               // =208
+ 17fcb84:      	bl	0xa795c4 <_ZN6litert18ErrorStatusBuilderC2IbEEOT_NS_14SourceLocationE>
+ 17fcb88:      	adrp	x1, 0x540000 <_ZZL20stbi__process_markerP10stbi__jpegiE3tag_0+0x5ac8>
+ 17fcb8c:      	add	x1, x1, #0x496
+ 17fcb90:      	add	x0, sp, #0x3e0
+ 17fcb94:      	bl	0xe74d5c <_ZN6litert18ErrorStatusBuilderlsIRA75_KcEERS0_OT_>
+ 17fcb98:      	b	0x17fd298 <_ZN6litert8internal14GpuEnvironment10InitializeERK25LiteRtEnvironmentOptionsT+0x7c0>
+ 17fcb9c:      	add	x8, sp, #0x3e0
+ 17fcba0:      	add	x0, x20, #0x8
+ 17fcba4:      	bl	0x193afb0 <_ZN6tflite3gpu2cl22CreateDefaultGPUDeviceEPNS1_8CLDeviceE@plt>
+ 17fcba8:      	bl	0x17fd794 <OUTLINED_FUNCTION_6>
+ 17fcbac:      	cmp	x22, #0x1

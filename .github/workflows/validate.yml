@@ -43,6 +43,8 @@ jobs:
             tools/test_apple_privacy_manifest.py \
             tools/macos_runtime_identity.py \
             tools/git_lfs_utils.py \
+            tools/gpu_environment_teardown.py \
+            tools/test_gpu_environment_teardown.py \
             tools/litert_lm_symbols.py \
             tools/fetch_litert_lm_asr_smoke_assets.py \
             tools/litert_lm_asr_smoke.py \
