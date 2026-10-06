@@ -39,6 +39,8 @@ jobs:
             tools/runtime_dependency_utils.py \
             tools/ios_runtime_policy.py \
             tools/test_ios_runtime_policy.py \
+            tools/apple_privacy_manifest.py \
+            tools/test_apple_privacy_manifest.py \
             tools/macos_runtime_identity.py \
             tools/git_lfs_utils.py \
             tools/litert_lm_symbols.py \

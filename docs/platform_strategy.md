@@ -62,6 +62,11 @@ package includes `GemmaModelConstraintProvider`, `LiteRtMetalAccelerator`, and
 `LiteRtTopKMetalSampler`; the Metal modules use framework-relative loader paths
 that are compatible with App Store bundle layout.
 
+Each SPM framework slice embeds a privacy manifest generated from an audited
+per-framework declaration, and packaging rejects an archive whose declarations
+differ from the required-reason APIs its binaries reference. See
+[`apple_privacy_manifest.md`](apple_privacy_manifest.md).
+
 The Apple LiteRT-LM SPM path must account for the architecture coverage of the
 native payload. Upstream `v0.13.1` and `v0.14.0` publish universal Apple
 XCFrameworks. For `v0.14.0`, the official archives were added after the release

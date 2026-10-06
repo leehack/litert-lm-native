@@ -75,6 +75,8 @@ GPU/NPU validation; web should use JavaScript interop instead of FFI.
   The compatibility `libCLiteRTLM_mac.dylib` re-exports the primary runtime.
 - `tools/package_apple_xcframeworks.py`: packages iOS framework wrappers and
   macOS bridge wrappers as SPM-compatible XCFramework zip assets.
+- `tools/apple_privacy_manifest.py`: holds the audited Apple privacy
+  declaration per framework and validates the manifests in XCFramework zips.
 - `tools/package_release.py`: builds local manifest and checksums.
 - `tools/validate_artifacts.py`: validates manifest, checksums, and layout.
 - `docs/platform_strategy.md`: platform and distribution strategy.
@@ -289,6 +291,14 @@ macOS compatibility shim references the adjacent `LiteRtLm.framework`, so the
 assembled app does not need flat copies of the core or its private dependencies.
 These packaging changes apply to newly built assets; the published v0.17.0
 macOS SPM assets require a corrected release before downstream adoption.
+
+Every framework slice in the SPM assets carries a `PrivacyInfo.xcprivacy`
+declaring the required-reason APIs that framework references, and packaging
+fails when a declaration and its binary disagree. Assets from `v0.17.0-7` and
+earlier carry none. See
+[`docs/apple_privacy_manifest.md`](docs/apple_privacy_manifest.md) for the
+declared reasons, the call-site audit, and the artifacts that cannot carry a
+manifest.
 
 ## Consumer Contract
 

@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import apple_privacy_manifest as privacy
 import ios_framework_metadata as metadata
 import package_apple_xcframeworks as apple
 import package_ios_runtime as ios
@@ -124,7 +125,7 @@ class IosMetadataPackagingTest(unittest.TestCase):
                          for p in (root / "bin").rglob("*") if p.is_file()}
             work = root / "work"
             work.mkdir()
-            with patch.object(apple, "BIN_DIR", root / "bin"):
+            with patch.object(apple, "BIN_DIR", root / "bin"), patch.dict(privacy.DECLARATIONS, {("Provider", "ios"): {}}):
                 archive = apple.package_ios_framework_module("Provider", work, root / "dist", "fixture")
             import zipfile
             with zipfile.ZipFile(archive) as packaged:
