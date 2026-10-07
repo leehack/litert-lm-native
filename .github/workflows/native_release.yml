@@ -36,6 +36,11 @@ on:
         options:
           - prepare-only
           - publish
+      candidate_source:
+        description: 'Optional exact preparation JSON: runId, runAttempt, artifactId, digest; empty rebuilds'
+        required: false
+        default: ""
+        type: string
       target_platform:
         description: "Source-built runtime platform to build, or all"
         required: false
@@ -62,6 +67,7 @@ permissions:
   contents: read
 
 env:
+  CANDIDATE_SOURCE: ${{ inputs.candidate_source }}
   RELEASE_TAG: ${{ inputs.release_tag }}
   UPSTREAM_TAG: ${{ inputs.upstream_tag }}
   UPSTREAM_COMMIT: ${{ inputs.upstream_commit }}
@@ -122,6 +128,10 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$NATIVE_COMMIT"
           test "$GITHUB_SHA" = "$NATIVE_COMMIT"
+          if [ -n "${CANDIDATE_SOURCE:-}" ]; then
+            test "$PUBLICATION_APPROVAL" = publish
+            PYTHONPATH=tools python3 -c 'import os; from candidate_promotion import parse_source; parse_source(os.environ["CANDIDATE_SOURCE"])'
+          fi
           if ! git merge-base --is-ancestor "$NATIVE_COMMIT" origin/main; then
             echo "::error::Native commit must be merged into main before release preparation"
             exit 1
@@ -277,9 +287,34 @@ jobs:
             test "$RUN_ASR_SMOKE" = true
           fi
 
+  reuse-candidate:
+    name: Verify exact prepared candidate
+    needs: preflight
+    if: inputs.candidate_source != '' && inputs.publication_approval == 'publish'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Authenticate source run and ZIP before extraction
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/candidate_promotion.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-${{ inputs.release_tag }}-${{ inputs.correlation_id }}
+          path: candidate
+          if-no-files-found: error
+          retention-days: 14
+
   runtime-matrix:
     name: Prepare runtime matrix
     needs: preflight
+    if: inputs.candidate_source == ''
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -592,16 +627,24 @@ jobs:
   publish:
     name: Publish validated immutable release
     if: >-
+      always() &&
       github.event_name == 'workflow_dispatch' &&
       github.repository == 'leehack/litert-lm-native' &&
       github.ref == 'refs/heads/main' &&
       github.sha == inputs.native_commit &&
       inputs.publication_approval == 'publish' &&
       needs.preflight.result == 'success' &&
-      needs.runtime-matrix.result == 'success' &&
-      needs.build-upstream-runtime.result == 'success' &&
-      needs.package.result == 'success'
-    needs: [preflight, runtime-matrix, build-upstream-runtime, package]
+      ((inputs.candidate_source == '' &&
+        needs.runtime-matrix.result == 'success' &&
+        needs.build-upstream-runtime.result == 'success' &&
+        needs.package.result == 'success' &&
+        needs.reuse-candidate.result == 'skipped') ||
+       (inputs.candidate_source != '' &&
+        needs.reuse-candidate.result == 'success' &&
+        needs.runtime-matrix.result == 'skipped' &&
+        needs.build-upstream-runtime.result == 'skipped' &&
+        needs.package.result == 'skipped'))
+    needs: [preflight, runtime-matrix, build-upstream-runtime, package, reuse-candidate]
     concurrency:
       group: litert-lm-native-publication
       cancel-in-progress: false
@@ -623,8 +666,13 @@ jobs:
 
       - name: Validate same-run candidate before any publication mutation
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          if [ -n "${CANDIDATE_SOURCE:-}" ]; then
+            python3 tools/candidate_promotion.py --verify
+          fi
           python3 tools/validate_publication_intent.py
           python3 tools/validate_release_manifest.py \
             candidate/manifest.json \
@@ -859,7 +907,12 @@ jobs:
             echo "Exact published transaction already exists; no publication mutation needed."
             exit 0
           fi
+          preparation_args=()
+          if [ -n "${CANDIDATE_SOURCE:-}" ]; then
+            preparation_args+=(--preparation candidate/promotion.json)
+          fi
           python3 tools/release_result.py \
+            "${preparation_args[@]}" \
             --manifest published-release-check/manifest.json \
             --correlation-id "$CORRELATION_ID" \
             --repository "$GITHUB_REPOSITORY" \
@@ -922,3 +975,46 @@ jobs:
           gh release edit "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false
+
+      - name: Summarize exact published handoff and completed job timings
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result=published-release-check/release-result.json
+          if [ -f published-release-check/existing-release-result.json ]; then
+            result=published-release-check/existing-release-result.json
+          fi
+          release_id="$(jq -r .id draft-release.json)"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            > published-release-check/published-release.json
+          python3 tools/validate_release_result.py \
+            --result "$result" \
+            --manifest published-release-check/manifest.json \
+            --release-metadata published-release-check/published-release.json \
+            --correlation-id "$CORRELATION_ID" \
+            --repository "$GITHUB_REPOSITORY" \
+            --release-tag "$RELEASE_TAG" \
+            --upstream-tag "$UPSTREAM_TAG" \
+            --upstream-commit "$UPSTREAM_COMMIT" \
+            --compatibility-tag "$COMPATIBILITY_TAG" \
+            --native-commit "$NATIVE_COMMIT" \
+            --candidate-artifact "release-candidate-${RELEASE_TAG}-${CORRELATION_ID}"
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
+            | jq '[.[].jobs[]]' > published-release-check/jobs.json
+          python3 tools/release_handoff.py \
+            --result "$result" \
+            --manifest published-release-check/manifest.json \
+            --jobs published-release-check/jobs.json \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --preview published-release-check/consumer-sync-preview.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: consumer-handoff-${{ inputs.release_tag }}-${{ github.run_attempt }}
+          path: |
+            published-release-check/consumer-sync-preview.json
+            published-release-check/jobs.json
+          if-no-files-found: error
+          retention-days: 14

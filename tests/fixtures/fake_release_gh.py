@@ -59,6 +59,14 @@ if a[:2] == ["release", "upload"]:
     save()
     sys.exit(0)
 endpoint = next((x for x in a if x.startswith("repos/")), "")
+if "/jobs?" in endpoint:
+    out([{"jobs": []}])
+if "/actions/runs/" in endpoint:
+    out(s["candidate_run"])
+if "/actions/artifacts/" in endpoint:
+    out(s["candidate_artifact"])
+if endpoint.endswith("/actions/workflows/native_release.yml"):
+    out({"id": 123})
 if endpoint.endswith("/releases") and "--method" in a:
     if a[a.index("--method") + 1] != "POST":
         out({"message": "Method Not Allowed"}, 405)

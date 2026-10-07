@@ -181,7 +181,9 @@ When moving to a new LiteRT-LM tag:
 2. Run `Native Build & Release` with `publication_approval=prepare-only` and
    inspect the candidate manifest, `release-result.json`, and evidence.
 3. After separate publication approval, rerun the exact inputs with
-   `publication_approval=publish`.
+   `publication_approval=publish` and `candidate_source` identifying the prepared
+   run, attempt, artifact ID and SHA-256. An empty `candidate_source` retains the
+   full rebuild fallback. See [exact candidate promotion](docs/release_protocol.md#exact-candidate-promotion).
 4. Verify the release contains runtime archives, official upstream assets,
    Apple SPM XCFramework zips, `manifest.json`, `release-result.json`, and
    `SHA256SUMS`.
@@ -241,7 +243,10 @@ gh workflow run native_release.yml \
 ```
 
 After reviewing the candidate and obtaining separate publication approval,
-rerun those exact inputs with `publication_approval=publish`.
+rerun those exact inputs with `publication_approval=publish` and the exact
+`candidate_source` JSON described in the release protocol. Alternatively, a
+single explicitly authorized `publish` dispatch builds, qualifies and publishes
+automatically in one merged-source transaction.
 
 Publication runs automatically after all qualification gates succeed for an explicit
 `publication_approval=publish` dispatch on canonical `main`, with `native_commit`

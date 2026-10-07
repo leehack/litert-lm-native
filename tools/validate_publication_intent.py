@@ -21,17 +21,26 @@ def validate_context(env: dict[str, str]) -> None:
         "RUN_ASR_SMOKE": "true",
     }
     if any(env.get(key) != value for key, value in expected.items()):
-        raise ValueError("publication requires canonical main dispatch, explicit publish, and full qualification")
+        raise ValueError(
+            "publication requires canonical main dispatch, explicit publish, and full qualification"
+        )
     if not env.get("GITHUB_SHA") or env["GITHUB_SHA"] != env.get("NATIVE_COMMIT"):
         raise ValueError("publication native commit must equal dispatch SHA")
 
 
 def validate_candidate(result: dict, manifest: dict, env: dict[str, str]) -> None:
     validate_context(env)
+    if env.get("CANDIDATE_SOURCE"):
+        from candidate_promotion import load_promotion
+
+        load_promotion(Path("candidate"), env)
+        return
     attempt = result.get("workflow", {}).get("runAttempt")
     # A failed-job rerun may reuse the successful package job from this run.
     if type(attempt) is not int or not 1 <= attempt <= int(env["GITHUB_RUN_ATTEMPT"]):
-        raise ValueError("candidate attempt must belong to this run's past or current attempts")
+        raise ValueError(
+            "candidate attempt must belong to this run's past or current attempts"
+        )
     expected = build_result(
         manifest=manifest,
         correlation_id=env["CORRELATION_ID"],
@@ -49,7 +58,9 @@ def validate_candidate(result: dict, manifest: dict, env: dict[str, str]) -> Non
         candidate_artifact=f"release-candidate-{env['RELEASE_TAG']}-{env['CORRELATION_ID']}",
     )
     if result != expected:
-        raise ValueError("candidate result does not match this exact publication transaction")
+        raise ValueError(
+            "candidate result does not match this exact publication transaction"
+        )
 
 
 def main() -> None:
