@@ -66,7 +66,7 @@ class PrebuiltOverridesTest(unittest.TestCase):
         )
 
     def test_supported_versions_keep_the_validated_android_dawn_rollback(self) -> None:
-        for tag in ("v0.16.0", "v0.16.1", "v0.17.0", "v0.17.1"):
+        for tag in ("v0.16.0", "v0.16.1", "v0.17.0", "v0.17.1", "v0.18.0"):
             with self.subTest(tag=tag):
                 self._assert_dawn_rollback(tag)
 
