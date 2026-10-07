@@ -208,7 +208,9 @@ Pull-request qualification targets upstream `v0.18.0` at
 `b2f686e2ed4718fb84ec398a61dd59ca0f0aff27`. This qualification baseline
 does not publish a release or move downstream pins. The iOS accelerator path
 patch applies to both the v0.17 and v0.18 LiteRT registry layouts, preserving
-the framework path and the newer upstream framework-name fallback.
+the framework path and the newer upstream framework-name fallback. See the
+[carried-fix audit](docs/upstream_patch_audit.md) for retained fixes and device
+qualification gaps.
 
 The v0.17 tokenizer compatibility patch preserves Qwen's single NORMAL NUL
 piece in BPE's length-aware vocabulary. It does not permit NUL trie keys,

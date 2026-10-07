@@ -1,0 +1,59 @@
+# Exact LiteRT-LM b2f686e2ed4718fb84ec398a61dd59ca0f0aff27 WORKSPACE excerpts.
+# Apache-2.0; Copyright 2026 Google LLC.
+# buildifier: disable=load-on-top
+
+workspace(name = "litert_lm")
+
+# UPDATED = 2026-09-25
+LITERT_REF = "26895c9fbcc25c43faa8c1a98cd1fd28951602c3"
+
+LITERT_SHA256 = "698811a8ec56f6a9bd7705ffaa75ff792cae03a67d3a759dbc84f2023493ee6f"
+
+# Keep TensorFlow at this commit for now. Newer commits load
+# `compatibility_proxy_repo` from `@rules_cc//cc:extensions.bzl` in
+# `tensorflow/workspace1.bzl`, which the rules_cc version resolved by this
+# WORKSPACE does not provide, breaking the bazel build (as of 2026-09-15).
+http_archive(
+    name = "minizip",
+    add_prefix = "minizip",
+    build_file = "@//third_party/minizip:minizip.BUILD",
+    sha256 = "9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23",
+    strip_prefix = "zlib-1.3.1/contrib/minizip",
+    urls = [
+        "https://storage.googleapis.com/mirror.tensorflow.org/zlib.net/fossils/zlib-1.3.1.tar.gz",
+        "https://mirror.bazel.build/zlib.net/fossils/zlib-1.3.1.tar.gz",
+        "https://zlib.net/fossils/zlib-1.3.1.tar.gz",
+    ],
+)
+
+http_archive(
+    name = "sentencepiece",
+    build_file = "@//third_party/sentencepiece:sentencepiece.BUILD",
+    patch_cmds = [
+        "printf '#ifndef CONFIG_H_\\n#define CONFIG_H_\\n#define VERSION \"0.2.2\"\\n#define PACKAGE \"sentencepiece\"\\n#define PACKAGE_STRING \"sentencepiece\"\\n#define INSTALL_DATADIR \"\"\\n#endif\\n' > config.h",
+        "mv src/* .",
+        # Replace third_party/absl/ with absl/ in *.h and *.cc files.
+        "sed -i -e 's|#include \"third_party/absl/|#include \"absl/|g' *.h *.cc",
+        # Replace third_party/protobuf-lite/ with google/protobuf/ in *.h and *.cc files.
+        "sed -i -e 's|#include \"third_party/protobuf-lite/google/protobuf/|#include \"google/protobuf/|g' *.h *.cc",
+        "sed -i -e 's|#include \"third_party/protobuf/|#include \"google/protobuf/|g' *.h *.cc",
+        "rm -rf third_party/protobuf-lite third_party/protobuf third_party/absl third_party/abseil-cpp",
+    ],
+    sha256 = "92381f713e094a15a1ccff1ac4a5315a4c4b82a99ac1332d6ac53c9dc8e1bcf1",
+    strip_prefix = "sentencepiece-0.2.2",
+    url = "https://github.com/google/sentencepiece/archive/refs/tags/v0.2.2.tar.gz",
+)
+
+http_archive(
+    name = "litert",
+    patch_cmds = [
+        # Replace @//third_party with @litert//third_party in files under third_party/.
+        # Only regular files are passed to `sed -i`, which fails on directories such as
+        # third_party/py/numpy. Uses a shell loop rather than `find`, which may resolve
+        # to find.exe on Windows.
+        "for f in third_party/*/*; do if [ -f \"$f\" ]; then sed -i -e 's|\"@//third_party/|\"@litert//third_party/|g' \"$f\" || exit 1; fi; done",
+    ],
+    sha256 = LITERT_SHA256,
+    strip_prefix = "LiteRT-" + LITERT_REF,
+    url = "https://github.com/google-ai-edge/LiteRT/archive/" + LITERT_REF + ".tar.gz",
+)
