@@ -65,7 +65,7 @@ cc_library(
         ":asr_api": ["litert_lm_asr_bridge.cc"],
         "//conditions:default": [],
     }),
-    hdrs = ["litert_lm_asr_bridge.h"],
+    hdrs = ["litert_lm_asr_bridge.h", "litert_lm_asr_session_adapter.h"],
     alwayslink = True,
     deps = select({
         ":asr_api": [

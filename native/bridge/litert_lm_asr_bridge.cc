@@ -13,6 +13,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "bridge/litert_lm_asr_audio_source.h"
+#include "bridge/litert_lm_asr_session_adapter.h"
 #include "omni/asr/asr_engine.h"
 #include "omni/asr/asr_session.h"
 #include "omni/asr/log_mel_spectrogram_processor.h"
@@ -523,15 +524,21 @@ litert_lm_asr_session_process_next(LitertLmAsrSession *session,
   }
 
   try {
-    if (!session->audio_source->CanProcess()) {
-      if (!session->audio_source->IsFinishedAndDrained()) {
-        return LITERT_LM_ASR_STATUS_NEEDS_MORE_AUDIO;
-      }
+    auto flush_final = [&]() -> LitertLmAsrStatus {
       auto flush_result = session->session->Flush();
       UpstreamMergeResult final_result;
       if (flush_result.ok()) {
-        final_result = *std::move(flush_result);
-      } else if (!absl::IsNotFound(flush_result.status())) {
+        const auto view = litert_lm_native::ViewAsrOutput(*flush_result);
+        if (view.kind == litert_lm_native::AsrOutputKind::kUnsupported) {
+          return ReturnStatus(absl::UnimplementedError(
+                                  "ASR flush returned an unsupported audio output."),
+                              out_error_message);
+        }
+        if (view.text != nullptr) {
+          final_result = *view.text;
+        }
+      } else if (!absl::IsNotFound(flush_result.status()) &&
+                 !absl::IsOutOfRange(flush_result.status())) {
         return ReturnStatus(flush_result.status(), out_error_message);
       }
       absl::Status populate = PopulateResult(final_result, true, out_result);
@@ -540,10 +547,20 @@ litert_lm_asr_session_process_next(LitertLmAsrSession *session,
       }
       session->final_result_returned = true;
       return LITERT_LM_ASR_STATUS_OK;
+    };
+    if (!session->audio_source->CanProcess()) {
+      if (!session->audio_source->IsFinishedAndDrained()) {
+        return LITERT_LM_ASR_STATUS_NEEDS_MORE_AUDIO;
+      }
+      return flush_final();
     }
 
-    auto result = session->session->ProcessNextChunk();
+    auto result = litert_lm_native::ProcessAsrNext(*session->session);
     if (!result.ok()) {
+      if (absl::IsOutOfRange(result.status()) &&
+          session->audio_source->IsFinishedAndDrained()) {
+        return flush_final();
+      }
       if (absl::IsNotFound(result.status())) {
         return LITERT_LM_ASR_STATUS_NEEDS_MORE_AUDIO;
       }
@@ -553,7 +570,21 @@ litert_lm_asr_session_process_next(LitertLmAsrSession *session,
       return ReturnStatus(absl::CancelledError("ASR session was cancelled."),
                           out_error_message);
     }
-    absl::Status populate = PopulateResult(*result, false, out_result);
+    const auto view = litert_lm_native::ViewAsrOutput(*result);
+    if (view.kind == litert_lm_native::AsrOutputKind::kUnsupported) {
+      return ReturnStatus(absl::UnimplementedError(
+                              "ASR processing returned an unsupported audio output."),
+                          out_error_message);
+    }
+    if (view.kind == litert_lm_native::AsrOutputKind::kEnd) {
+      if (!session->audio_source->IsFinishedAndDrained()) {
+        return ReturnStatus(absl::FailedPreconditionError(
+                                "ASR output ended before audio input was drained."),
+                            out_error_message);
+      }
+      return flush_final();
+    }
+    absl::Status populate = PopulateResult(*view.text, false, out_result);
     return ReturnStatus(populate, out_error_message);
   } catch (const std::exception &error) {
     return ReturnInternalException("ASR inference", &error, out_error_message);

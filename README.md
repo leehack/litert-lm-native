@@ -210,7 +210,10 @@ does not publish a release or move downstream pins. The iOS accelerator path
 patch applies to both the v0.17 and v0.18 LiteRT registry layouts, preserving
 the framework path and the newer upstream framework-name fallback. See the
 [carried-fix audit](docs/upstream_patch_audit.md) for retained fixes and device
-qualification gaps.
+qualification gaps. The owner ASR bridge adapts both older `ProcessNextChunk`
+results and v0.18 OmniSession text/end output to the unchanged C ASR ABI v1.
+Unsupported audio output fails explicitly; stream completion emits one final
+result before reporting end of stream.
 
 The v0.17 tokenizer compatibility patch preserves Qwen's single NORMAL NUL
 piece in BPE's length-aware vocabulary. It does not permit NUL trie keys,
