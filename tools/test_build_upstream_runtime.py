@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,54 @@ import package_upstream_prebuilts
 
 
 class BuildUpstreamRuntimeTest(unittest.TestCase):
+    def test_ios_framework_patch_applies_to_old_and_current_litert(self) -> None:
+        patch_file = (
+            build_upstream_runtime.REPO_ROOT
+            / "native/bridge/litert_ios_framework_paths.patch"
+        )
+        for version in ("17", "18"):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                target = root / "litert/runtime/accelerators/gpu_registry.cc"
+                target.parent.mkdir(parents=True)
+                original = (
+                    Path(__file__).parent
+                    / f"fixtures/litert_v0_{version}_gpu_registry_excerpt.cc"
+                ).read_text()
+                target.write_text(original)
+                subprocess.run(
+                    ["git", "apply", "--unidiff-zero", "--check", str(patch_file)],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["git", "apply", "--unidiff-zero", str(patch_file)],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                )
+                patched = target.read_text()
+                self.assertIn(
+                    '"@executable_path/Frameworks/LiteRtMetalAccelerator.framework/"',
+                    patched,
+                )
+                self.assertNotIn('"libLiteRtMetalAccelerator" SO_EXT', patched)
+                self.assertIn('"libLiteRtWebGpuAccelerator" SO_EXT', patched)
+                if version == "18":
+                    self.assertIn("// Inside an Apple framework bundle", patched)
+                    self.assertEqual(patched.count('"LiteRtMetalAccelerator",'), 2)
+                # Unknown iOS layouts must still fail instead of silently dropping the path fix.
+                target.write_text(
+                    original.replace("#elif TARGET_OS_IPHONE", "#elif CHANGED_PLATFORM")
+                )
+                result = subprocess.run(
+                    ["git", "apply", "--unidiff-zero", "--check", str(patch_file)],
+                    cwd=root,
+                    capture_output=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+
     def test_sentencepiece_patch_delimits_each_file_for_bazel(self) -> None:
         lines = (Path(__file__).resolve().parents[1] / "native/bridge/sentencepiece_bpe_null.patch").read_text().splitlines()
         files = []

@@ -204,6 +204,12 @@ inference and ASR real-model smokes on Linux x64, Windows x64, and macOS arm64. 
 runtime/evidence artifacts for review but has no publication input or write
 permission.
 
+Pull-request qualification targets upstream `v0.18.0` at
+`b2f686e2ed4718fb84ec398a61dd59ca0f0aff27`. This qualification baseline
+does not publish a release or move downstream pins. The iOS accelerator path
+patch applies to both the v0.17 and v0.18 LiteRT registry layouts, preserving
+the framework path and the newer upstream framework-name fallback.
+
 The v0.17 tokenizer compatibility patch preserves Qwen's single NORMAL NUL
 piece in BPE's length-aware vocabulary. It does not permit NUL trie keys,
 compound-NUL pieces, other piece types, or byte-fallback models. The build
