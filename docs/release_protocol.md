@@ -125,6 +125,77 @@ workflow against a ref that resolves to `native_commit`, and use
 `publication_approval=prepare-only`. A maintainer must separately approve a
 publish dispatch. Publication never updates `llamadart` pins.
 
+## Exact candidate promotion
+
+A maintainer may reuse one successful `prepare-only` candidate by dispatching
+`native_release.yml` on canonical `main` with the same exact release inputs and
+`publication_approval=publish`. Supply one `candidate_source` JSON object:
+
+```json
+{"runId": 123, "runAttempt": 1, "artifactId": 456, "digest": "sha256:<64 lowercase hex characters>"}
+```
+
+Read the ID and digest from GitHub's artifact metadata for the named preparation
+run; never choose an artifact by name alone. The source must be a completed,
+successful `workflow_dispatch` of this repository's `native_release.yml` on
+`main`, at the exact same native commit as the publication dispatch. Its current
+run attempt must equal the named attempt and its preparation receipt must bind
+that attempt, native/upstream commits, compatibility/channel/release identity,
+correlation ID, and `prepare-only` approval. The artifact must belong to that
+source run, have the exact candidate name, match the explicit SHA-256, and remain
+unexpired. Candidates produced before this tooling was merged, or after `main`
+has advanced away from the prepared native commit, require the rebuild fallback.
+
+The read-only reuse job authenticates the complete GitHub artifact ZIP before
+extraction, rejects traversal, duplicates, symlinks, special files, unexpected
+entries and oversized archives, validates the full manifest and the three pinned
+CPU model smokes, and records every original payload digest. Only a verified
+candidate is passed to the existing isolated publisher. The publisher checks
+source metadata again and verifies the entire payload inventory before any
+mutation; the rebuild jobs must all be skipped in this mode. The full rebuild
+route remains available with an empty `candidate_source`. A failed promotion
+never silently falls back to rebuilding or relabeling its candidate.
+
+Release archives, manifest, checksums and model evidence remain byte-identical.
+The published `release-result.json` retains its existing schema-1 fields and adds
+`candidate.preparation` for this path: the source run/attempt/artifact/digest,
+unchanged original preparation result, and original payload digests. Its top-level
+workflow identifies the new publication run. Final uploaded GitHub payload digests
+must match the original candidate; only the publication receipt changes. Failed-job
+retries preserve this evidence, and exact published retries remain read-only.
+Another dispatch cannot take over a published release or a draft belonging to a
+different publication run. Changing the tag, correlation, channel or native inputs
+cannot rebind a prepared candidate.
+
+The existing serialized history, collision, tag, rollback, draft, readback and
+credential boundaries remain in force. This is workflow-level collision/replay
+protection, separate from GitHub's optional release immutability setting. The
+workflow does not enable that platform setting. Source and consumer PR review
+remain required; it does not automatically update consumer pins.
+
+After actual publication readback, a handoff summary and
+`consumer-sync-preview.json` reference the exact published manifest and asset
+digests, recorded CPU model/backend rows, original preparation and publication
+runs, and a read-only consumer sync command. Missing independent review and
+affected device evidence remain explicit; CPU PASS never implies GPU or device
+qualification, and unavailable iOS 16.4 execution is still an external gap. This
+is the foundation for #63's wider device evidence handoff, not a device queue.
+
+The summary records a snapshot of completed runner-job time for the exact
+publication attempt. It labels the still-running publication job and never calls
+that snapshot final wall time. Compare final GitHub run wall/runner-job time and
+operator actions with the #63 v0.17.0-7 baseline after a comparable hosted release.
+No before/after performance claim is made by local synthetic tests.
+
+Local validation uses `python3 -m unittest discover -s tools -p 'test_*.py'`,
+`python3 tests/test_release_tag_lifecycle.py` with Bash 4+, and `actionlint`.
+Lifecycle fixtures exercise both publisher routes, failed promotion/resume,
+read-only published recovery, and source/payload/expiry rejection before writes.
+A hosted candidate-to-publication exercise and independent blocking QA are still
+required before marking this release-policy change ready. Cache boundary changes,
+Python readiness evidence (#940), device deadlines/retries, account reservations,
+and provider collection/cleanup remain separately tracked by #63.
+
 ## Manifest contract
 
 Schema 2 keeps the following sections distinct:

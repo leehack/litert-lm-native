@@ -283,6 +283,11 @@ def validate_resume_assets(release: dict, candidate: Path, env: dict[str, str]) 
         native_commit=env["NATIVE_COMMIT"],
         candidate_artifact=f"release-candidate-{env['RELEASE_TAG']}-{env['CORRELATION_ID']}",
         release_metadata=release,
+        preparation=(
+            json.loads((candidate / "promotion.json").read_text())
+            if env.get("CANDIDATE_SOURCE")
+            else None
+        ),
     )
     if result != expected:
         raise PublicationStateError("final receipt does not match exact transaction")

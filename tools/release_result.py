@@ -26,6 +26,52 @@ def load_json_object(path: Path, *, label: str) -> dict:
     return value
 
 
+def parse_candidate_source(value: str) -> dict:
+    source = json.loads(value)
+    if not isinstance(source, dict) or set(source) != {
+        "runId",
+        "runAttempt",
+        "artifactId",
+        "digest",
+    }:
+        raise ValueError(
+            "candidate source requires exact runId, runAttempt, artifactId and digest"
+        )
+    for key in ("runId", "runAttempt", "artifactId"):
+        if type(source[key]) is not int or source[key] <= 0:
+            raise ValueError("candidate source IDs must be positive integers")
+    if not isinstance(source["digest"], str) or not DIGEST_RE.fullmatch(
+        source["digest"]
+    ):
+        raise ValueError("candidate source requires a SHA-256 artifact digest")
+    return source
+
+
+def validate_preparation(
+    result: dict, manifest: dict, source: dict, env: dict[str, str]
+) -> None:
+    expected = build_result(
+        manifest=manifest,
+        correlation_id=env["CORRELATION_ID"],
+        repository="leehack/litert-lm-native",
+        run_id=source["runId"],
+        run_attempt=source["runAttempt"],
+        run_url=f"https://github.com/leehack/litert-lm-native/actions/runs/{source['runId']}",
+        approval="prepare-only",
+        outcome="prepared",
+        release_tag=env["RELEASE_TAG"],
+        upstream_tag=env["UPSTREAM_TAG"] or None,
+        upstream_commit=env["UPSTREAM_COMMIT"],
+        compatibility_tag=env["COMPATIBILITY_TAG"],
+        native_commit=env["NATIVE_COMMIT"],
+        candidate_artifact=f"release-candidate-{env['RELEASE_TAG']}-{env['CORRELATION_ID']}",
+    )
+    if result != expected:
+        raise ValueError(
+            "candidate receipt does not match exact preparation inputs and attempt"
+        )
+
+
 def build_result(
     *,
     manifest: dict,
@@ -43,6 +89,7 @@ def build_result(
     native_commit: str,
     candidate_artifact: str,
     release_metadata: dict | None = None,
+    preparation: dict | None = None,
 ) -> dict:
     if not isinstance(manifest, dict):
         raise ValueError("release manifest must be an object")
@@ -123,6 +170,49 @@ def build_result(
             "passingRealModelSmokes": passing_smokes,
         },
     }
+    if preparation is not None:
+        # Retain the original receipt; the publisher is a distinct transaction.
+        if not isinstance(preparation, dict) or set(preparation) != {
+            "source",
+            "result",
+            "payloadDigests",
+        }:
+            raise ValueError("invalid preparation evidence")
+        source = parse_candidate_source(json.dumps(preparation["source"]))
+        if source["runId"] == run_id:
+            raise ValueError("preparation and publication runs must differ")
+        validate_preparation(
+            preparation["result"],
+            manifest,
+            source,
+            {
+                "CORRELATION_ID": correlation_id,
+                "RELEASE_TAG": release_tag,
+                "UPSTREAM_TAG": upstream_tag or "",
+                "UPSTREAM_COMMIT": upstream_commit,
+                "COMPATIBILITY_TAG": compatibility_tag,
+                "NATIVE_COMMIT": native_commit,
+            },
+        )
+        digests = preparation["payloadDigests"]
+        if not isinstance(digests, dict) or not {
+            "manifest.json",
+            "SHA256SUMS",
+            "release-result.json",
+        } <= set(digests):
+            raise ValueError("preparation requires payload digests")
+        for path, digest in digests.items():
+            if (
+                not isinstance(path, str)
+                or not isinstance(digest, str)
+                or not DIGEST_RE.fullmatch(digest)
+                or (
+                    path not in {"manifest.json", "SHA256SUMS", "release-result.json"}
+                    and not re.fullmatch(r"release/[^/\\]+\.(zip|tar\.gz)", path)
+                )
+            ):
+                raise ValueError("invalid preparation payload digest")
+        result["candidate"]["preparation"] = preparation
     if release_metadata is not None:
         expected_release = {
             "tag_name": release_tag,
@@ -180,6 +270,14 @@ def build_result(
             raise ValueError(
                 "release assets lack GitHub SHA-256 digests: " + ", ".join(invalid)
             )
+        if preparation is not None:
+            expected_payloads = {
+                Path(path).name: digest
+                for path, digest in preparation["payloadDigests"].items()
+                if path != "release-result.json"
+            }
+            if expected_payloads != digests:
+                raise ValueError("published bytes do not match exact prepared payloads")
         result["release"] = {
             "id": release_metadata.get("id"),
             # Draft HTML URLs can contain an ephemeral untagged identifier even
@@ -246,6 +344,7 @@ def validate_published_result(
         native_commit=native_commit,
         candidate_artifact=candidate_artifact,
         release_metadata=validation_metadata,
+        preparation=result.get("candidate", {}).get("preparation"),
     )
     if result != expected:
         raise ValueError("published release result does not match exact transaction")
@@ -268,6 +367,7 @@ def main() -> int:
     parser.add_argument("--native-commit", required=True)
     parser.add_argument("--candidate-artifact", required=True)
     parser.add_argument("--release-metadata", type=Path)
+    parser.add_argument("--preparation", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:
@@ -293,6 +393,11 @@ def main() -> int:
             native_commit=args.native_commit,
             candidate_artifact=args.candidate_artifact,
             release_metadata=release_metadata,
+            preparation=(
+                load_json_object(args.preparation, label="preparation")
+                if args.preparation
+                else None
+            ),
         )
     except ValueError as error:
         raise SystemExit(str(error)) from error

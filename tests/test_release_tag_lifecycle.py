@@ -143,6 +143,161 @@ class DraftTagLifecycleTest(unittest.TestCase):
             c for c in self.state["calls"] if c[:1] == ["release"] or "--method" in c
         ]
 
+    def prepare_promoted_candidate(self):
+        from candidate_promotion import inventory
+        from datetime import datetime, timedelta, timezone
+
+        manifest = self.prepare_full_candidate()
+        candidate = self.root / "candidate"
+        original = json.loads((candidate / "release-result.json").read_text())
+        original["workflow"].update(
+            runId=41,
+            runAttempt=1,
+            url="https://github.com/leehack/litert-lm-native/actions/runs/41",
+        )
+        original["request"]["publicationApproval"] = "prepare-only"
+        (candidate / "release-result.json").write_text(json.dumps(original))
+        source = dict(runId=41, runAttempt=1, artifactId=7, digest="sha256:" + "a" * 64)
+        promotion = dict(
+            source=source, result=original, payloadDigests=inventory(candidate)
+        )
+        (candidate / "promotion.json").write_text(json.dumps(promotion))
+        self.env["CANDIDATE_SOURCE"] = json.dumps(source)
+        self.state["candidate_run"] = dict(
+            id=41,
+            run_attempt=1,
+            event="workflow_dispatch",
+            head_branch="main",
+            head_sha=NATIVE,
+            status="completed",
+            conclusion="success",
+            workflow_id=123,
+            path=".github/workflows/native_release.yml",
+            repository=dict(full_name="leehack/litert-lm-native"),
+            head_repository=dict(full_name="leehack/litert-lm-native"),
+        )
+        self.state["candidate_artifact"] = dict(
+            id=7,
+            name="release-candidate-v0.17.0-fixture-42",
+            digest=source["digest"],
+            expired=False,
+            size_in_bytes=123,
+            expires_at=(datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            workflow_run=dict(id=41, head_sha=NATIVE, head_branch="main"),
+        )
+        return original
+
+    def test_promoted_candidate_full_publication_retry_and_readonly_recovery(self):
+        original = self.prepare_promoted_candidate()
+        qualification = workflow_step(
+            "Validate same-run candidate before any publication mutation"
+        )
+        promotion = workflow_step("Validate draft and promote it")
+        self.env["GITHUB_STEP_SUMMARY"] = str(self.root / "summary.md")
+        handoff = workflow_step(
+            "Summarize exact published handoff and completed job timings"
+        )
+        script = qualification + "\n" + self.writer + "\n" + promotion + "\n" + handoff
+        result = self.run_shell(script, fail_promotion=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(self.state["release"]["draft"])
+        result = self.run_shell(script)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.state["release"]["draft"])
+        final = json.loads(
+            next(
+                content
+                for aid, content in self.state["asset_data"].items()
+                if aid
+                == str(
+                    next(
+                        asset["id"]
+                        for asset in self.state["release"]["assets"]
+                        if asset["name"] == "release-result.json"
+                    )
+                )
+            )
+        )
+        self.assertEqual(final["workflow"]["runId"], 42)
+        self.assertEqual(final["candidate"]["preparation"]["result"], original)
+        self.state["calls"] = []
+        result = self.run_shell(script)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.writes(), [])
+        preview = json.loads(
+            (
+                self.root / "published-release-check/consumer-sync-preview.json"
+            ).read_text()
+        )
+        self.assertEqual(preview["preparation"]["result"], original)
+        self.assertFalse(preview["deviceQualified"])
+
+    def test_promoted_candidate_missing_model_evidence_cannot_publish(self):
+        from candidate_promotion import inventory
+
+        self.prepare_promoted_candidate()
+        candidate = self.root / "candidate"
+        manifest = json.loads((candidate / "manifest.json").read_text())
+        manifest["realModelSmokes"] = [
+            smoke
+            for smoke in manifest["realModelSmokes"]
+            if smoke["platform"] != "windows"
+        ]
+        (candidate / "manifest.json").write_text(json.dumps(manifest))
+        result = build_result(
+            manifest=manifest,
+            correlation_id="fixture-42",
+            repository=self.env["GITHUB_REPOSITORY"],
+            run_id=41,
+            run_attempt=1,
+            run_url="https://github.com/leehack/litert-lm-native/actions/runs/41",
+            approval="prepare-only",
+            outcome="prepared",
+            release_tag="v0.17.0",
+            upstream_tag="v0.17.0",
+            upstream_commit=UPSTREAM,
+            compatibility_tag="v0.17.0",
+            native_commit=NATIVE,
+            candidate_artifact="release-candidate-v0.17.0-fixture-42",
+        )
+        (candidate / "release-result.json").write_text(json.dumps(result))
+        promotion = dict(
+            source=json.loads(self.env["CANDIDATE_SOURCE"]),
+            result=result,
+            payloadDigests=inventory(candidate),
+        )
+        (candidate / "promotion.json").write_text(json.dumps(promotion))
+        script = (
+            workflow_step("Validate same-run candidate before any publication mutation")
+            + "\n"
+            + self.writer
+        )
+        response = self.run_shell(script)
+        self.assertNotEqual(response.returncode, 0)
+        self.assertIn("smoke", response.stderr.lower())
+        self.assertEqual(self.writes(), [])
+
+    def test_promoted_candidate_mismatch_fails_before_any_write(self):
+        for change in ("payload", "source", "expired"):
+            with self.subTest(change=change):
+                self.prepare_promoted_candidate()
+                if change == "payload":
+                    (self.root / "candidate/release/runtime.tar.gz").write_text("skew")
+                elif change == "source":
+                    self.state["candidate_run"]["head_sha"] = "c" * 40
+                else:
+                    self.state["candidate_artifact"]["expired"] = True
+                script = (
+                    workflow_step(
+                        "Validate same-run candidate before any publication mutation"
+                    )
+                    + "\n"
+                    + self.writer
+                )
+                result = self.run_shell(script)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.writes(), [])
+
     def test_fresh_workflow_draft_creates_ref_before_upload(self):
         result = self.run_shell(self.writer)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -530,9 +685,7 @@ class DraftTagLifecycleTest(unittest.TestCase):
             self.assertEqual(path, fixture.package_release.BIN_DIR / "ios")
 
         def check_ios_archives(path):
-            self.assertEqual(
-                path, fixture.package_release.DIST_DIR / "spm" / "v0.17.0"
-            )
+            self.assertEqual(path, fixture.package_release.DIST_DIR / "spm" / "v0.17.0")
 
         with patch.multiple(
             fixture,
@@ -769,8 +922,12 @@ class SyntheticCandidateFixtureTest(unittest.TestCase):
             self.assertEqual(len(manifest["platforms"]), 9)
             self.assertEqual(len(manifest["realModelSmokes"]), 3)
             self.assertEqual(manifest["upstream"]["compatibilityTag"], "v0.17.0")
-            self.assertIs(fixture.package_release.validate_ios_directory, real_ios_guard)
-            self.assertIs(fixture.package_release.validate_ios_archives, real_archive_guard)
+            self.assertIs(
+                fixture.package_release.validate_ios_directory, real_ios_guard
+            )
+            self.assertIs(
+                fixture.package_release.validate_ios_archives, real_archive_guard
+            )
 
 
 if __name__ == "__main__":
