@@ -102,3 +102,76 @@ The published runtime never logs `Destroyed WebGPU delegate environment.`; the
 patched one logs it once per delete. The patched library was a local
 android-arm64 build with NDK r28c, not a packaged release artifact; release
 builds use r28b. Other Android GPUs and Android x64 are untested on hardware.
+
+
+## v0.18 candidate qualification (2026-10-07)
+
+Candidate owner head `f9819d3b89cdd765d414f193986696cba20a2a50` builds
+LiteRT-LM `b2f686e2ed4718fb84ec398a61dd59ca0f0aff27` / LiteRT
+`26895c9fbcc25c43faa8c1a98cd1fd28951602c3`. Physical Firebase Test Lab
+execution used the maintained public Dart API, Flutter 3.47.1, context 1024,
+32 generated tokens, and the exact Qwen/Gemma hashes above. The test consumer
+has isolated harness changes; its dirty-source report is supplemented by exact
+native-library and patch provenance, not treated as a clean production build.
+The generic validator reports `qualified=false` because its structured
+accelerator/provenance fields are incomplete; native adapter/delegate logs and
+library hashes provide supplemental evidence for the specific rows below.
+
+| Device / model | Stock v0.18 | Only Dawn replaced with the pinned historical binary |
+| --- | --- | --- |
+| Pixel 9 Pro, API 35, Mali-G715 / Qwen3 0.6B | Raw GPU inference times out after Vulkan `VK_ERROR_DEVICE_LOST` | Raw GPU inference passes |
+| Galaxy S24, API 36, Adreno 750 / Qwen3 0.6B | Engine creation rejects a 155582464-byte buffer against a 134217728-byte storage binding limit | Same allocation failure; Dawn replacement is insufficient |
+
+In the controlled comparison, non-signature APK entries compare byte-for-byte; only `lib/arm64-v8a/libwebgpu_dawn.so`
+changes, to SHA256
+`7282aacdb076ce89f0c9d93107a145b991b99eb1dfbd5b5746dd0d99466ab3c3`.
+The original API 37 Pixel row is unavailable in the current device catalog;
+API 35 is supplemental device-family evidence.
+
+The consumer's existing Qwen template separately fails v0.18 native chat:
+upstream now normalizes content to arrays, while the override concatenates
+strings. This is not a GPU driver failure. A consumer template adjustment must
+preserve string and text-part-array prompts, real `tool_response` payloads,
+thinking, history and explicit rejection of unsupported content. Changing only
+the message wire representation is insufficient because v0.18 normalizes it.
+The final combined Pixel Qwen run passed all 17
+selected cases, including three reloads, using the tool-safe template adjustment
+and the pinned Dawn replacement. A second run also
+passed all 17 cases and observed final disposal for 15 seconds: graphics memory
+fell from about 2344 MiB to 61 MiB and remained there for five samples.
+Peak graphics memory was about 2392 MiB. Exact library hashes and the isolated
+consumer patch remain part of the qualification evidence. Do not move consumer pins until the
+consumer adjustment is carried by a reviewed change.
+
+Pixel Gemma 4 E2B also passed all 17 selected public-API cases with the
+pinned Dawn replacement, including cancellation, three reloads and recovery.
+Post-disposal graphics memory returned from about 2049 MiB to 61 MiB and
+remained there for five samples; peak graphics memory was about 2083 MiB.
+The initial Android Gemma attempts failed during model download or isolated
+test-harness preparation before inference. The passing run used privately
+staged, SHA256-verified weights and a single initialized instrumentation
+automation connection shared by staging and the memory sampler.
+
+Physical iPhone 16 Pro / iOS 18.3 candidate Metal tests passed Qwen (with the
+consumer template adjustment) and Gemma: all 17 selected public-API cases,
+including cancellation, three reloads and recovery, with native Metal
+initialization and five environment destruction events. This proves the retained
+framework-path/provider-free bundle works; it does not prove the patch can be
+removed. iOS 16.6 produced only Firebase infrastructure errors, and iOS 16.4 is
+unavailable. Neither row is a minimum-OS pass.
+
+The new bridge also built against real upstream v0.17.0
+`e9fd8c53ff968071774206163027dd84bedfe925` on Ubuntu 24.04 / Linux x64;
+the Moonshine/JFK ASR smoke transcribed the audio and emitted one final event.
+The published v0.17.0-8 S24 control also logs
+the same 128 MiB binding validation error, although it proceeds through engine
+creation and most generation/lifecycle cases. Three text assertions fail. Thus
+the limit error is preexisting; v0.18 additionally fails delegate initialization.
+Do not classify the entire device/model failure as a new v0.18 regression or
+claim that the old runtime is qualified on this S24 row. Adapter-supported and
+requested/device limits still need comparison before changing limit policy.
+
+The S24 failure is tracked in [issue #51](https://github.com/leehack/litert-lm-native/issues/51).
+It remains an unsupported device/model row; keep the runtime failure explicit
+and do not call the v0.17 control a pass. Missing minimum-iOS execution evidence
+remains a qualification limit. Hosted CPU checks do not close these gaps.

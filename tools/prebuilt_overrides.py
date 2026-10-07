@@ -91,6 +91,9 @@ PREBUILT_OVERRIDES: dict[str, tuple[PrebuiltOverride, ...]] = {
     # v0.17.1 changes tool-call integer handling, not the Android Dawn inputs.
     # Preserve the correction until matching device evidence retires it.
     "v0.17.1": ANDROID_DAWN_ROLLBACKS,
+    # Stock v0.18 still loses the Vulkan device on Pixel Mali-G715.
+    # A single-library comparison restores inference with the pinned Dawn.
+    "v0.18.0": ANDROID_DAWN_ROLLBACKS,
 }
 
 
