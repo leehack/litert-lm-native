@@ -557,7 +557,8 @@ litert_lm_asr_session_process_next(LitertLmAsrSession *session,
 
     auto result = litert_lm_native::ProcessAsrNext(*session->session);
     if (!result.ok()) {
-      if (absl::IsOutOfRange(result.status()) &&
+      if ((absl::IsOutOfRange(result.status()) ||
+           absl::IsNotFound(result.status())) &&
           session->audio_source->IsFinishedAndDrained()) {
         return flush_final();
       }

@@ -150,6 +150,17 @@ int main() {
   pending.session->next = absl::Status{6};
   assert(call(pending) == LITERT_LM_ASR_STATUS_INTERNAL);
   assert(pending.session->flush_calls == 0 && !pending.final_result_returned);
+  for (int error : {5, 6}) {
+    LitertLmAsrSession no_output;
+    no_output.audio_source->can_process = true;
+    no_output.session->drain_on_process = true;
+    no_output.session->next = absl::Status{error};
+    assert(call(no_output) == LITERT_LM_ASR_STATUS_OK && out.is_final);
+    assert(std::string(out.confirmed_text) == "final");
+    release();
+    assert(call(no_output) == LITERT_LM_ASR_STATUS_END_OF_STREAM);
+    assert(no_output.session->flush_calls == 1);
+  }
   LitertLmAsrSession failed;
   failed.audio_source->drained = true;
   failed.session->flush = absl::Status{3};
