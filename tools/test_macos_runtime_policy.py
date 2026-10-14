@@ -17,6 +17,7 @@ import macos_runtime_policy as policy
 import package_apple_xcframeworks as packager
 import package_macos_runtime
 import qualification_scope
+import validate_runtime_dependencies
 from validate_runtime_dependencies import validate_macho_dependencies
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -225,6 +226,88 @@ class MacOsArm64OnlyPackagingTest(unittest.TestCase):
                     package_macos_runtime.package_macos_runtime(
                         root / "missing.zip", clean=True, upstream_tag="v0.18.0"
                     )
+
+
+def write_runtime_tarball(release: Path, archive_arch: str, member_arch: str) -> Path:
+    staging = release.parent / "staging" / archive_arch / member_arch
+    (staging / "libLiteRtLm.dylib").parent.mkdir(parents=True)
+    (staging / "libLiteRtLm.dylib").write_bytes(b"\x00")
+    release.mkdir(parents=True, exist_ok=True)
+    archive = release / f"litert-lm-native-runtime-macos-{archive_arch}-v0.18.0-1.tar.gz"
+    with tarfile.open(archive, "w:gz") as bundle:
+        bundle.add(staging, arcname=f"macos/{member_arch}")
+    return archive
+
+
+class MacOsArchiveAuditCallSiteTest(unittest.TestCase):
+    def test_arm64_tarball_with_foreign_arch_member_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            release = Path(temp) / "release"
+            write_runtime_tarball(release, "arm64", "arm64")
+            self.assertEqual(policy.validate_macos_archives(release), [])
+            write_runtime_tarball(release, "arm64", "x64")
+            errors = policy.validate_macos_archives(release)
+        self.assertTrue(errors)
+        self.assertTrue(
+            all(
+                error.startswith(
+                    "litert-lm-native-runtime-macos-arm64-v0.18.0-1.tar.gz: contains macos/x64"
+                )
+                for error in errors
+            ),
+            errors,
+        )
+
+    def test_runtime_dependency_main_audits_archive_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive_root = root / "archives"
+            write_runtime_tarball(archive_root, "arm64", "arm64")
+
+            def run_main() -> int:
+                with patch.object(sys, "argv", [
+                    "validate_runtime_dependencies.py", "--root", str(root),
+                    "--upstream-tag", "v0.18.0", "--archive-root", str(archive_root),
+                ]):
+                    return validate_runtime_dependencies.main()
+
+            self.assertEqual(run_main(), 0)
+            write_runtime_tarball(archive_root, "x64", "x64")
+            with self.assertRaises(SystemExit) as failure:
+                run_main()
+        message = str(failure.exception)
+        self.assertIn("macOS archive validation failed", message)
+        self.assertIn(
+            "litert-lm-native-runtime-macos-x64-v0.18.0-1.tar.gz: macOS runtimes are "
+            "published for arm64 only",
+            message,
+        )
+
+    def test_packager_main_audits_its_release_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            dist = Path(temp) / "dist"
+            release = dist / "v0.18.0-1"
+            packaged = write_runtime_tarball(release, "arm64", "arm64")
+
+            def run_main() -> int:
+                with patch.object(packager, "DIST_DIR", dist), \
+                     patch.object(packager, "REPO_ROOT", Path(temp)), \
+                     patch.object(packager, "package_all", return_value=[packaged]), \
+                     patch.object(packager, "validate_privacy_manifests"), \
+                     patch.object(sys, "argv", [
+                         "package_apple_xcframeworks.py", "--release-tag", "v0.18.0-1",
+                         "--compatibility-tag", "v0.18.0",
+                     ]):
+                    return packager.main()
+
+            self.assertEqual(run_main(), 0)
+            write_runtime_tarball(release, "arm64", "x64")
+            with self.assertRaisesRegex(
+                RuntimeError,
+                r"macOS XCFramework validation failed:\n"
+                r"litert-lm-native-runtime-macos-arm64-v0\.18\.0-1\.tar\.gz: contains macos/x64",
+            ):
+                run_main()
 
 
 class MacOsArm64OnlyInventoryTest(unittest.TestCase):

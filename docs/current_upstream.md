@@ -21,7 +21,7 @@ validation; drift fails closed and requires fresh qualification.
 
 These are upstream asset identities, not evidence of a qualified bridge-enabled
 native release. The read-only PR qualification workflow now targets this exact
-commit. All nine runtime builds, aggregate packaging, required exports, and
+commit. All eight runtime builds, aggregate packaging, required exports, and
 Linux x64 / Windows x64 / macOS arm64 real-model ASR evidence must pass before
 calling the candidate qualified. At that date downstream consumers were on
 `v0.16.0-native.2`. Native `v0.17.0` was published from this commit on
