@@ -141,7 +141,6 @@ class ValidateReleaseManifestTest(unittest.TestCase):
             Path("bin/ios/arm64-sim/LiteRtLm.framework/LiteRtLm"),
             Path("bin/ios/arm64-sim/CLiteRTLM.framework/CLiteRTLM"),
             Path("bin/macos/arm64/libCLiteRTLM_mac.dylib"),
-            Path("bin/macos/x64/libCLiteRTLM_mac.dylib"),
             *validate_runtime_artifacts.V0_16_IOS_GPU_ARTIFACTS,
         }
         with tempfile.TemporaryDirectory() as temp:
@@ -258,7 +257,7 @@ class ValidateReleaseManifestTest(unittest.TestCase):
         release = fixture_dir / "schema2_contract_release.json"
         self.assertEqual(
             hashlib.sha256(release.read_bytes()).hexdigest(),
-            "e2d199613270b62ad51c6b89fdb5375979822d8b5affd96e00c51afe59296002",
+            "a5352536af34e1a4076c05261766ea85e532eb174be3fee6cd35deb3eb94d8e6",
         )
         base_argv = [
             "validate_release_manifest.py",
@@ -306,6 +305,14 @@ class ValidateReleaseManifestTest(unittest.TestCase):
                     with patch.object(sys, "argv", [*base_argv[:-1], str(mutated)]):
                         with self.assertRaisesRegex(SystemExit, expected_error):
                             main()
+
+            candidate = deepcopy(payload)
+            x64_asset = f"litert-lm-native-runtime-macos-x64-{RELEASE_TAG}.tar.gz"
+            candidate["assets"].append({"name": x64_asset, "digest": "sha256:" + "e" * 64})
+            mutated.write_text(json.dumps(candidate), encoding="utf-8")
+            with patch.object(sys, "argv", [*base_argv[:-1], str(mutated)]):
+                with self.assertRaisesRegex(SystemExit, f"unexpected assets:\n- {x64_asset}"):
+                    main()
 
     def test_manifest_cannot_expand_the_allowed_spm_release_inventory(self) -> None:
         manifest = deepcopy(self.valid)
@@ -481,8 +488,36 @@ class ValidateReleaseManifestTest(unittest.TestCase):
 
         empty_platforms = deepcopy(self.valid)
         empty_platforms["platforms"] = []
-        with self.assertRaisesRegex(SystemExit, "nine platform"):
+        with self.assertRaisesRegex(SystemExit, "exactly 8 platform bundles"):
             self.validate(empty_platforms)
+
+    def test_schema_2_rejects_a_macos_x64_runtime_bundle(self) -> None:
+        with_x64 = deepcopy(self.valid)
+        arm64 = next(
+            item
+            for item in with_x64["platforms"]
+            if (item["platform"], item["arch"]) == ("macos", "arm64")
+        )
+        x64 = deepcopy(arm64)
+        x64["arch"] = "x64"
+        x64["releaseAsset"] = arm64["releaseAsset"].replace("-arm64-", "-x64-")
+        x64["artifactPaths"] = [
+            path.replace("/arm64/", "/x64/") for path in arm64["artifactPaths"]
+        ]
+        for path in arm64["artifactPaths"]:
+            artifact = deepcopy(
+                next(item for item in with_x64["artifacts"] if item["path"] == path)
+            )
+            artifact.update(arch="x64", path=path.replace("/arm64/", "/x64/"))
+            with_x64["artifacts"].append(artifact)
+        with_x64["platforms"].append(x64)
+        with self.assertRaisesRegex(SystemExit, "exactly 8 platform bundles"):
+            self.validate(with_x64)
+
+        replaced = deepcopy(with_x64)
+        replaced["platforms"].remove(arm64)
+        with self.assertRaisesRegex(SystemExit, "missing, duplicate, or unsupported"):
+            self.validate(replaced)
 
     def test_malformed_platform_fields_fail_cleanly_before_set_use(self) -> None:
         mutations = {

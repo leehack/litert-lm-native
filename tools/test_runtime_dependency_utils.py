@@ -224,8 +224,8 @@ class RuntimeDependencyUtilsTest(unittest.TestCase):
                     return_value=[],
                 ):
                     with patch(
-                        "validate_runtime_dependencies.unresolved_dynamic_lookup_symbols",
-                        return_value=[],
+                        "validate_runtime_dependencies.unresolved_provider_symbols",
+                        return_value={},
                     ):
                         with patch(
                             "validate_runtime_dependencies.macho_exported_symbols",

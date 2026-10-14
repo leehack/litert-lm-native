@@ -755,7 +755,7 @@ class DraftTagLifecycleTest(unittest.TestCase):
             candidate_artifact="release-candidate-v0.17.0-fixture-42",
         )
         (self.root / "candidate/release-result.json").write_text(json.dumps(result))
-        self.assertEqual(len(manifest["platforms"]), 9)
+        self.assertEqual(len(manifest["platforms"]), 8)
         self.assertEqual(len(manifest["realModelSmokes"]), 3)
         return manifest
 
@@ -919,7 +919,7 @@ class SyntheticCandidateFixtureTest(unittest.TestCase):
                 side_effect=AssertionError("Synthetic fixture invoked Apple tools"),
             ):
                 manifest = case.prepare_full_candidate()
-            self.assertEqual(len(manifest["platforms"]), 9)
+            self.assertEqual(len(manifest["platforms"]), 8)
             self.assertEqual(len(manifest["realModelSmokes"]), 3)
             self.assertEqual(manifest["upstream"]["compatibilityTag"], "v0.17.0")
             self.assertIs(

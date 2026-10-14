@@ -105,9 +105,16 @@ Initial native targets:
 | Linux | x64 | 2 | `.so` bundle |
 | Windows | x64 | 2 | `.dll` bundle |
 | Linux | arm64 | 3 | `.so` bundle |
-| macOS | x64 | 3 | `.dylib` or `.framework` bundle |
 | Android | x86_64 | 3 | `.so` bundle |
 | iOS simulator | arm64; x64 when available | 3 | `.framework` runtime plus companion frameworks |
+
+macOS x86_64 is not a target. Upstream publishes the Gemma model constraint
+provider for macOS arm64 only, and the x86_64 runtime it would link cannot be
+loaded ([#72](https://github.com/leehack/litert-lm-native/issues/72)).
+`tools/macos_runtime_policy.py` owns this policy: build, packaging, and release
+validation reject macOS runtime directories, archives, and XCFramework slices
+for any other architecture. Supporting Intel Macs requires an x86_64 provider
+linked two-level through `@loader_path`, not a validation exemption.
 
 ## Web
 
@@ -133,7 +140,7 @@ Schema 2 records release-wide identity and compatibility data at the top level:
   development identity, compatibility baseline, and any prebuilt overrides
 - `abi` and `capabilities`: the complete ABI and capability contract for the
   release
-- `platforms`: exactly nine platform/architecture bundles; each entry names its
+- `platforms`: exactly eight platform/architecture bundles; each entry names its
   release asset, linked `artifactPaths`, and the accelerator union of those
   linked artifacts
 - `realModelSmokes`: pinned model, tokenizer, audio, library, source URL,
@@ -204,16 +211,16 @@ it does not select or qualify the runtime release.
 
 `tools/qualification_scope.py` uses an explicit allowlist for documentation and
 existing tooling tests. Unknown paths, shared build/packaging inputs, native
-sources, workflow changes, and missing comparison data retain all nine targets.
+sources, workflow changes, and missing comparison data retain all eight targets.
 Renames and deletions consider both sides of the change.
 
-Changes confined to the macOS packager or identity helper select both macOS
-architectures; iOS packager changes select both supported iOS targets. These
+Changes confined to the macOS packager or identity helper select the macOS
+arm64 target; iOS packager changes select both supported iOS targets. These
 candidates retain the real Apple XCFramework packaging gate, with unselected
 Apple prebuilts excluded first. Artifact/dependency checks and real-model evidence
 must match the selected targets; macOS also retains its Qwen inference gate.
 Partial validation does not claim a full release candidate. Shared changes still
-run the complete nine-target inventory and all three desktop model gates.
+run the complete eight-target inventory and all three desktop model gates.
 
 `qualification-result` always reports the selected job results and fails for
 missing, failed, cancelled, or unexpectedly skipped work. Only superseded PR runs
@@ -267,6 +274,6 @@ packaging and fail-closed controls, not LiteRT execution. Before publishing or
 changing consumer pins, qualify the rebuilt device/simulator archives and real
 Metal exports, run the closest affected Gemma family with constrained decoding
 false and true, and establish the actual minimum OS on supported devices. The
-shared owner change retains the full nine-platform build qualification and
+shared owner change retains the full platform build qualification and
 three Qwen smoke jobs. Gemma4 weights are available locally for later testing;
 rebuilt iOS artifacts and an iOS 16.4 environment remain required.

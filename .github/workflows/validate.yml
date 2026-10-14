@@ -42,6 +42,8 @@ jobs:
             tools/apple_privacy_manifest.py \
             tools/test_apple_privacy_manifest.py \
             tools/macos_runtime_identity.py \
+            tools/macos_runtime_policy.py \
+            tools/test_macos_runtime_policy.py \
             tools/git_lfs_utils.py \
             tools/gpu_environment_teardown.py \
             tools/test_gpu_environment_teardown.py \

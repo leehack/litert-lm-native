@@ -78,6 +78,6 @@ python3 -m unittest discover -s diagnostics -p 'test_*.py'
 A separately authorized local one-round check can use
 `python3 diagnostics/runner_downloads.py --round-report /tmp/download-round.json`.
 It is local evidence, not runner evidence. Running the script without arguments
-uses the three-round schedule. Diagnostic-only changes do not trigger the full
-nine-target PR qualification workflow; the existing Validate job runs these
+uses the three-round schedule. Diagnostic-only changes do not trigger the
+full-platform PR qualification workflow; the existing Validate job runs these
 lightweight tests.

@@ -259,7 +259,7 @@ def main() -> None:
             output.write(
                 f"### Exact candidate promotion\nSource run: {source['runId']}, attempt {source['runAttempt']}; "
                 f"artifact {source['artifactId']}, `{source['digest']}`.\n\n"
-                "Reused nine platform builds and three identical-byte CPU smokes. "
+                "Reused all platform builds and three identical-byte CPU smokes. "
                 "No new GPU or device qualification is implied.\n"
             )
 
