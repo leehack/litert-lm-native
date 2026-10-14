@@ -334,7 +334,6 @@ jobs:
               {"os": "macos-latest", "platform": "ios", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 120},
               {"os": "macos-latest", "platform": "ios", "arch": "arm64-sim", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 120},
               {"os": "macos-latest", "platform": "macos", "arch": "arm64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 120},
-              {"os": "macos-latest", "platform": "macos", "arch": "x64", "jobs": "3", "bazel_output_root": ".bazel-output-root", "timeout_minutes": 120},
           ]
           platform = os.environ["TARGET_PLATFORM"]
           arch = os.environ["TARGET_ARCH"]
@@ -380,7 +379,7 @@ jobs:
           add-to-path: false
 
       - name: Cache Bazel
-        if: matrix.platform != 'windows' && !(matrix.platform == 'macos' && matrix.arch == 'x64') && !(matrix.platform == 'linux' && matrix.arch == 'x64') && !(matrix.platform == 'android' && matrix.arch == 'x64')
+        if: matrix.platform != 'windows' && !(matrix.platform == 'linux' && matrix.arch == 'x64') && !(matrix.platform == 'android' && matrix.arch == 'x64')
         continue-on-error: true
         uses: actions/cache@v4
         with:

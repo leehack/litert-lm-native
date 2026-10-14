@@ -14,7 +14,7 @@ from validate_runtime_artifacts import required_runtime_artifacts
 
 class ScopeTest(unittest.TestCase):
     def test_full_matrix_preserved_for_shared_unknown_release_and_native(self):
-        self.assertEqual(len(MATRIX),9)
+        self.assertEqual(len(MATRIX),8)
         for paths in ([], ['native/bridge/litert_lm_bridge.c'], ['tools/build_upstream_runtime.py'],
                       ['tools/prebuilt_overrides.py'], ['tools/package_release.py'],
                       ['tools/package_apple_xcframeworks.py'], ['.github/workflows/native_release.yml'],

@@ -62,7 +62,7 @@ legacy output forms, partial publication matrices, and publication without the
 required real-model smoke evidence.
 
 Stable manual preflight applies the same consumability decision as scheduled
-detection before any of the nine platform builds start. A metadata-only tag at
+detection before any of the eight platform builds start. A metadata-only tag at
 an already packaged commit is rejected unless the requested native identity is
 an explicitly ordered rebuild, and every stable input must publish the required
 official iOS and macOS C-runtime XCFramework archives. This makes upstream
@@ -111,7 +111,7 @@ draft release ID, URL, and GitHub SHA-256 digests before promotion.
 Pull requests that change release tooling run the read-only
 `.github/workflows/pr_release_qualification.yml` workflow. Its inputs are fixed
 to the current compatible stable line; it checks out the exact pull-request
-head, builds all nine platform targets, and requires pinned real-model evidence
+head, builds all eight platform targets, and requires pinned real-model evidence
 on Linux x64, Windows x64, and macOS arm64. It contains no publication input,
 write permission, release command, or call into the write-scoped publication
 job.
@@ -212,10 +212,15 @@ Schema 2 keeps the following sections distinct:
   source URLs/release asset; exact commits; ABI/backend; transcript expectation;
   platform; and passing transcript recorded by the release run
 
-Schema 2 requires the exact package identity, all nine platform records, every
+Schema 2 requires the exact package identity, all eight platform records, every
 native artifact bound to one platform with digest and provenance, and complete
 release/ABI/capability declarations. The owner-generated canonical fixture is
 checked at `tools/fixtures/schema2_contract_manifest.json`.
+
+Schema-2 releases up to `v0.18.0` carry a ninth `macos/x64` record and runtime
+archive whose library cannot load
+([#72](https://github.com/leehack/litert-lm-native/issues/72)). They remain
+immutable; this tooling validates new candidates and rejects that record.
 
 Schema 1 manifests and all existing archives remain valid for explicit legacy
 consumption; they never require the schema-2-only `release-result.json` asset.

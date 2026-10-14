@@ -104,7 +104,7 @@ jobs:
           add-to-path: false
 
       - name: Cache Bazel
-        if: matrix.platform != 'windows' && !(matrix.platform == 'macos' && matrix.arch == 'x64') && !(matrix.platform == 'linux' && matrix.arch == 'x64') && !(matrix.platform == 'android' && matrix.arch == 'x64')
+        if: matrix.platform != 'windows' && !(matrix.platform == 'linux' && matrix.arch == 'x64') && !(matrix.platform == 'android' && matrix.arch == 'x64')
         continue-on-error: true
         uses: actions/cache@v4
         with:
@@ -193,7 +193,7 @@ jobs:
           retention-days: 14
 
   verify:
-    name: ${{ needs.scope.outputs.full == 'true' && 'Verify nine-platform candidate' || 'Verify affected-platform candidate' }}
+    name: ${{ needs.scope.outputs.full == 'true' && 'Verify full-platform candidate' || 'Verify affected-platform candidate' }}
     needs: [preflight, scope, tokenizer-compatibility, build]
     if: always() && needs.scope.outputs.native == 'true'
     runs-on: macos-latest
@@ -296,7 +296,7 @@ jobs:
               raise SystemExit(
                   f"Expected exact real-model evidence {sorted(expected)}, got {sorted(actual)}"
               )
-          print(f"Verified all nine runtimes and {len(evidence)} real-model smokes")
+          print(f"Verified the full runtime matrix and {len(evidence)} real-model smokes")
           PY
 
       - name: Validate affected platform runtime inventory

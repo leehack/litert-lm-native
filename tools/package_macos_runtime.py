@@ -22,6 +22,10 @@ from macos_runtime_identity import (
     LITERTLM_INSTALL_NAME,
     normalize_macos_runtime_identity,
 )
+from macos_runtime_policy import (
+    MACOS_RUNTIME_ARCHES,
+    reject_unsupported_macos_runtime_dirs,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
@@ -51,15 +55,14 @@ CLITERTLM_MAC_INSTALL_NAME = f"@rpath/{CLITERTLM_MAC_LIBRARY}"
 LITERTLM_REEXPORT_NAME = LITERTLM_INSTALL_NAME.encode("ascii")
 CLITERTLM_MAC_REEXPORT_NAME = CLITERTLM_MAC_INSTALL_NAME.encode("ascii")
 
-MACOS_ARCH_ORDER = {"arm64": 0, "x64": 1}
+MACOS_ARCH_ORDER = {arch: index for index, arch in enumerate(MACOS_RUNTIME_ARCHES)}
 REQUIRED_MACOS_ARCHES = set(MACOS_ARCH_ORDER)
+# Official CLiteRTLM_mac x86_64 slices are skipped, not repackaged.
 XCFRAMEWORK_ARCH_TO_RUNTIME_ARCH = {
     "arm64": "arm64",
-    "x86_64": "x64",
 }
 RUNTIME_ARCH_TO_MACHO_ARCH = {
     "arm64": "arm64",
-    "x64": "x86_64",
 }
 
 
@@ -388,6 +391,7 @@ def package_macos_runtime(
     upstream_tag: str,
     require_official: bool = False,
 ) -> list[Path]:
+    reject_unsupported_macos_runtime_dirs(BIN_DIR / "macos")
     if has_asr_bridge(upstream_tag):
         print(
             "Using source-built macOS runtimes so the v0.16+ ASR bridge "

@@ -16,6 +16,9 @@ from apple_privacy_manifest import MANIFEST_NAME, manifest_bytes, validate_archi
 from ios_framework_metadata import (
     update_framework_minimum_os, validate_framework_metadata, version_tuple,
 )
+from macos_runtime_policy import (
+    MACOS_RUNTIME_ARCHES, reject_unsupported_macos_runtime_dirs, validate_macos_archives,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BIN_DIR = REPO_ROOT / "bin"
@@ -23,7 +26,7 @@ DIST_DIR = REPO_ROOT / "dist" / "spm"
 WORK_DIR = REPO_ROOT / ".dart_tool" / "apple_xcframeworks"
 
 IOS_ARCHES = ["arm64", "arm64-sim", "x64-sim"]
-MACOS_ARCHES = ["arm64", "x64"]
+MACOS_ARCHES = list(MACOS_RUNTIME_ARCHES)
 PRIMARY_MODULE = "LiteRtLm"
 IOS_REEXPORT_MODULE = "CLiteRTLM"
 PRIMARY_LIBRARY = "libLiteRtLm.dylib"
@@ -458,6 +461,7 @@ def package_ios_companions(
 
 
 def package_all(release_tag: str, clean: bool, compatibility_tag: str) -> list[Path]:
+    reject_unsupported_macos_runtime_dirs(BIN_DIR / "macos")
     if provider_free_ios(compatibility_tag):
         validate_ios_directory(BIN_DIR / "ios")
     output_dir = DIST_DIR / release_tag
@@ -565,6 +569,9 @@ def main() -> int:
         validate_ios_archives(DIST_DIR / release_tag)
     if not packaged:
         raise RuntimeError("No Apple XCFramework zips were produced")
+    macos_errors = validate_macos_archives(DIST_DIR / release_tag)
+    if macos_errors:
+        raise RuntimeError("macOS XCFramework validation failed:\n" + "\n".join(macos_errors))
     validate_privacy_manifests(packaged)
     for path in packaged:
         print(path.relative_to(REPO_ROOT).as_posix(), flush=True)

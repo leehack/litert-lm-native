@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -22,14 +21,15 @@ from litert_lm_symbols import (
     APPLE_METAL_ACCELERATOR_SYMBOLS,
     APPLE_METAL_SAMPLER_SYMBOLS,
 )
+from macos_runtime_policy import (
+    UNSUPPORTED_MACOS_ARCH_REASON,
+    unresolved_provider_symbols,
+    unsupported_macos_runtime_dirs,
+    validate_macos_archives,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANDROID_MIN_LOAD_ALIGNMENT = 0x4000
-MACOS_UNRESOLVED_PROVIDER_SYMBOLS = {
-    "_LiteRtLmGemmaModelConstraintProvider_Create",
-    "_LiteRtLmGemmaModelConstraintProvider_CreateConstraintFromTools",
-    "_LiteRtLmGemmaModelConstraintProvider_Destroy",
-}
 
 
 def fail(message: str) -> None:
@@ -196,25 +196,6 @@ def resolve_macho_dependency(
     return runtime_dir / Path(relative).name
 
 
-def unresolved_dynamic_lookup_symbols(path: Path) -> list[str]:
-    if shutil.which("nm") is None:
-        return []
-    result = subprocess.run(
-        ["nm", "-m", str(path)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    symbols: list[str] = []
-    for line in result.stdout.splitlines():
-        if "(undefined)" not in line or "(dynamically looked up)" not in line:
-            continue
-        match = re.search(r"\b(_[A-Za-z0-9_]+)\s+\(dynamically looked up\)", line)
-        if match:
-            symbols.append(match.group(1))
-    return symbols
-
-
 def macho_exported_symbols(path: Path) -> set[str]:
     if shutil.which("nm") is None:
         return set()
@@ -234,19 +215,13 @@ def macho_exported_symbols(path: Path) -> set[str]:
     return symbols
 
 
-def allows_unresolved_macos_provider_symbols(path: Path, root: Path) -> bool:
-    try:
-        relative = path.relative_to(root)
-    except ValueError:
-        return False
-    # The source-built v0.14.0 x64 LiteRtLm dylib leaves these optional symbols
-    # as dynamic lookups and does not link a provider install name.
-    return relative.parts == ("bin", "macos", "x64", "libLiteRtLm.dylib")
-
-
 def validate_macho_dependencies(root: Path) -> int:
     checked = 0
-    errors: list[str] = []
+    errors: list[str] = [
+        f"{path.relative_to(root).as_posix()} is not a supported runtime "
+        f"directory: {UNSUPPORTED_MACOS_ARCH_REASON}."
+        for path in unsupported_macos_runtime_dirs(root / "bin" / "macos")
+    ]
     for library in iter_macho_libraries(root):
         checked += 1
         relative = library.relative_to(root)
@@ -263,16 +238,11 @@ def validate_macho_dependencies(root: Path) -> int:
                     "but it is missing from the runtime directory."
                 )
 
-        unresolved = [
-            symbol
-            for symbol in unresolved_dynamic_lookup_symbols(library)
-            if symbol in MACOS_UNRESOLVED_PROVIDER_SYMBOLS
-        ]
-        if unresolved and not allows_unresolved_macos_provider_symbols(library, root):
-            formatted = ", ".join(sorted(unresolved))
+        for arch, unresolved in unresolved_provider_symbols(library).items():
             errors.append(
-                f"{library.relative_to(root).as_posix()} leaves required Gemma "
-                f"constraint provider symbols unresolved: {formatted}"
+                f"{library.relative_to(root).as_posix()} ({arch}) leaves required "
+                "Gemma constraint provider symbols unresolved: "
+                + ", ".join(unresolved)
             )
 
         required_exports: set[str] = set()
@@ -314,6 +284,12 @@ def main() -> int:
         validate_ios_archives(args.archive_root or root / "dist" / "spm")
     checked_elf = validate_elf_dependencies(root)
     checked_macho = validate_macho_dependencies(root)
+    macos_archive_errors = validate_macos_archives(args.archive_root or root / "dist" / "spm")
+    if macos_archive_errors:
+        fail(
+            "macOS archive validation failed:\n"
+            + "\n".join(f"- {e}" for e in macos_archive_errors)
+        )
     print(
         "Validated runtime dependencies for "
         f"{checked_elf} ELF libraries and {checked_macho} Mach-O libraries"

@@ -42,9 +42,17 @@ Tier 2:
 Tier 3:
 
 - Linux arm64
-- macOS x64
 - Android x86_64
 - Simulator builds
+
+macOS x86_64 is not published. Upstream LiteRT-LM ships the Gemma model
+constraint provider for macOS arm64 only, and an x86_64 `libLiteRtLm` leaves
+those entry points unresolved, so dyld aborts any process that loads it
+([#72](https://github.com/leehack/litert-lm-native/issues/72)). Published
+macOS XCFrameworks from `v0.13.1` through `v0.18.0` contain that unloadable
+x86_64 slice. Later releases ship arm64-only macOS runtimes and XCFramework
+slices; consumers must exclude x86_64 or report LiteRT-LM as unsupported on
+Intel Macs.
 
 Acceleration is platform-specific. Android and macOS are the primary paths for
 GPU/NPU validation; web should use JavaScript interop instead of FFI.
@@ -119,7 +127,7 @@ python3 tools/validate_artifacts.py
 - `Native Build & Release`: prepares or explicitly publishes an exact upstream
   LiteRT-LM tag/commit and exact native commit.
   It builds upstream C runtime libraries with embedded LiteRtLmBridge symbols for
-  Android arm64/x64, iOS arm64/arm64-sim, Linux x64/arm64, macOS arm64/x64, and
+  Android arm64/x64, iOS arm64/arm64-sim, Linux x64/arm64, macOS arm64, and
   Windows x64, copies upstream `prebuilt/` companion libraries for Android,
   Apple, Linux, and Windows, uses official Apple XCFramework archives when
   upstream publishes them, falls back to the source-built Apple runtimes when
@@ -199,7 +207,7 @@ preparation and the final publication recheck both enforce that provenance. A
 when preparing from another retained source ref.
 
 Release-tooling pull requests automatically run a read-only exact-input
-qualification. It builds all nine targets and requires checksum-pinned Qwen CPU
+qualification. It builds all eight targets and requires checksum-pinned Qwen CPU
 inference and ASR real-model smokes on Linux x64, Windows x64, and macOS arm64. It uploads the
 runtime/evidence artifacts for review but has no publication input or write
 permission.
@@ -302,7 +310,11 @@ cannot ship.
 
 The macOS packager embeds the primary framework's private dylib dependencies
 inside `LiteRtLm.framework/Versions/A/Dependencies` and rewrites their loader
-paths. It rejects missing dependencies or required architecture slices. The
+paths. It rejects missing dependencies or required architecture slices, and
+refuses any macOS runtime directory other than `arm64`. The macOS slices of every
+XCFramework are `macos-arm64`; release validation fails if a macOS slice or
+runtime archive carries another architecture or leaves the Gemma constraint
+provider to flat-namespace lookup. The
 macOS compatibility shim references the adjacent `LiteRtLm.framework`, so the
 assembled app does not need flat copies of the core or its private dependencies.
 These packaging changes apply to newly built assets; the published v0.17.0

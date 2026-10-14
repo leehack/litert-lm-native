@@ -21,9 +21,13 @@ REQUIRED_RUNTIME_ARCHIVES = [
     "litert-lm-native-runtime-linux-arm64-{tag}.tar.gz",
     "litert-lm-native-runtime-linux-x64-{tag}.tar.gz",
     "litert-lm-native-runtime-macos-arm64-{tag}.tar.gz",
-    "litert-lm-native-runtime-macos-x64-{tag}.tar.gz",
     "litert-lm-native-runtime-windows-x64-{tag}.tar.gz",
 ]
+
+# Schema 1 releases predate the arm64-only macOS policy and keep their x64 asset.
+LEGACY_SCHEMA_1_RUNTIME_ARCHIVES = sorted(
+    REQUIRED_RUNTIME_ARCHIVES + ["litert-lm-native-runtime-macos-x64-{tag}.tar.gz"]
+)
 
 REQUIRED_SPM_XCFRAMEWORKS = [
     "litert-lm-native-apple-CLiteRTLM-xcframework-{tag}.zip",
@@ -56,7 +60,6 @@ REQUIRED_PLATFORM_KEYS = {
     ("linux", "arm64"),
     ("linux", "x64"),
     ("macos", "arm64"),
-    ("macos", "x64"),
     ("windows", "x64"),
 }
 
@@ -254,7 +257,10 @@ def validate_schema_2_payload(
     if not isinstance(platforms, list) or len(platforms) != len(
         REQUIRED_PLATFORM_KEYS
     ):
-        raise SystemExit("Release manifest must contain exactly nine platform bundles")
+        raise SystemExit(
+            "Release manifest must contain exactly "
+            f"{len(REQUIRED_PLATFORM_KEYS)} platform bundles"
+        )
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, list) or not artifacts:
         raise SystemExit("Release manifest must contain provenance-bearing artifacts")
@@ -867,7 +873,11 @@ def main() -> int:
             f"litert-lm-native-prebuilts-{args.release_tag}.tar.gz",
             *[
                 pattern.format(tag=args.release_tag)
-                for pattern in REQUIRED_RUNTIME_ARCHIVES
+                for pattern in (
+                    REQUIRED_RUNTIME_ARCHIVES
+                    if schema_version == 2
+                    else LEGACY_SCHEMA_1_RUNTIME_ARCHIVES
+                )
             ],
             *[pattern.format(tag=args.release_tag) for pattern in required_spm],
             *manifest_spm_assets,

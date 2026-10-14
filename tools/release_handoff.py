@@ -56,7 +56,7 @@ def handoff(
         lines += [
             f"Preparation: {preparation['result']['workflow']['url']} (attempt {source['runAttempt']})",
             f"Immutable candidate: artifact {source['artifactId']}, `{source['digest']}`",
-            "Reused nine builds and three CPU model smokes from the exact candidate.",
+            "Reused all platform builds and three CPU model smokes from the exact candidate.",
             "",
         ]
     else:

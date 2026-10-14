@@ -23,6 +23,7 @@ from litert_lm_symbols import (
     uses_stream_chunk_api,
 )
 from macos_runtime_identity import normalize_macos_runtime_identity
+from macos_runtime_policy import UNSUPPORTED_MACOS_ARCH_REASON
 from package_upstream_prebuilts import apply_prebuilt_overrides
 from runtime_dependency_utils import (
     elf_has_global_flag,
@@ -111,16 +112,6 @@ RUNTIME_TARGETS = {
     ("macos", "arm64"): {
         "bazel_target": "//bridge:libLiteRtLm.dylib",
         "bazel_configs": ["macos", "macos_arm64"],
-        "output": "bazel-bin/bridge/libLiteRtLm.dylib",
-        "library": "libLiteRtLm.dylib",
-    },
-    ("macos", "x64"): {
-        "bazel_target": "//bridge:libLiteRtLm.dylib",
-        "bazel_config": "macos",
-        "bazel_options": [
-            "--cpu=darwin_x86_64",
-            "--platforms=@build_bazel_apple_support//platforms:darwin_x86_64",
-        ],
         "output": "bazel-bin/bridge/libLiteRtLm.dylib",
         "library": "libLiteRtLm.dylib",
     },
@@ -702,6 +693,8 @@ def main() -> int:
     upstream_ref = args.upstream_ref or args.upstream_tag
 
     key = (args.platform, args.arch)
+    if key == ("macos", "x64"):
+        raise SystemExit(f"Unsupported target macos/x64: {UNSUPPORTED_MACOS_ARCH_REASON}")
     if key not in RUNTIME_TARGETS:
         supported = ", ".join(f"{p}/{a}" for p, a in sorted(RUNTIME_TARGETS))
         raise SystemExit(f"Unsupported target {args.platform}/{args.arch}; supported: {supported}")

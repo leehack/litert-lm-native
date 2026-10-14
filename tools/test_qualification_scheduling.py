@@ -46,7 +46,7 @@ class QualificationSchedulingTest(unittest.TestCase):
     def test_candidate_check_reports_every_unsuccessful_prerequisite(self) -> None:
         verify = job('verify')
         metadata, steps = verify.split('    steps:\n', 1)
-        self.assertIn('Verify nine-platform candidate', metadata)
+        self.assertIn('Verify full-platform candidate', metadata)
         self.assertIn('needs: [preflight, scope, tokenizer-compatibility, build]', metadata)
         self.assertIn("    if: always() && needs.scope.outputs.native == 'true'\n", metadata)
         self.assertNotIn('continue-on-error:', verify)
