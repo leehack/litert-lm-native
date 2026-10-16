@@ -1,0 +1,1312 @@
+{
+  "baseline": "unmodified upstream v0.18.0 at overlap 0.4",
+  "prior_patch_commit": "9e6187d9",
+  "patchSha256": "665fe85a8a4e7f9abde048b3038ede1b4385aaac016aa90438210352b865e589",
+  "prior_patch": [
+    {
+      "corpus": "ordinary",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 1200,
+      "upstream_exact": 1165,
+      "patched_exact": 1199,
+      "regressed": 0,
+      "fixed": 34,
+      "edit_worse": 0,
+      "edit_better": 34,
+      "examples": []
+    },
+    {
+      "corpus": "ordinary",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 1200,
+      "upstream_exact": 516,
+      "patched_exact": 1110,
+      "regressed": 0,
+      "fixed": 594,
+      "edit_worse": 0,
+      "edit_better": 643,
+      "examples": []
+    },
+    {
+      "corpus": "adjacent",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 1200,
+      "upstream_exact": 444,
+      "patched_exact": 1115,
+      "regressed": 0,
+      "fixed": 671,
+      "edit_worse": 0,
+      "edit_better": 742,
+      "examples": []
+    },
+    {
+      "corpus": "adjacent",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 1200,
+      "upstream_exact": 215,
+      "patched_exact": 1059,
+      "regressed": 0,
+      "fixed": 844,
+      "edit_worse": 0,
+      "edit_better": 961,
+      "examples": []
+    },
+    {
+      "corpus": "natural",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2275,
+      "patched_exact": 2321,
+      "regressed": 13,
+      "fixed": 59,
+      "edit_worse": 13,
+      "edit_better": 59,
+      "examples": [
+        {
+          "ref": "way in the people he and then world we will word and we will very we will and we will this state system from it at the end know of the life and of we",
+          "chunks": [
+            "way in the people he and then world we will word",
+            "then world we will word and we will very",
+            "will very we will and",
+            "and we will this state system from it",
+            "this state system from it at the end know",
+            "at the end know of",
+            "of the life and of we",
+            "and of we"
+          ],
+          "upstream": "way in the people he and then world we will word and we will very we will and we will this state system from it at the end know of the life and of we",
+          "patched": "way in the people he and then world we will word and we will very we will this state system from it at the end know of the life and of we"
+        },
+        {
+          "ref": "very take of the we this I with said work with I think he the people is hand state man hand mother and way in a he at the end made at the end a call we",
+          "chunks": [
+            "very take of the we this I with said work with",
+            "with said work with I think he the people is",
+            "he the people is hand state man hand mother",
+            "hand mother and way in a he at",
+            "way in a he at the end made",
+            "end made at the end a",
+            "a call we"
+          ],
+          "upstream": "very take of the we this I with said work with I think he the people is hand state man hand mother and way in a he at the end made at the end a call we",
+          "patched": "very take of the we this I with said work with I think he the people is hand state man hand mother and way in a he at the end a call we"
+        }
+      ]
+    },
+    {
+      "corpus": "natural",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 926,
+      "patched_exact": 1740,
+      "regressed": 4,
+      "fixed": 818,
+      "edit_worse": 5,
+      "edit_better": 1108,
+      "examples": [
+        {
+          "ref": "way in the people he and then world we will word and we will very we will and we will this state system from it at the end know of the life and of we",
+          "chunks": [
+            "way in the people he and then world we will word",
+            "then world we will word and we will very",
+            "will very we will and",
+            "and we will this state system from it",
+            "this state system from it at the end know",
+            "at the end know of",
+            "of the life and of we",
+            "oh and of we"
+          ],
+          "upstream": "way in the people he and then world we will word and we will very we will and we will this state system from it at the end know of the life and of we",
+          "patched": "way in the people he and then world we will word and we will very we will this state system from it at the end know of the life and of we"
+        },
+        {
+          "ref": "one two three room problem you know and then and then we the people as look child on at I by",
+          "chunks": [
+            "one two three room problem you know and",
+            "you know and then and",
+            "and then we the people",
+            "the people as look child",
+            "look child on at I by"
+          ],
+          "upstream": "one two three room problem you know and then and then we the people as look child on at I by",
+          "patched": "one two three room problem you know and then we the people as look child on at I by"
+        }
+      ]
+    },
+    {
+      "corpus": "repeat_phrases",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 838,
+      "patched_exact": 636,
+      "regressed": 462,
+      "fixed": 260,
+      "edit_worse": 1167,
+      "edit_better": 478,
+      "examples": [
+        {
+          "ref": "month one two three one two three the people the people the people state work of I'm sorry I'm sorry I think I think I think we will we",
+          "chunks": [
+            "month one two three one",
+            "one two three the people the",
+            "the people the people the people state work of",
+            "people state work of I'm sorry I'm sorry I",
+            "I'm sorry I think I think I think we",
+            "think I think we will we"
+          ],
+          "upstream": "month one two three one two three the people the people state work of I'm sorry I'm sorry I think I think I think we will we",
+          "patched": "month one two three the people the people the people state work of I'm sorry I'm sorry I think I think I think we will we"
+        },
+        {
+          "ref": "water and then and then room you know you know you know part program job of the of the very very very we will we will we will water call from fact I'm sorry I'm sorry I'm sorry country to life",
+          "chunks": [
+            "water and then and then room you know you know",
+            "you know you know you know part program job of",
+            "part program job of the of the very very very",
+            "of the very very very we will we will we",
+            "we will we will water call from fact",
+            "water call from fact I'm sorry I'm sorry I'm",
+            "I'm sorry I'm sorry country to life"
+          ],
+          "upstream": "water and then and then room you know you know you know part program job of the of the very very we will we will water call from fact I'm sorry I'm sorry I'm sorry country to life",
+          "patched": "water and then and then room you know you know you know part program job of the of the very very very we will we will water call from fact I'm sorry I'm sorry country to life"
+        }
+      ]
+    },
+    {
+      "corpus": "repeat_phrases",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 353,
+      "patched_exact": 653,
+      "regressed": 163,
+      "fixed": 463,
+      "edit_worse": 705,
+      "edit_better": 1205,
+      "examples": [
+        {
+          "ref": "month one two three one two three the people the people the people state work of I'm sorry I'm sorry I think I think I think we will we",
+          "chunks": [
+            "month one two three one",
+            "one two three the people the",
+            "oh the people the people the people state work of eh",
+            "people state work of I'm sorry I'm sorry I one",
+            "I'm sorry I think I think I think we",
+            "eh think I think we will we"
+          ],
+          "upstream": "month one two three one two three the people the people state work of I'm sorry I'm sorry I think I think I think we will we",
+          "patched": "month one two three the people the people the people state work of I'm sorry I'm sorry I think I think I think we will we"
+        },
+        {
+          "ref": "company program and then and then and then I'm sorry I'm sorry I'm sorry world is I think I think very very one two three one two three I'm sorry I'm sorry I'm sorry",
+          "chunks": [
+            "company program and then and then and then I'm",
+            "and then I'm sorry I'm sorry I'm",
+            "uh I'm sorry I'm sorry world is I think I",
+            "is I think I think very very one",
+            "very very one two three one two three I'm",
+            "three one two three I'm sorry I'm sorry I'm sorry"
+          ],
+          "upstream": "company program and then and then and then I'm sorry I'm sorry I'm sorry world is I think I think very very one two three one two three I'm sorry I'm sorry I'm sorry",
+          "patched": "company program and then and then and then I'm sorry I'm sorry world is I think I think very very one two three one two three I'm sorry I'm sorry I'm sorry"
+        }
+      ]
+    },
+    {
+      "corpus": "periodic_bigram",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2189,
+      "patched_exact": 1937,
+      "regressed": 375,
+      "fixed": 123,
+      "edit_worse": 401,
+      "edit_better": 125,
+      "examples": [
+        {
+          "ref": "by night place system by night program on look way and eye and eye this day world this day school is need week is need people we work month we work he with work of",
+          "chunks": [
+            "by night place system by night program on look way",
+            "program on look way and eye and eye this",
+            "and eye this day world",
+            "world this day school is need week",
+            "day school is need week is need people we",
+            "need people we work month we work he with work",
+            "work he with work of"
+          ],
+          "upstream": "by night place system by night program on look way and eye and eye this day world this day school is need week is need people we work month we work he with work of",
+          "patched": "by night place system by night program on look way and eye and eye this day school is need week is need people we work month we work he with work of"
+        },
+        {
+          "ref": "is call that is call you life a word we word take we word see he night money want he night study he system water home group he system is a group that student a group they try fact money and they try",
+          "chunks": [
+            "is call that is call you life a",
+            "life a word we word take we word",
+            "word take we word see he night money want he",
+            "night money want he night study he system water home",
+            "he system water home group he system is a",
+            "system is a group that",
+            "that student a group they try fact",
+            "group they try fact money and they try"
+          ],
+          "upstream": "is call that is call you life a word we word take we word see he night money want he night study he system water home group he system is a group that student a group they try fact money and they try",
+          "patched": "is call that is call you life a word we word take we word see he night money want he night study he system water home group he system is a group they try fact money and they try"
+        }
+      ]
+    },
+    {
+      "corpus": "periodic_bigram",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 805,
+      "patched_exact": 1520,
+      "regressed": 82,
+      "fixed": 797,
+      "edit_worse": 162,
+      "edit_better": 1148,
+      "examples": [
+        {
+          "ref": "the eye way the eye as want eye month part as want to month woman to month in of I right I right thing they want child as water they want tell at feel mother at feel way school the people the people for",
+          "chunks": [
+            "the eye way the eye as want eye month part as",
+            "as want eye month part as want to month woman",
+            "to month woman to month in of I right",
+            "month in of I right I right thing ah",
+            "I right thing they want child as water they",
+            "as water they want tell at feel mother tree",
+            "at feel mother at feel way school the",
+            "feel way school the people",
+            "people the people for"
+          ],
+          "upstream": "the eye way the eye as want eye month part as want to month woman to month in of I right I right thing they want child as water they want tell at feel mother at feel way school the people the people for",
+          "patched": "the eye way the eye as want eye month part as want to month woman to month in of I right I right thing they want child as water they want tell at feel mother at feel way school the people for"
+        },
+        {
+          "ref": "right by with number program with number a question and student a question on man call on man they mother it see they mother call a child come a child with woman is",
+          "chunks": [
+            "right by with number program with number",
+            "number a question and",
+            "and student a question on",
+            "a question on man call on man",
+            "on man they mother it see they",
+            "it see they mother call a child",
+            "a child come a child with woman is",
+            "child with woman is"
+          ],
+          "upstream": "right by with number program with number a question and student a question on man call on man they mother it see they mother call a child come a child with woman is",
+          "patched": "right by with number program with number a question on man call on man they mother it see they mother call a child come a child with woman is"
+        }
+      ]
+    },
+    {
+      "corpus": "prose",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 3200,
+      "upstream_exact": 3143,
+      "patched_exact": 3145,
+      "regressed": 6,
+      "fixed": 8,
+      "edit_worse": 9,
+      "edit_better": 9,
+      "examples": [
+        {
+          "ref": "and may require a packaged LiteRT dispatch directory. Android cpu gpu npu CPU GPU supported for emulator test targets; NPU is deployment-specific and not validated for generic emulators. iOS device cpu gpu Supported iOS simulator cpu gpu Supported iOS simulator Not",
+          "chunks": [
+            "and may require a packaged LiteRT dispatch directory.",
+            "directory. Android cpu gpu npu",
+            "npu CPU GPU supported for",
+            "for emulator test targets; NPU is",
+            "test targets; NPU is deployment-specific and not validated for generic emulators.",
+            "not validated for generic emulators. iOS device cpu gpu",
+            "cpu gpu Supported iOS simulator cpu",
+            "iOS simulator cpu gpu Supported iOS simulator Not"
+          ],
+          "upstream": "and may require a packaged LiteRT dispatch directory. Android cpu gpu npu CPU GPU supported for emulator test targets; NPU is deployment-specific and not validated for generic emulators. iOS device cpu gpu Supported iOS simulator cpu gpu Supported iOS simulator Not",
+          "patched": "and may require a packaged LiteRT dispatch directory. Android cpu gpu supported for emulator test targets; NPU is deployment-specific and not validated for generic emulators. iOS device cpu gpu Supported iOS simulator Not"
+        },
+        {
+          "ref": "benchmark static server, which sets the COOP COEP headers required for threaded WebAssembly and supports byte-range requests for large local model artifacts. Results Device target Backend Model artifact Runtime path Median wall tok s Median decode tok s Load init notes Pixel Pro,",
+          "chunks": [
+            "benchmark static server, which sets the COOP COEP headers",
+            "COOP COEP headers required for threaded WebAssembly and supports",
+            "WebAssembly and supports byte-range requests for large local",
+            "for large local model artifacts. Results Device target Backend",
+            "artifacts. Results Device target Backend Model artifact Runtime path Median wall tok",
+            "Runtime path Median wall tok s Median",
+            "Median decode tok s Load init",
+            "Load init notes Pixel Pro,"
+          ],
+          "upstream": "benchmark static server, which sets the COOP COEP headers required for threaded WebAssembly and supports byte-range requests for large local model artifacts. Results Device target Backend Model artifact Runtime path Median wall tok s Median decode tok s Load init notes Pixel Pro,",
+          "patched": "benchmark static server, which sets the COOP COEP headers required for threaded WebAssembly and supports byte-range requests for large local model artifacts. Results Device target Backend Model artifact Runtime path Median wall tok s Load init notes Pixel Pro,"
+        }
+      ]
+    },
+    {
+      "corpus": "prose",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 3200,
+      "upstream_exact": 1195,
+      "patched_exact": 2218,
+      "regressed": 1,
+      "fixed": 1024,
+      "edit_worse": 5,
+      "edit_better": 1438,
+      "examples": [
+        {
+          "ref": "and may require a packaged LiteRT dispatch directory. Android cpu gpu npu CPU GPU supported for emulator test targets; NPU is deployment-specific and not validated for generic emulators. iOS device cpu gpu Supported iOS simulator cpu gpu Supported iOS simulator Not",
+          "chunks": [
+            "and may require a packaged LiteRT dispatch directory.",
+            "directory. Android cpu gpu npu",
+            "um uh npu CPU GPU supported for",
+            "ah for emulator test targets; NPU is",
+            "test targets; NPU is deployment-specific and not validated for generic emulators.",
+            "not validated for generic emulators. iOS device cpu gpu",
+            "uh cpu gpu Supported iOS simulator cpu",
+            "iOS simulator cpu gpu Supported iOS simulator Not"
+          ],
+          "upstream": "and may require a packaged LiteRT dispatch directory. Android cpu gpu npu uh npu CPU GPU supported for emulator test targets; NPU is deployment-specific and not validated for generic emulators. iOS device cpu gpu Supported iOS simulator cpu gpu Supported iOS simulator Not",
+          "patched": "and may require a packaged LiteRT dispatch directory. Android cpu gpu npu uh npu CPU GPU supported for emulator test targets; NPU is deployment-specific and not validated for generic emulators. iOS device cpu gpu Supported iOS simulator Not"
+        },
+        {
+          "ref": "benchmark static server, which sets the COOP COEP headers required for threaded WebAssembly and supports byte-range requests for large local model artifacts. Results Device target Backend Model artifact Runtime path Median wall tok s Median decode tok s Load init notes Pixel Pro,",
+          "chunks": [
+            "benchmark static server, which sets",
+            "sets the COOP COEP headers required",
+            "COOP COEP headers required for threaded WebAssembly and",
+            "WebAssembly and supports byte-range requests for large local",
+            "requests for large local model artifacts. Results Device target",
+            "model artifacts. Results Device target Backend Model",
+            "Backend Model artifact Runtime path Median wall tok s",
+            "path Median wall tok s Median",
+            "Median decode tok s Load um",
+            "s Load init notes Pixel Pro,",
+            "Pixel Pro,"
+          ],
+          "upstream": "benchmark static server, which sets the COOP COEP headers required for threaded WebAssembly and supports byte-range requests for large local model artifacts. Results Device target Backend Model artifact Runtime path Median wall tok s Median decode tok s Load init notes Pixel Pro,",
+          "patched": "benchmark static server, which sets the COOP COEP headers required for threaded WebAssembly and supports byte-range requests for large local model artifacts. Results Device target Backend Model artifact Runtime path Median wall tok s Load init notes Pixel Pro,"
+        }
+      ]
+    },
+    {
+      "corpus": "periodic",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 5,
+      "patched_exact": 1,
+      "regressed": 5,
+      "fixed": 1,
+      "edit_worse": 1406,
+      "edit_better": 830,
+      "examples": [
+        {
+          "ref": "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la",
+          "chunks": [
+            "la la la la hey la la la",
+            "hey la la la la hey la la la la hey",
+            "la la la hey la la la la hey la",
+            "la la hey la la la la hey la la"
+          ],
+          "upstream": "la la la la hey la la hey la la la la hey la la la la hey la la la la hey la la",
+          "patched": "la la la la hey la la la la hey la la"
+        },
+        {
+          "ref": "one two three one two three one two three one two three one two three one two three one two three one two three one two three one two three one two three one two three",
+          "chunks": [
+            "one two three one two three one two three",
+            "two three one two three one",
+            "one two three one two three one two three one",
+            "two three one two three one two three",
+            "one two three one two three",
+            "two three one two three one two",
+            "three one two three one two three"
+          ],
+          "upstream": "one two three one two three one two three one two three one two three one two three",
+          "patched": "one two three one two three one two three one two three one two three"
+        }
+      ]
+    },
+    {
+      "corpus": "periodic",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 5,
+      "patched_exact": 0,
+      "regressed": 5,
+      "fixed": 0,
+      "edit_worse": 1845,
+      "edit_better": 446,
+      "examples": [
+        {
+          "ref": "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la",
+          "chunks": [
+            "la la la la hey la la la oh",
+            "hey la la la la hey la la la la hey eh",
+            "la la la hey la la la la hey la one",
+            "la la hey la la la la hey la la"
+          ],
+          "upstream": "la la la la hey la la hey la la la la hey la la la la hey la la la la hey la la",
+          "patched": "la la la la hey la la la la hey la la"
+        },
+        {
+          "ref": "one two three one two three one two three one two three one two three one two three one two three one two three one two three one two three one two three one two three",
+          "chunks": [
+            "one two three one two three one two three",
+            "eh two three one two three one",
+            "one two three one two three one two three one",
+            "uh two three one two three one two three",
+            "one two three one two three",
+            "two three one two three one two",
+            "three one two three one two three"
+          ],
+          "upstream": "one two three one two three one two three one two three one two three one two three",
+          "patched": "one two three one two three one two three one two three one two three"
+        }
+      ]
+    },
+    {
+      "corpus": "ordinary",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 1200,
+      "upstream_exact": 1107,
+      "patched_exact": 1200,
+      "regressed": 0,
+      "fixed": 93,
+      "edit_worse": 0,
+      "edit_better": 93,
+      "examples": []
+    },
+    {
+      "corpus": "ordinary",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 1200,
+      "upstream_exact": 970,
+      "patched_exact": 1200,
+      "regressed": 0,
+      "fixed": 230,
+      "edit_worse": 0,
+      "edit_better": 230,
+      "examples": []
+    },
+    {
+      "corpus": "adjacent",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 1200,
+      "upstream_exact": 447,
+      "patched_exact": 1200,
+      "regressed": 0,
+      "fixed": 753,
+      "edit_worse": 0,
+      "edit_better": 753,
+      "examples": []
+    },
+    {
+      "corpus": "adjacent",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 1200,
+      "upstream_exact": 429,
+      "patched_exact": 1200,
+      "regressed": 0,
+      "fixed": 771,
+      "edit_worse": 0,
+      "edit_better": 771,
+      "examples": []
+    },
+    {
+      "corpus": "natural",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2032,
+      "patched_exact": 2400,
+      "regressed": 0,
+      "fixed": 368,
+      "edit_worse": 0,
+      "edit_better": 368,
+      "examples": []
+    },
+    {
+      "corpus": "natural",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 1835,
+      "patched_exact": 2400,
+      "regressed": 0,
+      "fixed": 565,
+      "edit_worse": 0,
+      "edit_better": 565,
+      "examples": []
+    },
+    {
+      "corpus": "repeat_phrases",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 790,
+      "patched_exact": 2390,
+      "regressed": 2,
+      "fixed": 1602,
+      "edit_worse": 4,
+      "edit_better": 1606,
+      "examples": [
+        {
+          "ref": "of give where where where very very very think man need and then and then and then at the end at the end at the end at the end at the end the people the people the people at the end at the end at the end country place and of see one two three one two three one two three one two three and then and then and then man I'm sorry I'm sorry I'm sorry story one two three one two three I'm sorry I'm sorry I think I think in where where come year they word case to you work family you know you know work they in the in the in the said no no where where student they at I'm sorry I'm sorry I think I think I think I'm sorry I'm sorry I'm sorry I'm sorry I'm sorry of the of the of the family very very and then and then with I think I think I think very very very story think made you know you know you know one two three one two three fact no no you know you know you know you",
+          "chunks": [
+            "of give where where where very very very think man need and then and then and then at the end at the end at the end at the",
+            "end at the end at the end at the end at the end the people the people the people at the end at the end at the end country",
+            "the people the people at the end at the end at the end country place and of see one two three one two three one two three one two three and then and then and",
+            "one two three one two three one two three and then and then and then man I'm sorry I'm sorry I'm sorry story one two three one two three I'm sorry I'm sorry I",
+            "I'm sorry story one two three one two three I'm sorry I'm sorry I think I think in where where come year they word case to you work family you know you know work they in the in",
+            "case to you work family you know you know work they in the in the in the said no no where where student they at I'm sorry I'm sorry I think I think I",
+            "they at I'm sorry I'm sorry I think I think I think I'm sorry I'm sorry I'm sorry I'm sorry I'm sorry of the of the of the family very very and then",
+            "I'm sorry I'm sorry of the of the of the family very very and then and then with I think I think I think very very very story think made you know you know you know one two three",
+            "I think very very very story think made you know you know you know one two three one two three fact no no you know you know you know you"
+          ],
+          "upstream": "of give where where where very very very think man need and then and then and then at the end at the end at the end at the end at the end the people the people the people at the end at the end at the end country place and of see one two three one two three one two three one two three and then and then and then man I'm sorry I'm sorry I'm sorry story one two three one two three I'm sorry I'm sorry I think I think in where where come year they word case to you work family you know you know work they in the in the in the said no no where where student they at I'm sorry I'm sorry I think I think I think I'm sorry I'm sorry I'm sorry I'm sorry I'm sorry of the of the of the family very very and then and then with I think I think I think very very very story think made you know you know you know one two three one two three fact no no you know you know you know you",
+          "patched": "of give where where where very very very think man need and then and then and then at the end at the end at the end at the end the people the people the people at the end at the end at the end country place and of see one two three one two three one two three one two three and then and then and then man I'm sorry I'm sorry I'm sorry story one two three one two three I'm sorry I'm sorry I think I think in where where come year they word case to you work family you know you know work they in the in the in the said no no where where student they at I'm sorry I'm sorry I think I think I think I'm sorry I'm sorry I'm sorry I'm sorry I'm sorry of the of the of the family very very and then and then with I think I think I think very very very story think made you know you know you know one two three one two three fact no no you know you know you know you"
+        },
+        {
+          "ref": "year I think I think I think home I think I think I think I think of the of the we will we will we will at the end at the end know number in the in the at the end at the end at the end water very very he went find the people the people job very very very with company from month at the end at the end give in the in the in the lot the people the people the people problem hand where where where made you know you know in the in the in the of the of the in the in the in the night think very very very job at the end at the end at the end eye you use of the of the of the made water I'm sorry I'm sorry word very very very area the people the people problem one two three one two three one two three one two three one two three one two three one two three one two three study at the end at the end group system I'm sorry I'm sorry I'm sorry at the end at the end at the end said very very very call I call group system I'm sorry I'm sorry year know you know you know at the end at the end right want I think",
+          "chunks": [
+            "year I think I think I think home I think I think I think I think of the of the we will we will we will at the end at the end know number in the in the at the end at the end at",
+            "we will at the end at the end know number in the in the at the end at the end at the end water very very he went find the people the people job very very very with company from month at the end at the",
+            "people job very very very with company from month at the end at the end give in the in the in the lot the people the people the people problem hand where where where made you know",
+            "people the people the people problem hand where where where made you know you know in the in the in the of the of the in the in the in the night think very very very job at the end",
+            "of the of the in the in the in the night think very very very job at the end at the end at the end eye you use of the of the of the made water I'm sorry I'm sorry word very very very area the",
+            "the of the of the made water I'm sorry I'm sorry word very very very area the people the people problem one two three one two three one two three one two three one two three one two three one two three",
+            "three one two three one two three one two three one two three one two three one two three one two three study at the end at the end group system I'm sorry I'm sorry",
+            "the end at the end group system I'm sorry I'm sorry I'm sorry at the end at the end at the end said very very very call I call group system I'm sorry I'm",
+            "at the end at the end said very very very call I call group system I'm sorry I'm sorry year know you know you know at the end at the end right want I think"
+          ],
+          "upstream": "year I think I think I think home I think I think I think I think of the of the we will we will we will at the end at the end know number in the in the at the end at the end at the end water very very he went find the people the people job very very very with company from at the end at the end give in the in the in the lot the people the people the people problem hand where where made you know you know in the in the in the of the of the in the in the in the night think very very very job at the end at the end at the end eye you use of the of the of the made water I'm sorry I'm sorry word very very very area the people the people problem one two three one two three one two three one two three one two three one two three one two three one two three study at the end at the end group system I'm sorry I'm sorry I'm sorry at the end at the end at the end said very very very call I call group system I'm sorry I'm sorry year know you know you know at the end at the end right want I think",
+          "patched": "year I think I think I think home I think I think I think I think of the of the we will we will we will at the end at the end know number in the in the at the end at the end at the end water very very he went find the people the people job very very very with company from month at the end at the end give in the in the in the lot the people the people the people problem hand where where where made you know you know in the in the in the of the of the in the in the in the night think very very very job at the end at the end at the end eye you use of the of the of the made water I'm sorry I'm sorry word very very very area the people the people problem one two three one two three one two three one two three one two three one two three one two three study at the end at the end group system I'm sorry I'm sorry I'm sorry at the end at the end at the end said very very very call I call group system I'm sorry I'm sorry year know you know you know at the end at the end right want I think"
+        }
+      ]
+    },
+    {
+      "corpus": "repeat_phrases",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 771,
+      "patched_exact": 2390,
+      "regressed": 2,
+      "fixed": 1621,
+      "edit_worse": 4,
+      "edit_better": 1625,
+      "examples": [
+        {
+          "ref": "of give where where where very very very think man need and then and then and then at the end at the end at the end at the end at the end the people the people the people at the end at the end at the end country place and of see one two three one two three one two three one two three and then and then and then man I'm sorry I'm sorry I'm sorry story one two three one two three I'm sorry I'm sorry I think I think in where where come year they word case to you work family you know you know work they in the in the in the said no no where where student they at I'm sorry I'm sorry I think I think I think I'm sorry I'm sorry I'm sorry I'm sorry I'm sorry of the of the of the family very very and then and then with I think I think I think very very very story think made you know you know you know one two three one two three fact no no you know you know you know you",
+          "chunks": [
+            "of give where where where very very very think man need and then and then and then at the end at the end at the end at the",
+            "end at the end at the end at the end at the end the people the people the people at the end at the end at the end country",
+            "the people the people at the end at the end at the end country place and of see one two three one two three one two three one two three and then and then and",
+            "one two three one two three one two three and then and then and then man I'm sorry I'm sorry I'm sorry story one two three one two three I'm sorry I'm sorry I",
+            "oh I'm sorry story one two three one two three I'm sorry I'm sorry I think I think in where where come year they word case to you work family you know you know work they in the in",
+            "case to you work family you know you know work they in the in the in the said no no where where student they at I'm sorry I'm sorry I think I think I",
+            "they at I'm sorry I'm sorry I think I think I think I'm sorry I'm sorry I'm sorry I'm sorry I'm sorry of the of the of the family very very and then",
+            "I'm sorry I'm sorry of the of the of the family very very and then and then with I think I think I think very very very story think made you know you know you know one two three ah",
+            "I think very very very story think made you know you know you know one two three one two three fact no no you know you know you know you"
+          ],
+          "upstream": "of give where where where very very very think man need and then and then and then at the end at the end at the end at the end at the end the people the people the people at the end at the end at the end country place and of see one two three one two three one two three one two three and then and then and then man I'm sorry I'm sorry I'm sorry story one two three one two three I'm sorry I'm sorry I think I think in where where come year they word case to you work family you know you know work they in the in the in the said no no where where student they at I'm sorry I'm sorry I think I think I think I'm sorry I'm sorry I'm sorry I'm sorry I'm sorry of the of the of the family very very and then and then with I think I think I think very very very story think made you know you know you know one two three one two three fact no no you know you know you know you",
+          "patched": "of give where where where very very very think man need and then and then and then at the end at the end at the end at the end the people the people the people at the end at the end at the end country place and of see one two three one two three one two three one two three and then and then and then man I'm sorry I'm sorry I'm sorry story one two three one two three I'm sorry I'm sorry I think I think in where where come year they word case to you work family you know you know work they in the in the in the said no no where where student they at I'm sorry I'm sorry I think I think I think I'm sorry I'm sorry I'm sorry I'm sorry I'm sorry of the of the of the family very very and then and then with I think I think I think very very very story think made you know you know you know one two three one two three fact no no you know you know you know you"
+        },
+        {
+          "ref": "year I think I think I think home I think I think I think I think of the of the we will we will we will at the end at the end know number in the in the at the end at the end at the end water very very he went find the people the people job very very very with company from month at the end at the end give in the in the in the lot the people the people the people problem hand where where where made you know you know in the in the in the of the of the in the in the in the night think very very very job at the end at the end at the end eye you use of the of the of the made water I'm sorry I'm sorry word very very very area the people the people problem one two three one two three one two three one two three one two three one two three one two three one two three study at the end at the end group system I'm sorry I'm sorry I'm sorry at the end at the end at the end said very very very call I call group system I'm sorry I'm sorry year know you know you know at the end at the end right want I think",
+          "chunks": [
+            "year I think I think I think home I think I think I think I think of the of the we will we will we will at the end at the end know number in the in the at the end at the end at",
+            "we will at the end at the end know number in the in the at the end at the end at the end water very very he went find the people the people job very very very with company from month at the end at the",
+            "people job very very very with company from month at the end at the end give in the in the in the lot the people the people the people problem hand where where where made you know uh",
+            "people the people the people problem hand where where where made you know you know in the in the in the of the of the in the in the in the night think very very very job at the end",
+            "of the of the in the in the in the night think very very very job at the end at the end at the end eye you use of the of the of the made water I'm sorry I'm sorry word very very very area the",
+            "the of the of the made water I'm sorry I'm sorry word very very very area the people the people problem one two three one two three one two three one two three one two three one two three one two three",
+            "three one two three one two three one two three one two three one two three one two three one two three study at the end at the end group system I'm sorry I'm sorry um",
+            "the end at the end group system I'm sorry I'm sorry I'm sorry at the end at the end at the end said very very very call I call group system I'm sorry I'm",
+            "at the end at the end said very very very call I call group system I'm sorry I'm sorry year know you know you know at the end at the end right want I think"
+          ],
+          "upstream": "year I think I think I think home I think I think I think I think of the of the we will we will we will at the end at the end know number in the in the at the end at the end at the end water very very he went find the people the people job very very very with company from at the end at the end give in the in the in the lot the people the people the people problem hand where where made you know you know in the in the in the of the of the in the in the in the night think very very very job at the end at the end at the end eye you use of the of the of the made water I'm sorry I'm sorry word very very very area the people the people problem one two three one two three one two three one two three one two three one two three one two three one two three study at the end at the end group system I'm sorry I'm sorry I'm sorry at the end at the end at the end said very very very call I call group system I'm sorry I'm sorry year know you know you know at the end at the end right want I think",
+          "patched": "year I think I think I think home I think I think I think I think of the of the we will we will we will at the end at the end know number in the in the at the end at the end at the end water very very he went find the people the people job very very very with company from month at the end at the end give in the in the in the lot the people the people the people problem hand where where where made you know you know in the in the in the of the of the in the in the in the night think very very very job at the end at the end at the end eye you use of the of the of the made water I'm sorry I'm sorry word very very very area the people the people problem one two three one two three one two three one two three one two three one two three one two three study at the end at the end group system I'm sorry I'm sorry I'm sorry at the end at the end at the end said very very very call I call group system I'm sorry I'm sorry year know you know you know at the end at the end right want I think"
+        }
+      ]
+    },
+    {
+      "corpus": "periodic_bigram",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 1871,
+      "patched_exact": 2400,
+      "regressed": 0,
+      "fixed": 529,
+      "edit_worse": 0,
+      "edit_better": 529,
+      "examples": []
+    },
+    {
+      "corpus": "periodic_bigram",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 1689,
+      "patched_exact": 2400,
+      "regressed": 0,
+      "fixed": 711,
+      "edit_worse": 0,
+      "edit_better": 711,
+      "examples": []
+    },
+    {
+      "corpus": "prose",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 3200,
+      "upstream_exact": 2815,
+      "patched_exact": 3200,
+      "regressed": 0,
+      "fixed": 385,
+      "edit_worse": 0,
+      "edit_better": 385,
+      "examples": []
+    },
+    {
+      "corpus": "prose",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 3200,
+      "upstream_exact": 2539,
+      "patched_exact": 3200,
+      "regressed": 0,
+      "fixed": 661,
+      "edit_worse": 0,
+      "edit_better": 661,
+      "examples": []
+    },
+    {
+      "corpus": "periodic",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2,
+      "patched_exact": 0,
+      "regressed": 2,
+      "fixed": 0,
+      "edit_worse": 2400,
+      "edit_better": 0,
+      "examples": [
+        {
+          "ref": "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no",
+          "chunks": [
+            "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no",
+            "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no",
+            "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no",
+            "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no"
+          ],
+          "upstream": "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no",
+          "patched": "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no"
+        },
+        {
+          "ref": "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey",
+          "chunks": [
+            "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la",
+            "hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la",
+            "hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la",
+            "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey"
+          ],
+          "upstream": "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey",
+          "patched": "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey"
+        }
+      ]
+    },
+    {
+      "corpus": "periodic",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 9,
+      "patched_exact": 0,
+      "regressed": 9,
+      "fixed": 0,
+      "edit_worse": 2400,
+      "edit_better": 0,
+      "examples": [
+        {
+          "ref": "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no",
+          "chunks": [
+            "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no",
+            "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no",
+            "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no tree",
+            "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no"
+          ],
+          "upstream": "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no",
+          "patched": "no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no no"
+        },
+        {
+          "ref": "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey",
+          "chunks": [
+            "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la",
+            "hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la oh",
+            "hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la eh",
+            "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey"
+          ],
+          "upstream": "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey",
+          "patched": "la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey la la la la hey"
+        }
+      ]
+    }
+  ],
+  "conservative_patch": [
+    {
+      "corpus": "ordinary",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 1200,
+      "upstream_exact": 1165,
+      "patched_exact": 1196,
+      "regressed": 0,
+      "fixed": 31,
+      "edit_worse": 0,
+      "edit_better": 32,
+      "examples": []
+    },
+    {
+      "corpus": "ordinary",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 1200,
+      "upstream_exact": 516,
+      "patched_exact": 883,
+      "regressed": 0,
+      "fixed": 367,
+      "edit_worse": 0,
+      "edit_better": 470,
+      "examples": []
+    },
+    {
+      "corpus": "adjacent",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 1200,
+      "upstream_exact": 444,
+      "patched_exact": 551,
+      "regressed": 0,
+      "fixed": 107,
+      "edit_worse": 0,
+      "edit_better": 204,
+      "examples": []
+    },
+    {
+      "corpus": "adjacent",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 1200,
+      "upstream_exact": 215,
+      "patched_exact": 429,
+      "regressed": 0,
+      "fixed": 214,
+      "edit_worse": 0,
+      "edit_better": 514,
+      "examples": []
+    },
+    {
+      "corpus": "natural",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2275,
+      "patched_exact": 2313,
+      "regressed": 0,
+      "fixed": 38,
+      "edit_worse": 0,
+      "edit_better": 38,
+      "examples": []
+    },
+    {
+      "corpus": "natural",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 926,
+      "patched_exact": 1385,
+      "regressed": 0,
+      "fixed": 459,
+      "edit_worse": 0,
+      "edit_better": 713,
+      "examples": []
+    },
+    {
+      "corpus": "repeat_phrases",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 838,
+      "patched_exact": 843,
+      "regressed": 0,
+      "fixed": 5,
+      "edit_worse": 0,
+      "edit_better": 24,
+      "examples": []
+    },
+    {
+      "corpus": "repeat_phrases",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 353,
+      "patched_exact": 409,
+      "regressed": 0,
+      "fixed": 56,
+      "edit_worse": 1,
+      "edit_better": 239,
+      "examples": [
+        {
+          "ref": "and then and then and then government you know you know of the of the you know you know tell in work at the end at the end at the end woman",
+          "chunks": [
+            "and then and then and then government you know you",
+            "government you know you know of the oh",
+            "the of the you know",
+            "you know you know tell in work at the ah",
+            "tell in work at the end at the end",
+            "tree ah end at the end woman",
+            "the end woman"
+          ],
+          "upstream": "and then and then and then government you know you know of the oh of the you know tell in work at the end at the end ah end at the end woman",
+          "patched": "and then and then and then government you know you know of the oh of the you know tell in work at the end at the end woman"
+        }
+      ]
+    },
+    {
+      "corpus": "periodic_bigram",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2189,
+      "patched_exact": 2204,
+      "regressed": 0,
+      "fixed": 15,
+      "edit_worse": 0,
+      "edit_better": 16,
+      "examples": []
+    },
+    {
+      "corpus": "periodic_bigram",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 805,
+      "patched_exact": 1181,
+      "regressed": 0,
+      "fixed": 376,
+      "edit_worse": 1,
+      "edit_better": 634,
+      "examples": [
+        {
+          "ref": "hand and right country and right we time we time on day by you point on day it man a program student it man woman the word think year for the word that week school woman money that week",
+          "chunks": [
+            "hand and right country and right we",
+            "right we time we time on day by you point",
+            "ah on day by you point on day it man a program tree",
+            "tree oh it man a program student it man woman the word",
+            "man woman the word think year for the one",
+            "ah eh for the word that week school woman",
+            "week school woman money that week"
+          ],
+          "upstream": "hand and right country and right we time we time on day by you point on day it man a program tree it man a program student it man woman the word think year for the one eh for the word that week school woman money that week",
+          "patched": "hand and right country and right we time we time on day by you point on day it man a program tree oh it man a program student it man woman the word think year for the one eh for the word that week school woman money that week"
+        }
+      ]
+    },
+    {
+      "corpus": "prose",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 3200,
+      "upstream_exact": 3143,
+      "patched_exact": 3147,
+      "regressed": 0,
+      "fixed": 4,
+      "edit_worse": 0,
+      "edit_better": 4,
+      "examples": []
+    },
+    {
+      "corpus": "prose",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 3200,
+      "upstream_exact": 1195,
+      "patched_exact": 1771,
+      "regressed": 0,
+      "fixed": 576,
+      "edit_worse": 0,
+      "edit_better": 931,
+      "examples": []
+    },
+    {
+      "corpus": "periodic",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 5,
+      "patched_exact": 5,
+      "regressed": 0,
+      "fixed": 0,
+      "edit_worse": 0,
+      "edit_better": 0,
+      "examples": []
+    },
+    {
+      "corpus": "periodic",
+      "seconds": 5,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 5,
+      "patched_exact": 5,
+      "regressed": 0,
+      "fixed": 0,
+      "edit_worse": 0,
+      "edit_better": 0,
+      "examples": []
+    },
+    {
+      "corpus": "ordinary",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 1200,
+      "upstream_exact": 1107,
+      "patched_exact": 1193,
+      "regressed": 0,
+      "fixed": 86,
+      "edit_worse": 0,
+      "edit_better": 87,
+      "examples": []
+    },
+    {
+      "corpus": "ordinary",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 1200,
+      "upstream_exact": 970,
+      "patched_exact": 1119,
+      "regressed": 1,
+      "fixed": 150,
+      "edit_worse": 8,
+      "edit_better": 168,
+      "examples": [
+        {
+          "ref": "say could it came name write low give if little then we take sound there his thing about sound my use has could sentence go did more of but say was live but water help we could that name in than any after for look for which their work write came down no first like give name make as like make what two as where more day first after out an no how work who one him more what help she made will can go we just or any come name had every first think know name thing said where all each use are said look were come we me we where side two this great year see thing say",
+          "chunks": [
+            "say could it came name write low give if little then we take sound there his thing about sound my use has could sentence go did more of but say was live but water help we could that name in than any after for look for which their work write came down no",
+            "tree but water help we could that name in than any after for look for which their work write came down no first like give name make as like make what two as where more day first after out an no how work who one him more what help she made will one",
+            "tree ah as where more day first after out an no how work who one him more what help she made will can go we just or any come name had every first think know name thing said where all each use are said look were come we me we where side two this",
+            "think know name thing said where all each use are said look were come we me we where side two this great year see thing say"
+          ],
+          "upstream": "say could it came name write low give if little then we take sound there his thing about sound my use has could sentence go did more of but say was live but water help we could that name in than any after for look for which their work write came down no first like give name make as like make what two as where more day first after out an no how work who one him more how work who one him more what help she made will can go we just or any come name had every first think know name thing said where all each use are said look were come we me we where side two this great year see thing say",
+          "patched": "say could it came name write low give if little then we take sound there his thing about sound my use has could sentence go did more of but say was live but water help we could that name in than any after for look for which their work write came down no first like give name make as like make what two as where more day first after out an no how work who one him more no how work who one him more what help she made will can go we just or any come name had every first think know name thing said where all each use are said look were come we me we where side two this great year see thing say"
+        },
+        {
+          "ref": "come most round under no think our then under did than water other and work most or round most will down then by have low who sound have work do now an were very how what more through way two people an on day like word form said make come most after say people or when side little could our make their some are and down many only two know them take think can there with call think little look which come your time thing only but show people their help out they is time of what all work their this said side know so by down them show your say them a who man after in had no it form other form first in with water work do do about know which there have number your was make many could if did show down could there it thing people first that can you only all sentence low come had you down form get down see had she like are of all look it have place back write name we long had what year your which find said every up has form your part call he work down for how year her a and about which they be there some it many we you where now her you and up a in in only me her to have some form most long have show on a sentence my which make of to her form be very when low be came these part do she number show so first more give sound most say if little who in find of are",
+          "chunks": [
+            "come most round under no think our then under did than water other and work most or round most will down then by have low who sound have work do now an were very how what more through way two people an on day like word form said make come most after say people or",
+            "what more through way two people an on day like word form said make come most after say people or when side little could our make their some are and down many only two know them take think can there with call think little look which come your",
+            "are and down many only two know them take think can there with call think little look which come your time thing only but show people their help out they is time of what all work their this said side know so by down them show your say them uh",
+            "time of what all work their this said side know so by down them show your say them a who man after in had no it form other form first in with water work do do about know which there have number your was make many could if did show down could",
+            "uh with water work do do about know which there have number your was make many could if did show down could there it thing people first that can you only all sentence low come had you down form get down see had she like are of all look it have place back write name we long tree",
+            "tree one had you down form get down see had she like are of all look it have place back write name we long had what year your which find said every up has form your part call he work down for how year her a and about which they be there some it many",
+            "one has form your part call he work down for how year her a and about which they be there some it many we you where now her you and up a in in only me her to have some form most long have show on a sentence my which make of to her form be",
+            "her to have some form most long have show on a sentence my which make of to her form be very when low be came these part do she number show so first more give sound most say if little who in find of are"
+          ],
+          "upstream": "come most round under no think our then under did than water other and work most or round most will down then by have low who sound have work do now an were very how what more through way two people an on day like word form said make come most after say people or when side little could our make their some are and down many only two know them take think can there with call think little look which come your time thing only but show people their help out they is time of what all work their this said side know so by down them show your say them a who man after in had no it form other form first in with water work do do about know which there have number your was make many could if did show down could there it thing people first that can you only all sentence low come had you down form get down see had she like are of all look it have are of all look it have place back write name we long had what year your which find said every up has form your part call he work down for how year her a and about which they be there some it many we you where now her you and up a in in only me her to have some form most long have show on a sentence my which make of to her form be very when low be came these part do she number show so first more give sound most say if little who in find of are",
+          "patched": "come most round under no think our then under did than water other and work most or round most will down then by have low who sound have work do now an were very how what more through way two people an on day like word form said make come most after say people or when side little could our make their some are and down many only two know them take think can there with call think little look which come your time thing only but show people their help out they is time of what all work their this said side know so by down them show your say them a who man after in had no it form other form first in with water work do do about know which there have number your was make many could if did show down could there it thing people first that can you only all sentence low come had you down form get down see had she like are of all look it have like are of all look it have place back write name we long had what year your which find said every up has form your part call he work down for how year her a and about which they be there some it many we you where now her you and up a in in only me her to have some form most long have show on a sentence my which make of to her form be very when low be came these part do she number show so first more give sound most say if little who in find of are"
+        }
+      ]
+    },
+    {
+      "corpus": "adjacent",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 1200,
+      "upstream_exact": 447,
+      "patched_exact": 1130,
+      "regressed": 0,
+      "fixed": 683,
+      "edit_worse": 0,
+      "edit_better": 715,
+      "examples": []
+    },
+    {
+      "corpus": "adjacent",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 1200,
+      "upstream_exact": 429,
+      "patched_exact": 1068,
+      "regressed": 1,
+      "fixed": 640,
+      "edit_worse": 2,
+      "edit_better": 701,
+      "examples": [
+        {
+          "ref": "water it or be be be could could who who only only down of when out show part go with sound sound what than could said name show who day make way will say number number number number long were were low there may may may to his very take take take he thing one been about about back when your your she go number number part people part man a a through thing make number every every no when through back little go go there there see people over know side side they find any any this this this that line line came line line one are are side live get get so in in in you some side side could how come come come many an they they new new live live through did did our man she each no have have first first are are have have said said will will now now under under side side side through but like him back back long long give over his what so said over over any any made them them them out other come he so my on a can can can our our look way down look from from from come work with them get up up then then then then write give man line line line line made about if one line give came came came were low now your had from from these thing your",
+          "chunks": [
+            "water it or be be be could could who who only only down of when out show part go with sound sound what than could said name show who day make way will say number number number number long were were low there may may may to his very take take",
+            "uh way will say number number number number long were were low there may may may to his very take take take he thing one been about about back when your your she go number number part people part man a a through thing make number every every no when uh",
+            "one oh she go number number part people part man a a through thing make number every every no when through back little go go there there see people over know side side they find any any this this this that line line came line line one are are side live get eh",
+            "side they find any any this this this that line line came line line one are are side live get get so in in in you some side side could how come come come many an they they new new live live through did did our man she each no have",
+            "come come many an they they new new live live through did did our man she each no have have first first are are have have said said will will now now under under side side side through but like him back back long long eh",
+            "said will will now now under under side side side through but like him back back long long give over his what so said over over any any made them them them out other come he so my on a can can can our our look way down look from from from come work",
+            "out other come he so my on a can can can our our look way down look from from from come work with them get up up then then then then write give man line line line line made about if one line give came came came were low now your had",
+            "give man line line line line made about if one line give came came came were low now your had from from these thing your"
+          ],
+          "upstream": "water it or be be be could could who who only only down of when out show part go with sound sound what than could said name show who day make way will say number number number number long were were low there may may may to his very take take take he thing one been about about back when your your she go number number part people part man a a through thing make a a through thing make number every every no when through back little go go there there see people over know side side they find any any this this this that line line came line line one are are side live get get so in in in you some side side could how come come come many an they they new new live live through did did our man she each no have have first first are are have have said said will will now now under under side side side through but like him back back long long give over his what so said over over any any made them them them out other come he so my on a can can can our our look way down look from from from come work with them get up up then then then then write give man line line line line made about if one line give came came came were low now your had from from these thing your",
+          "patched": "water it or be be be could could who who only only down of when out show part go with sound sound what than could said name show who day make way will say number number number number long were were low there may may may to his very take take take he thing one been about about back when your your she go number number part people part man a a through thing make man a a through thing make number every every no when through back little go go there there see people over know side side they find any any this this this that line line came line line one are are side live get get so in in in you some side side could how come come come many an they they new new live live through did did our man she each no have have first first are are have have said said will will now now under under side side side through but like him back back long long give over his what so said over over any any made them them them out other come he so my on a can can can our our look way down look from from from come work with them get up up then then then then write give man line line line line made about if one line give came came came were low now your had from from these thing your"
+        },
+        {
+          "ref": "sentence which which her think they he he he so back many do round more all all all her take this do do through may may like over as like where where work my made for when when your how little give had may may may people then are him him many two sentence every every every every was was was an an an an may may up some take time when when when each my was two two he he he this this could could round sound one in other other when when when what what what he more take and and little little can how write may first part part then which come may are are are are name name these these these these who who who no has them up at would get down and help day so so over up any any for make on on on an some some look two two out out out most good were write write help so so so how through which first first back time call it of this how new new these if very great great great great it line",
+          "chunks": [
+            "sentence which which her think they he he he so back many do round more all all all her take this do do through may may like over as like where where work my made for when when your how little give had may may may people",
+            "like over as like where where work my made for when when your how little give had may may may people then are him him many two sentence every every every every was was was an an an an may may up some take time when when when each my was two two he he he this",
+            "oh ah was an an an an may may up some take time when when when each my was two two he he he this this could could round sound one in other other when when when what what what he more take and and little little can how write may first part part then which come may are are are",
+            "one um what what what he more take and and little little can how write may first part part then which come may are are are are name name these these these these who who who no has them up at would get down and help day so so over up any any for make on on",
+            "oh ah them up at would get down and help day so so over up any any for make on on on an some some look two two out out out most good were write write help so so so how through which first first back time call it of this how new new these if very great oh",
+            "out most good were write write help so so so how through which first first back time call it of this how new new these if very great great great great it line"
+          ],
+          "upstream": "sentence which which her think they he he he so back many do round more all all all her take this do do through may may like over as like where where work my made for when when your how little give had may may may people then are him him many two sentence every every every every was was was an an an an may may up some take time when when when each my was two two he he he this this could could round sound one in other other when when when what what what he more take and and little little can how write may first part part then which come may are are are are name name these these these these who who who no has them up at would get down and help day so so over up any any for make on on on an some some look two two out out out most good were write write help so so so how through which first first back time call it of this how new new these if very great great great great it line",
+          "patched": "sentence which which her think they he he he so back many do round more all all all her take this do do through may may like over as like where where work my made for when when your how little give had may may may people then are him him many two sentence every every every every was was was an an an an may may up some take time when when when each my was two two he he he this this could could round sound one in other other when when when what what what he more take and and little little can how write may first part part then which come may are are are are name name these these these these who who who no has them up at would get down and help day so so over up any any for make on on on an some some look two two out out out most good were write write help so so so how through which first first back time call it of this how through which first first back time call it of this how new new these if very great great great great it line"
+        }
+      ]
+    },
+    {
+      "corpus": "natural",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2032,
+      "patched_exact": 2374,
+      "regressed": 0,
+      "fixed": 342,
+      "edit_worse": 0,
+      "edit_better": 350,
+      "examples": []
+    },
+    {
+      "corpus": "natural",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 1835,
+      "patched_exact": 2215,
+      "regressed": 1,
+      "fixed": 381,
+      "edit_worse": 16,
+      "edit_better": 416,
+      "examples": [
+        {
+          "ref": "call a one two three at that think this story by story it we tell area system it where the people from in the of no see and from government right is find day is part try study that week is by a ask and then work the people you at number in the people know you no at the end you know where we will is need no woman at the end it in right night went and then on that he at by you a one two three by and and then work month for of thing day lot ask word child as they for week is a one two three is is on no went went for it want it very I'm sorry feel at and then life you know where we of the on the for with day from at government at want come we they job find week they we will in the question we will number we by word of the people month government try at of way you know book want come is it we of the think work and said no where on day job question is you know they of the in work to group question family thing on it no with family day said and area tell that this child this this government take in take program to that of the at government ask",
+          "chunks": [
+            "call a one two three at that think this story by story it we tell area system it where the people from in the of no see and from government right is find day is part try study that week is by a ask and then work the people you at number",
+            "is find day is part try study that week is by a ask and then work the people you at number in the people know you no at the end you know where we will is need no woman at the end it in right night went and then on that he",
+            "um you know where we will is need no woman at the end it in right night went and then on that he at by you a one two three by and and then work month for of thing day lot ask word child as they for week is a one two three is is on no uh",
+            "one ah thing day lot ask word child as they for week is a one two three is is on no went went for it want it very I'm sorry feel at and then life you know where we of the on the for with day from at government at want come we they job find",
+            "life you know where we of the on the for with day from at government at want come we they job find week they we will in the question we will number we by word of the people month government try at of way you know",
+            "we will number we by word of the people month government try at of way you know book want come is it we of the think work and said no where on day job question is you know they of the in work to group question family thing on it no",
+            "and said no where on day job question is you know they of the in work to group question family thing on it no with family day said and area tell that this child this this government take in take program to that of the at government ask"
+          ],
+          "upstream": "call a one two three at that think this story by story it we tell area system it where the people from in the of no see and from government right is find day is part try study that week is by a ask and then work the people you at number in the people know you no at the end you know where we will is need no woman at the end it in right night went and then on that he at by you a one two three by and and then work month for of thing day lot ask word child as they for week is a one is a one two three is is on no went went for it want it very I'm sorry feel at and then life you know where we of the on the for with day from at government at want come we they job find week they we will in the question we will number we by word of the people month government try at of way you know book want come is it we of the think work and said no where on day job question is you know they of the in work to group question family thing on it no with family day said and area tell that this child this this government take in take program to that of the at government ask",
+          "patched": "call a one two three at that think this story by story it we tell area system it where the people from in the of no see and from government right is find day is part try study that week is by a ask and then work the people you at number in the people know you no at the end you know where we will is need no woman at the end it in right night went and then on that he at by you a one two three by and and then work month for of thing day lot ask word child as they for week is a one week is a one two three is is on no went went for it want it very I'm sorry feel at and then life you know where we of the on the for with day from at government at want come we they job find week they we will in the question we will number we by word of the people month government try at of way you know book want come is it we of the think work and said no where on day job question is you know they of the in work to group question family thing on it no with family day said and area tell that this child this this government take in take program to that of the at government ask"
+        },
+        {
+          "ref": "said he we find we mother is one two three we as this it for want question room I think of for state as I you room at the end work at as for he tell ask way they by we that need with he this school want use right you time I to see on come life and study we use by that mother ask it want from one two three the in the he problem I'm sorry very went from a as people ask day no of man child we you in to people made by we will at think he need year one two three and then tell we we will to went to this I think this the system student time time government the as by and said part mother you one two three made school and then system man he as think we will with school try room student at month the area we will and of the area fact way job thing month take woman of as is of a eye where try the",
+          "chunks": [
+            "said he we find we mother is one two three we as this it for want question room I think of for state as I you room at the end work at as for he tell ask way they by we that need with he this school want eh",
+            "work at as for he tell ask way they by we that need with he this school want use right you time I to see on come life and study we use by that mother ask it want from one two three the in one",
+            "and study we use by that mother ask it want from one two three the in the he problem I'm sorry very went from a as people ask day no of man child we you in to people made by we will at think he need year one ah",
+            "as people ask day no of man child we you in to people made by we will at think he need year one two three and then tell we we will to went to this I think this the system student time time government the as by and said part mother you one two three made school and then system",
+            "uh think this the system student time time government the as by and said part mother you one two three made school and then system man he as think we will with school try room student at month the area we will and of the area fact way job thing month take woman of as uh",
+            "uh um at month the area we will and of the area fact way job thing month take woman of as is of a eye where try the"
+          ],
+          "upstream": "said he we find we mother is one two three we as this it for want question room I think of for state as I you room at the end work at as for he tell ask way they by we that need with he this school want use right you time I to see on come life and study we use by that mother ask it want from one two three the in the he problem I'm sorry very went from a as people ask day no of man child we you in to people made by we will at think he need year one two three and then tell we we will to went to this I think this the system student time time government the as by and said part mother you one two three made school and then system man he as think we will with school try room student at month the area we will and of the area fact way job the area fact way job thing month take woman of as is of a eye where try the",
+          "patched": "said he we find we mother is one two three we as this it for want question room I think of for state as I you room at the end work at as for he tell ask way they by we that need with he this school want use right you time I to see on come life and study we use by that mother ask it want from one two three the in the he problem I'm sorry very went from a as people ask day no of man child we you in to people made by we will at think he need year one two three and then tell we we will to went to this I think this the system student time time government the as by and said part mother you one two three made school and then system man he as think we will with school try room student at month the area we will and of the area fact way job thing the area fact way job thing month take woman of as is of a eye where try the"
+        }
+      ]
+    },
+    {
+      "corpus": "repeat_phrases",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 790,
+      "patched_exact": 797,
+      "regressed": 0,
+      "fixed": 7,
+      "edit_worse": 0,
+      "edit_better": 36,
+      "examples": []
+    },
+    {
+      "corpus": "repeat_phrases",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 771,
+      "patched_exact": 781,
+      "regressed": 0,
+      "fixed": 10,
+      "edit_worse": 0,
+      "edit_better": 37,
+      "examples": []
+    },
+    {
+      "corpus": "periodic_bigram",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 1871,
+      "patched_exact": 2344,
+      "regressed": 0,
+      "fixed": 473,
+      "edit_worse": 0,
+      "edit_better": 483,
+      "examples": []
+    },
+    {
+      "corpus": "periodic_bigram",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 1689,
+      "patched_exact": 2246,
+      "regressed": 4,
+      "fixed": 561,
+      "edit_worse": 11,
+      "edit_better": 599,
+      "examples": [
+        {
+          "ref": "from said went family from said with come money week at with come work and book child and book this day a this day school it find it find find they know call the life they know state by come thing by come is student study the see the see you country month home you country area program a man job a man this world government fact this world job is ask job at he is ask see it week it week want in this system we feel with this system they work group they work government on place for feel story on place money he want at in he want it room that it room by and with lot place right with lot that case I tell way that case is government is government as take take said as take the day the day I made think night area I made man said he use world home we he use time to work we to work you school take you school this student study see this student a fact number think a fact at week",
+          "chunks": [
+            "from said went family from said with come money week at with come work and book child and book this day a this day school it find it find find they know call the life they know state by come thing by come is student study the see the see you country month tree",
+            "know call the life they know state by come thing by come is student study the see the see you country month home you country area program a man job a man this world government fact this world job is ask job at he is ask see it week it week want in this",
+            "ah uh government fact this world job is ask job at he is ask see it week it week want in this system we feel with this system they work group they work government on place for feel story on place money he want at in he want it room that it room by and with lot place one",
+            "one uh on place for feel story on place money he want at in he want it room that it room by and with lot place right with lot that case I tell way that case is government is government as take take said as take the day the day I made think night area I made man said he use world home we he use",
+            "as take take said as take the day the day I made think night area I made man said he use world home we he use time to work we to work you school take you school this student study see this student a fact number think a fact at week"
+          ],
+          "upstream": "from said went family from said with come money week at with come work and book child and book this day a this day school it find it find find they know call the life they know state by come thing by come is student study the see the see you country month home you country area program a man job a man this world government fact this world job is ask job at he is ask see it week it week want in this system we feel with this system they work group they work government on place for feel story on place money he want at in he want it room that it at in he want it room that it room by and with lot place right with lot that case I tell way that case is government is government as take take said as take the day the day I made think night area I made man said he use world home we he use time to work we to work you school take you school this student study see this student a fact number think a fact at week",
+          "patched": "from said went family from said with come money week at with come work and book child and book this day a this day school it find it find find they know call the life they know state by come thing by come is student study the see the see you country month home you country area program a man job a man this world government fact this world job is ask job at he is ask see it week it week want in this system we feel with this system they work group they work government on place for feel story on place money he want at in he want it room that it want at in he want it room that it room by and with lot place right with lot that case I tell way that case is government is government as take take said as take the day the day I made think night area I made man said he use world home we he use time to work we to work you school take you school this student study see this student a fact number think a fact at week"
+        },
+        {
+          "ref": "at world point fact look at world company right of question of woman of question by month call by month people life by try point in by try to group state company to group at made this at made we a thing on way as it group it group the feel life I family the feel water room for of area is room this world right case man this world it eye case from with school of you hand with school as government need lot for book for book you month word you month for room at child question week world at child child a word woman area a word and story and story he water number on he water a number you by story a number the point book take come the point of number work of number eye said to lot to lot is take it is take this thing this thing we and come want is and come with thing for way thing for way story call on home at country on home we company come need by we company from country know people time from country on school people study on school he week book we he week we hand for case we hand it said went school it said fact a family a family take work by student and by student as work case ask book as work family",
+          "chunks": [
+            "at world point fact look at world company right of question of woman of question by month call by month people life by try point in by try to group state company to group at made this at made we a thing on way as it group it group the feel",
+            "group at made this at made we a thing on way as it group it group the feel life I family the feel water room for of area is room this world right case man this world it eye case from with school of you hand with one",
+            "is room this world right case man this world it eye case from with school of you hand with school as government need lot for book for book you month word you month for room at child question week world at child child a word woman area a word and story",
+            "for room at child question week world at child child a word woman area a word and story and story he water number on he water a number you by story a number the point book take come the point of number work",
+            "number you by story a number the point book take come the point of number work of number eye said to lot to lot is take it is take this thing this thing we and come want is and come with thing for way ah",
+            "is take this thing this thing we and come want is and come with thing for way thing for way story call on home at country on home we company come need by we company from country know people time from country on school people study on school he",
+            "tree eh come need by we company from country know people time from country on school people study on school he week book we he week we hand for case we hand it said went school it said fact a family a family take work by student and by student as work case ask book oh",
+            "oh um went school it said fact a family a family take work by student and by student as work case ask book as work family"
+          ],
+          "upstream": "at world point fact look at world company right of question of woman of question by month call by month people life by try point in by try to group state company to group at made this at made we a thing on way as it group it group the feel life I family the feel water room for of area is room this world right case man this world it eye case from with school of you hand with school as government need lot for book for book you month word you month for room at child question week world at child child a word woman area a word and story and story he water number on he water a number you by story a number the point book take come the point of number work of number eye said to lot to lot is take it is take this thing this thing we and come want is and come with thing for way thing for way story call on home at country on home we company come need by we company from country know people time from country on school people study on school he week book we he week we hand for case we hand it said went school it said fact a family a family take work by student and by family take work by student and by student as work case ask book as work family",
+          "patched": "at world point fact look at world company right of question of woman of question by month call by month people life by try point in by try to group state company to group at made this at made we a thing on way as it group it group the feel life I family the feel water room for of area is room this world right case man this world it eye case from with school of you hand with school as government need lot for book for book you month word you month for room at child question week world at child child a word woman area a word and story and story he water number on he water a number you by story a number the point book take come the point of number work of number eye said to lot to lot is take it is take this thing this thing we and come want is and come with thing for way thing for way story call on home at country on home we company come need by we company from country know people time from country on school people study on school he week book we he week we hand for case we hand it said went school it said fact a family a family take work by student and by student family take work by student and by student as work case ask book as work family"
+        }
+      ]
+    },
+    {
+      "corpus": "prose",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 3200,
+      "upstream_exact": 2815,
+      "patched_exact": 3163,
+      "regressed": 0,
+      "fixed": 348,
+      "edit_worse": 0,
+      "edit_better": 356,
+      "examples": []
+    },
+    {
+      "corpus": "prose",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 3200,
+      "upstream_exact": 2539,
+      "patched_exact": 3008,
+      "regressed": 2,
+      "fixed": 471,
+      "edit_worse": 16,
+      "edit_better": 506,
+      "examples": [
+        {
+          "ref": "in llamadart-native Do not add Apple SPM runtime binaries or Flutter plugin manifests to the core package root; keep them isolated in the Flutter runtime companion packages under packages Do not treat bridge runtime internals as owned by this repo; those belong in llama-web-bridge Where changes should go llama.cpp native wrapper runtime behavior and Apple SPM-compatible artifacts: llamadart-native LiteRT-LM native wrapper runtime behavior and Apple SPM-compatible artifacts: litert-lm-native Flutter Apple SPM package manifests: packages llamadart llama cpp flutter and packages llamadart litert lm flutter Web bridge runtime behavior: llama-web-bridge Published bridge assets: llama-web-bridge-assets Dart API runtime selection docs tests: llamadart Why this matters Keeping ownership boundaries clear avoids drift between: bundle publishing pipelines, runtime contract implementations, and consumer-facing Dart APIs. It also keeps this repo focused on integration correctness. title: Migration to Key breaking changes from to ChatSession API shape changed Removed helper APIs: session.chat session.chatText Use streaming create with content parts instead: LlamaChatMessage constructor renames LlamaChatMessage.text LlamaChatMessage.fromText LlamaChatMessage.multimodal LlamaChatMessage.withContent Logging moved out of ModelParams ModelParams logLevel: was removed. Use engine-level logging controls: await engine.setDartLogLevel await engine.setNativeLogLevel or await engine.setLogLevel Model reload now requires explicit unload loadModel throws if a model is already loaded. Public exports were tightened Package-root exports removed several internals, including: ToolRegistry LlamaTokenizer ChatTemplateProcessor Prefer the supported surfaces: LlamaEngine ChatSession template APIs and tool definitions in package:llamadart llamadart.dart Custom backend implementations need updates If you",
+          "chunks": [
+            "in llamadart-native Do not add Apple SPM runtime binaries or Flutter plugin manifests to the core package root; keep them isolated in the Flutter runtime companion packages under packages Do not treat bridge runtime internals as owned by this repo; those belong in llama-web-bridge Where changes should go llama.cpp native wrapper runtime behavior and Apple SPM-compatible artifacts: llamadart-native",
+            "by this repo; those belong in llama-web-bridge Where changes should go llama.cpp native wrapper runtime behavior and Apple SPM-compatible artifacts: llamadart-native LiteRT-LM native wrapper runtime behavior and Apple SPM-compatible artifacts: litert-lm-native Flutter Apple SPM package manifests: packages llamadart llama cpp flutter and packages llamadart litert lm flutter Web bridge runtime behavior:",
+            "litert-lm-native Flutter Apple SPM package manifests: packages llamadart llama cpp flutter and packages llamadart litert lm flutter Web bridge runtime behavior: llama-web-bridge Published bridge assets: llama-web-bridge-assets Dart API runtime selection docs tests: llamadart Why this matters Keeping ownership boundaries clear avoids drift between: bundle publishing pipelines, runtime contract implementations, and consumer-facing Dart",
+            "docs tests: llamadart Why this matters Keeping ownership boundaries clear avoids drift between: bundle publishing pipelines, runtime contract implementations, and consumer-facing Dart APIs. It also keeps this repo focused on integration correctness. title: Migration to Key breaking changes from to ChatSession API shape changed Removed helper APIs: session.chat session.chatText Use streaming create with content parts instead: LlamaChatMessage",
+            "tree one Migration to Key breaking changes from to ChatSession API shape changed Removed helper APIs: session.chat session.chatText Use streaming create with content parts instead: LlamaChatMessage constructor renames LlamaChatMessage.text LlamaChatMessage.fromText LlamaChatMessage.multimodal LlamaChatMessage.withContent Logging moved out of ModelParams ModelParams logLevel: was removed. Use engine-level logging controls: await engine.setDartLogLevel await engine.setNativeLogLevel or await engine.setLogLevel Model reload now requires explicit eh",
+            "one eh ModelParams logLevel: was removed. Use engine-level logging controls: await engine.setDartLogLevel await engine.setNativeLogLevel or await engine.setLogLevel Model reload now requires explicit unload loadModel throws if a model is already loaded. Public exports were tightened Package-root exports removed several internals, including: ToolRegistry LlamaTokenizer ChatTemplateProcessor Prefer the supported surfaces: LlamaEngine ChatSession template APIs and",
+            "tightened Package-root exports removed several internals, including: ToolRegistry LlamaTokenizer ChatTemplateProcessor Prefer the supported surfaces: LlamaEngine ChatSession template APIs and tool definitions in package:llamadart llamadart.dart Custom backend implementations need updates If you"
+          ],
+          "upstream": "in llamadart-native Do not add Apple SPM runtime binaries or Flutter plugin manifests to the core package root; keep them isolated in the Flutter runtime companion packages under packages Do not treat bridge runtime internals as owned by this repo; those belong in llama-web-bridge Where changes should go llama.cpp native wrapper runtime behavior and Apple SPM-compatible artifacts: llamadart-native LiteRT-LM native wrapper runtime behavior and Apple SPM-compatible artifacts: litert-lm-native Flutter Apple SPM package manifests: packages llamadart llama cpp flutter and packages llamadart litert lm flutter Web bridge runtime behavior: llama-web-bridge Published bridge assets: llama-web-bridge-assets Dart API runtime selection docs tests: llamadart Why this matters Keeping ownership boundaries clear avoids drift between: bundle publishing pipelines, runtime contract implementations, and consumer-facing Dart APIs. It also keeps this repo focused on integration correctness. title: Migration to Key breaking changes from to ChatSession API shape changed Removed helper APIs: session.chat session.chatText Use streaming create with content parts instead: LlamaChatMessage constructor renames LlamaChatMessage.text LlamaChatMessage.fromText LlamaChatMessage.multimodal LlamaChatMessage.withContent Logging moved out of ModelParams ModelParams logLevel: was removed. Use engine-level logging controls: await engine.setDartLogLevel await engine.setNativeLogLevel or await engine.setNativeLogLevel or await engine.setLogLevel Model reload now requires explicit unload loadModel throws if a model is already loaded. Public exports were tightened Package-root exports removed several internals, including: ToolRegistry LlamaTokenizer ChatTemplateProcessor Prefer the supported surfaces: LlamaEngine ChatSession template APIs and tool definitions in package:llamadart llamadart.dart Custom backend implementations need updates If you",
+          "patched": "in llamadart-native Do not add Apple SPM runtime binaries or Flutter plugin manifests to the core package root; keep them isolated in the Flutter runtime companion packages under packages Do not treat bridge runtime internals as owned by this repo; those belong in llama-web-bridge Where changes should go llama.cpp native wrapper runtime behavior and Apple SPM-compatible artifacts: llamadart-native LiteRT-LM native wrapper runtime behavior and Apple SPM-compatible artifacts: litert-lm-native Flutter Apple SPM package manifests: packages llamadart llama cpp flutter and packages llamadart litert lm flutter Web bridge runtime behavior: llama-web-bridge Published bridge assets: llama-web-bridge-assets Dart API runtime selection docs tests: llamadart Why this matters Keeping ownership boundaries clear avoids drift between: bundle publishing pipelines, runtime contract implementations, and consumer-facing Dart APIs. It also keeps this repo focused on integration correctness. title: Migration to Key breaking changes from to ChatSession API shape changed Removed helper APIs: session.chat session.chatText Use streaming create with content parts instead: LlamaChatMessage constructor renames LlamaChatMessage.text LlamaChatMessage.fromText LlamaChatMessage.multimodal LlamaChatMessage.withContent Logging moved out of ModelParams ModelParams logLevel: was removed. Use engine-level logging controls: await engine.setDartLogLevel await engine.setNativeLogLevel or await engine.setDartLogLevel await engine.setNativeLogLevel or await engine.setLogLevel Model reload now requires explicit unload loadModel throws if a model is already loaded. Public exports were tightened Package-root exports removed several internals, including: ToolRegistry LlamaTokenizer ChatTemplateProcessor Prefer the supported surfaces: LlamaEngine ChatSession template APIs and tool definitions in package:llamadart llamadart.dart Custom backend implementations need updates If you"
+        },
+        {
+          "ref": "command-line workflow. llamadart Server llamadart-server OpenAI-compatible local HTTP server. TUI Coding Agent tui-coding-agent nocterm-based coding assistant flow. Which one should I start with? Learn API surface first: start with Basic App. Learn local embedding flows quickly: use Basic App embedding CLI. Learn local embedding vector database retrieval: use Basic App SQLite vector CLI. Build a product UI: start with Chat App. Need terminal workflow parity: start with llama CLI. Need HTTP integration for tools agents: start with llamadart Server. Need an interactive coding-agent terminal UI: start with TUI Coding Agent. Global example requirements Dart SDK Flutter SDK for Flutter examples Flutter Apple example builds that use SwiftPM companion packages require deployment targets of iOS or macOS or newer Internet on first run runtime bundle resolution The Chat App keeps the default all-runtime native-assets configuration because it demonstrates GGUF and models. title: TUI Coding Agent Example Path: example tui coding agent This example is a deliberately small, Pi-style local coding agent built with nocterm and llamadart It uses one model, one in-memory conversation, one screen, and four general tools. Run Select a different workspace, model, or cache only at startup: The default model is the native-desktop Unsloth K M GGUF at hf: unsloth K M.gguf intended for systems with at least GB of RAM. Its non-thinking preset uses a context, up to output tokens, an explicit logical batch size",
+          "chunks": [
+            "command-line workflow. llamadart Server llamadart-server OpenAI-compatible local HTTP server. TUI Coding Agent tui-coding-agent nocterm-based coding assistant flow. Which one should I start with? Learn API surface first: start with Basic App. Learn local embedding flows quickly: use Basic App embedding CLI. Learn local embedding vector database retrieval: use Basic App SQLite",
+            "App. Learn local embedding flows quickly: use Basic App embedding CLI. Learn local embedding vector database retrieval: use Basic App SQLite vector CLI. Build a product UI: start with Chat App. Need terminal workflow parity: start with llama CLI. Need HTTP integration for tools agents: start with llamadart Server. Need an interactive coding-agent terminal UI:",
+            "workflow parity: start with llama CLI. Need HTTP integration for tools agents: start with llamadart Server. Need an interactive coding-agent terminal UI: start with TUI Coding Agent. Global example requirements Dart SDK Flutter SDK for Flutter examples Flutter Apple example builds that use SwiftPM companion packages require deployment targets of iOS or macOS oh",
+            "requirements Dart SDK Flutter SDK for Flutter examples Flutter Apple example builds that use SwiftPM companion packages require deployment targets of iOS or macOS or newer Internet on first run runtime bundle resolution The Chat App keeps the default all-runtime native-assets configuration because it demonstrates GGUF and models. title: TUI Coding Agent Example Path: example ah",
+            "tree keeps the default all-runtime native-assets configuration because it demonstrates GGUF and models. title: TUI Coding Agent Example Path: example tui coding agent This example is a deliberately small, Pi-style local coding agent built with nocterm and llamadart It uses one model, one in-memory conversation, one screen, and four general tools. Run Select a different tree",
+            "tree uh built with nocterm and llamadart It uses one model, one in-memory conversation, one screen, and four general tools. Run Select a different workspace, model, or cache only at startup: The default model is the native-desktop Unsloth K M GGUF at hf: unsloth K M.gguf intended for systems with at least GB eh",
+            "model is the native-desktop Unsloth K M GGUF at hf: unsloth K M.gguf intended for systems with at least GB of RAM. Its non-thinking preset uses a context, up to output tokens, an explicit logical batch size"
+          ],
+          "upstream": "command-line workflow. llamadart Server llamadart-server OpenAI-compatible local HTTP server. TUI Coding Agent tui-coding-agent nocterm-based coding assistant flow. Which one should I start with? Learn API surface first: start with Basic App. Learn local embedding flows quickly: use Basic App embedding CLI. Learn local embedding vector database retrieval: use Basic App SQLite vector CLI. Build a product UI: start with Chat App. Need terminal workflow parity: start with llama CLI. Need HTTP integration for tools agents: start with llamadart Server. Need an interactive coding-agent terminal UI: start with TUI Coding Agent. Global example requirements Dart SDK Flutter SDK for Flutter examples Flutter Apple example builds that use SwiftPM companion packages require deployment targets of iOS or macOS or newer Internet on first run runtime bundle resolution The Chat App keeps the default all-runtime native-assets configuration because it demonstrates GGUF and models. title: TUI Coding Agent Example Path: example tui coding agent This example is a deliberately small, Pi-style local coding agent built with nocterm and llamadart It uses one model, one in-memory conversation, one screen, and four one in-memory conversation, one screen, and four general tools. Run Select a different workspace, model, or cache only at startup: The default model is the native-desktop Unsloth K M GGUF at hf: unsloth K M.gguf intended for systems with at least GB of RAM. Its non-thinking preset uses a context, up to output tokens, an explicit logical batch size",
+          "patched": "command-line workflow. llamadart Server llamadart-server OpenAI-compatible local HTTP server. TUI Coding Agent tui-coding-agent nocterm-based coding assistant flow. Which one should I start with? Learn API surface first: start with Basic App. Learn local embedding flows quickly: use Basic App embedding CLI. Learn local embedding vector database retrieval: use Basic App SQLite vector CLI. Build a product UI: start with Chat App. Need terminal workflow parity: start with llama CLI. Need HTTP integration for tools agents: start with llamadart Server. Need an interactive coding-agent terminal UI: start with TUI Coding Agent. Global example requirements Dart SDK Flutter SDK for Flutter examples Flutter Apple example builds that use SwiftPM companion packages require deployment targets of iOS or macOS or newer Internet on first run runtime bundle resolution The Chat App keeps the default all-runtime native-assets configuration because it demonstrates GGUF and models. title: TUI Coding Agent Example Path: example tui coding agent This example is a deliberately small, Pi-style local coding agent built with nocterm and llamadart It uses one model, one in-memory conversation, one screen, and four general one in-memory conversation, one screen, and four general tools. Run Select a different workspace, model, or cache only at startup: The default model is the native-desktop Unsloth K M GGUF at hf: unsloth K M.gguf intended for systems with at least GB of RAM. Its non-thinking preset uses a context, up to output tokens, an explicit logical batch size"
+        }
+      ]
+    },
+    {
+      "corpus": "periodic",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2,
+      "patched_exact": 2,
+      "regressed": 0,
+      "fixed": 0,
+      "edit_worse": 0,
+      "edit_better": 0,
+      "examples": []
+    },
+    {
+      "corpus": "periodic",
+      "seconds": 30,
+      "garbled": true,
+      "cases": 2400,
+      "upstream_exact": 9,
+      "patched_exact": 9,
+      "regressed": 0,
+      "fixed": 0,
+      "edit_worse": 0,
+      "edit_better": 0,
+      "examples": []
+    }
+  ]
+}

@@ -3,166 +3,188 @@
 ## Design and scope
 
 Carry `native/bridge/asr_untimed_overlap.patch` on the exact audited v0.18.0
-merger. Its SHA-256 is `146edea2ddb06f1cc2f257604639336a142c2a99d31e482498462b7cf594f155`.
-The build applies it before Bazel for both archive builds and `--source-root`.
-Original and patched source hashes make application idempotent and fail closed
-on drift. Other compatibility versions are unchanged.
+merger. Patch SHA-256: `665fe85a8a4e7f9abde048b3038ede1b4385aaac016aa90438210352b865e589`.
+It applies before Bazel for archive builds and `--source-root`. Preimage and
+postimage hashes normalize CRLF to LF, make application idempotent and reject
+source drift. `.gitattributes` preserves patch bytes on Windows; `git apply`
+accepts source context with either line ending and verifies the postimage.
 
-The patch aligns the longest canonical exact suffix/prefix of at least two
-words, allowing at most one trailing old word and two leading new words to be
-corrupted by a cut boundary. It retains the old overlap spelling and the new
-continuation, including repeated words, without `DedupWords` on that path.
-Ties favor fewer old trailing words removed, then fewer new leading words
-skipped. If there is no anchor, the existing algorithm remains the fallback.
-Only two entirely untimed word chunks enter this path. The zero-overlap and
-first-window branches precede it; timestamped words bypass it.
+This affects **every untimed ASR preset**, including Moonshine, Whisper tiny
+and Qwen3-ASR, when both word chunks have no timestamps. Timed/mixed chunks,
+zero overlap and first windows retain upstream behaviour. It changes no ABI,
+model, preset, default overlap ratio or number of inference windows.
 
-This is a 43-line declarative patch to one upstream function, rather than a
-second merger in the C ABI bridge. It fixes the upstream stage before confirmed
-text becomes irreversible and avoids changing ABI/config defaults or copying
-session state into the bridge. In keeping with [#19](https://github.com/leehack/litert-lm-native/issues/19),
-it has a pinned preimage, model-free repro, separate upstream issue draft, and
-removal condition: an upstream tagged equivalent must pass this replay and
-published-artifact Moonshine/JFK qualification, plus timed/repeated-word controls.
-New source/version adoption needs explicit requalification, not blind rebasing.
-This does not complete #19's existing source-patch manifest inventory work.
+The first patch chose the longest exact canonical suffix/prefix with at least
+two words, allowing one old trailing word and two new leading words to differ.
+That is unsafe for periodic speech: a whole-window match confirms nothing.
+It also mistakes nearby recurring phrases for acoustic overlap. The original
+repetition test covered adjacent single-word repeats, not refrains or distant
+phrase repetition. Its zero-regression conclusion did not generalize.
 
-Untimed text cannot distinguish every real repeated phrase from acoustic
-overlap. The zero-regression claim below is limited to these evaluated corpora;
-short/ambiguous no-anchor cases still use upstream's heuristic. This patch does
-not claim a universal ASR correctness guarantee or fix memory growth.
+The revised patch uses the upstream word-count fallback unless all confidence
+checks pass:
+
+- Confirm at least one old word, with anchor start at least
+  `max(1, floor(previous_words * (1 - overlap)) - search_window)`.
+- Require one occurrence of the selected anchor in each window. All candidate
+  matches, including shorter/trimmed ones, must agree on the alignment offset.
+- Require at least three words when skipping/trimming; clean two-word anchors
+  remain useful for preserving legitimate boundary repeats.
+- Require at least six distinct canonical words and more than 50% distinct
+  words in each window. Repeated bigrams rule out two-word anchors; if at least
+  half the word positions start a recurring bigram, use upstream instead.
+- Skipped new words must not occur in the old window, and trimmed old words
+  must not occur in the new window. Shared words undermine a cut-word claim.
+
+Accepted anchors retain old spelling and new continuation without a second
+`DedupWords` pass. The confidence cutoffs are empirical conservative choices,
+not a proof that text alone can locate acoustic overlap. The six-distinct-word
+floor deliberately returns the audited mono/counting/chorus corpora to upstream.
+It also sacrifices many good alignments in short or repetitive speech.
+
+There is no clean trade-off retaining all original gains. Recommend this
+conservative variant over the original patch: the JFK fix remains, periodic
+streams match upstream event for event, and clean corpora have no measured
+regressions. Garbled cases still have small regressions, especially at 30s.
+Packaged-library real-model qualification remains required before release.
 
 ## Reproduce without models or downloads
 
 ```sh
-export TMPDIR=/private/tmp/claude-501/-opt-UnitySrc-personal-llama-llamadart/d3f6dc35-082b-480b-9a68-73f9c56abb4d/scratchpad/codex/tmp673n
+# Use any writable temporary directory; no local scratch path is required.
+export TMPDIR="$(mktemp -d)"
 python3 tools/qualify_asr_untimed_overlap.py \
   --source-root /path/to/LiteRT-LM-v0.18.0 \
-  --work-dir "$TMPDIR/qualification"
+  --work-dir "$TMPDIR/qualification" --mutations
+python3 tools/evaluate_asr_overlap.py \
+  "$TMPDIR/qualification/upstream" "$TMPDIR/qualification/fixed" \
+  --output "$TMPDIR/audit-results.json"
 LITERT_LM_ASR_SOURCE=/path/to/LiteRT-LM-v0.18.0 \
   python3 -m unittest discover -s tools -p test_asr_untimed_overlap.py
 ```
 
-Requires a C++17 compiler, pkg-config, and recent Abseil with status macros.
-The runner compiles actual original/patched upstream `timestamp_text_merger.cc`
-and unmodified `levenshtein_align.cc` against actual upstream stage headers.
-It uses only a temporary LiteRT-to-Abseil status macro alias to avoid fetching
-the full inference dependency closure. It does not approximate the merger in
-Python. `tests/asr_overlap/sim.py` is the supplied auditor's simulation, retained
-unchanged; its Python generates inputs/reference words only. The new replay
-driver extends the auditor's `driver.cc` with timed inputs, event-level output,
-reset/flush checks, and deterministic C++ regression cases.
+Requires a C++17 compiler, pkg-config and recent Abseil with status macros.
+The runner compiles the actual original/patched upstream merger and unmodified
+`levenshtein_align.cc` against actual stage headers. A LiteRT-to-Abseil status
+macro alias avoids the inference dependency closure. Python only generates
+windows/references and calculates edit distance; it does not emulate the merger.
+The fast distance implementation is checked against the original simulator.
+The source fixture is the exact upstream preimage with SHA-256
+`6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826`.
 
-The original source fixture is copied verbatim from the supplied v0.18.0 source
-and matches SHA-256 `6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826`.
-It is a patch application test preimage, not vendored runtime source.
+## Full adversarial evaluation
 
-## Measurements
+The audit's `adv.py`, `real.py`, `mono.py` recipes are extended in
+`tests/asr_overlap/adversarial.py` and `tools/evaluate_asr_overlap.py`.
+`sim.py` remains unchanged. Ordinary/adjacent use its original timing recipe;
+other rows use pause probabilities 0.12 and 0.35 from the audit. Seeds are
+101/202/303, except prose 5/17/29/41. There are 400 cases per seed/schedule
+(prose uses 400 rather than the audit script's 500). The prose tokens are frozen
+from the same LICENSE/documentation extraction recipe; provenance and checksum
+are in `prose.source.json`. These are simulated windows, not audio inference.
 
-Seeds 7, 11, 23; 400 utterances of 20-40 words per seed; 5-second windows,
-step `5 * (1 - overlap)`. Clean boundaries retain or omit cut words according
-to their visible fraction; garbled boundaries can replace cut words with
-one/two garbage tokens. Both preserve the auditor's timings and RNG recipes.
-Each ratio uses its corresponding windows. Exact means identical space-joined
-reference tokens. Fixed means inexact at upstream 0.4, exact in the variant;
-regressed means exact at upstream 0.4, inexact in the variant. These are counts
-of utterances, not edit-distance improvements or inference measurements.
+At 5s, utterances have 20–45 words. At 30s, word counts scale sixfold to 120–270
+so the evaluation still exercises multiple boundaries; using 20–45 words would
+mostly test only single windows. Overlap is 0.4 throughout. Each clean/garbled
+row uses the same timing/reference recipe but can produce different cut tokens.
+Ordinary/adjacent each use one pause schedule; the others use both.
 
-| Boundary | Seed | Variant | Exact / 400 | Fixed | Regressed |
-| --- | --- | --- | ---: | ---: | ---: |
-| Clean | 7 | upstream@0.4 | 391 | 0 | 0 |
-| Clean | 7 | upstream@0.6 | 381 | 7 | 17 |
-| Clean | 7 | fixed@0.4 | 400 | 9 | 0 |
-| Garbled | 7 | upstream@0.4 | 203 | 0 | 0 |
-| Garbled | 7 | upstream@0.6 | 263 | 115 | 55 |
-| Garbled | 7 | fixed@0.4 | 381 | 178 | 0 |
-| Clean | 11 | upstream@0.4 | 389 | 0 | 0 |
-| Clean | 11 | upstream@0.6 | 387 | 10 | 12 |
-| Clean | 11 | fixed@0.4 | 400 | 11 | 0 |
-| Garbled | 11 | upstream@0.4 | 193 | 0 | 0 |
-| Garbled | 11 | upstream@0.6 | 262 | 133 | 64 |
-| Garbled | 11 | fixed@0.4 | 380 | 187 | 0 |
-| Clean | 23 | upstream@0.4 | 391 | 0 | 0 |
-| Clean | 23 | upstream@0.6 | 382 | 8 | 17 |
-| Clean | 23 | fixed@0.4 | 400 | 9 | 0 |
-| Garbled | 23 | upstream@0.4 | 192 | 0 | 0 |
-| Garbled | 23 | upstream@0.6 | 263 | 123 | 52 |
-| Garbled | 23 | fixed@0.4 | 380 | 188 | 0 |
+R = upstream-exact to patched-inexact; F = upstream-inexact to patched-exact;
+W = utterances with higher word edit distance, including already-inexact cases.
+These are utterance counts against **upstream 0.4**, not WER percentages.
 
-Aggregate counts (1,200 utterances per row):
+| Corpus | Seconds | Cases per boundary | Clean R / F / W | Garbled R / F / W |
+| --- | ---: | ---: | ---: | ---: |
+| Ordinary | 5 | 1,200 | 0 / 31 / 0 | 0 / 367 / 0 |
+| Adjacent word repeats | 5 | 1,200 | 0 / 107 / 0 | 0 / 214 / 0 |
+| Natural | 5 | 2,400 | 0 / 38 / 0 | 0 / 459 / 0 |
+| Phrase repeats | 5 | 2,400 | 0 / 5 / 0 | 0 / 56 / 1 |
+| Distant bigrams | 5 | 2,400 | 0 / 15 / 0 | 0 / 376 / 1 |
+| Real prose | 5 | 3,200 | 0 / 4 / 0 | 0 / 576 / 0 |
+| Periodic | 5 | 2,400 | 0 / 0 / 0 | 0 / 0 / 0 |
+| Ordinary | 30 | 1,200 | 0 / 86 / 0 | 1 / 150 / 8 |
+| Adjacent word repeats | 30 | 1,200 | 0 / 683 / 0 | 1 / 640 / 2 |
+| Natural | 30 | 2,400 | 0 / 342 / 0 | 1 / 381 / 16 |
+| Phrase repeats | 30 | 2,400 | 0 / 7 / 0 | 0 / 10 / 0 |
+| Distant bigrams | 30 | 2,400 | 0 / 473 / 0 | 4 / 561 / 11 |
+| Real prose | 30 | 3,200 | 0 / 348 / 0 | 2 / 471 / 16 |
+| Periodic | 30 | 2,400 | 0 / 0 / 0 | 0 / 0 / 0 |
 
-| Boundary | Variant | Exact | Fixed | Regressed | Windows |
-| --- | --- | ---: | ---: | ---: | ---: |
-| Clean | upstream@0.4 | 1171 | 0 | 0 | 6534 |
-| Clean | upstream@0.6 | 1150 | 25 | 46 | 8926 |
-| Clean | fixed@0.4 | 1200 | 29 | 0 | 6534 |
-| Garbled | upstream@0.4 | 588 | 0 | 0 | 6534 |
-| Garbled | upstream@0.6 | 788 | 371 | 171 | 8926 |
-| Garbled | fixed@0.4 | 1141 | 553 | 0 | 6534 |
-| Repeated, clean | upstream@0.4 | 477 | 0 | 0 | 6534 |
-| Repeated, clean | upstream@0.6 | 291 | 136 | 322 | 8926 |
-| Repeated, clean | fixed@0.4 | 1125 | 648 | 0 | 6534 |
+Natural mixes function/content words and recurring phrases; phrase-repeat
+repeats n-grams 2–3 times; distant-bigram repeats two-word phrases with gaps
+0–3. Periodic combines `no`, `la la la la hey`, and `one two three` loops.
+The baseline is already very inaccurate on periodic speech: falling back
+prevents the new collapse but does not repair upstream transcript loss.
 
-The repetition stress corpus replaces each token after the first with its
-preceding token at probability 0.3, preserving timestamps. It uses the same
-seeds/counts, with a fresh deterministic RNG stream after utterance generation.
-Clean ordinary and repetition-heavy inputs also have zero edit-distance
-regressions (including cases already inexact upstream). On garbled input,
-586 utterances improve edit distance and one already-inexact utterance worsens:
-seed 23, case 156 retains one extra `tree` garbage word (3 insertions versus
-upstream's 2), without dropping a reference word. Thus zero exact-to-inexact
-regressions does not imply zero error-count increases on corrupted input.
-Per-seed repetition counts, edit-distance comparisons, and window totals are in
-[`tests/asr_overlap/results.json`](../tests/asr_overlap/results.json).
+For example, the audit mono.py 192-word counting-loop recipe produces 123 words
+upstream and with the revised patch, versus 24 with the original patch. The
+native qualifier additionally checks all intermediate output bytes for 24
+periodic sequences (96/192 words, 5/30s, clean/garbled, three patterns).
+Accepted matches must confirm a nonempty prefix, preventing the original
+whole-window anchor from retaining the same pending window indefinitely.
 
-The fixed C++ unit tests cover clean suffixes, two corrupt new-prefix words,
-one corrupt old-suffix word, repeated words and phrases across boundaries,
-single windows with repetitions/punctuation, empty windows, zero overlap,
-reset and idempotent final flush. The JFK three-window constructed repro
-reproduces the exact reported upstream duplicate and yields the complete
-normalized reference with this patch. It is **not captured Moonshine output**
-and no real-model JFK inference was run: no cached model was available and
-weights were not downloaded. Published-library real-model validation remains
-required before release/adoption.
+The 5s clean phrase-repeat row changed from the original patch's **462 regressed,
+260 fixed, 1,167 edit-distance-worse** to **0 / 5 / 0**. Distant-bigram changed
+from **375 / 123 / 401** to **0 / 15 / 0**. This deliberately loses most of the
+original repetition gains. On ordinary, natural and prose 5s garbled inputs,
+the revision retains roughly 56–62% of the original exact fixes. At 30s it
+retains roughly 65–71% for those corpora, with small nonzero regressions.
+No claim of zero regressions on repetition-heavy or corrupted speech is made.
+The complete prior/revised rows, exact totals, edit improvements and examples
+are in [audit_results.json](../tests/asr_overlap/audit_results.json).
+Original three-seed qualification results and mutations are in
+[results.json](../tests/asr_overlap/results.json).
 
-400 timed sequences and 400 single-window cases compare every confirmed and
-unconfirmed event byte for byte, including flush, at ratios 0, 0.4, and 0.6:
-all unchanged. No additional inference windows are introduced by the patch.
+## CI and negative tests
 
-## Local build/test evidence (macOS arm64, 2026-10-16)
+`pr_release_qualification.yml` has a required `asr-compatibility` lane alongside
+SentencePiece qualification. It checks out the exact pinned upstream commit,
+installs Abseil/pkg-config, and runs the real-merger qualifier with `--mutations`.
+Build, verification and the aggregate result require its success. No model is
+needed by this lane. The shared tooling suite also tests patch application.
 
-- C++17 compilation and execution of real original/patched merger targets:
-  passed, including native unit cases and quantitative replay.
-- Full tools discovery with `LITERT_LM_ASR_SOURCE` set: 292 tests,
-  291 passed, 1 skipped (Linux-only loader coverage). An earlier run had one
-  transient environmental error: `xcodebuild -create-xcframework` exited 70
-  because `IDESimulatorFoundation` could not load `CoreSimulator.framework`.
-  The full rerun, including that fixture and the opt-in merger test, passed.
-- Diagnostics: 21 passed. Web self-test, actionlint, Python compilation, and
-  schema-2 fixture byte comparison passed.
-- Publication lifecycle: 29 attempted; 1 passed and 28 stopped in setup because
-  only Bash 3.2 is installed; this suite requires Bash 4+.
-- Bazel 7.6.1 merger/bridge test invocation in an isolated source tree with
-  `--repository_disable_download` stopped during repository loading:
-  `rules_shell` is not cached and downloads are disabled. An initial `--nofetch`
-  attempt also lacked the built-in `bazel_tools` repository. Therefore the
-  Bazel bridge audio-source and upstream gtest targets, full runtime linking,
-  eight-platform builds, packaged-library/device/model smokes were not run.
-  No model weights or large artifacts were downloaded and no port 8080 was used.
+Native tests cover the JFK constructed repro, two-word boundary repeats,
+corrupt edges, one-word fallback, empty canonical anchors, both mixed timestamp
+transitions, reset and idempotent flush. Differential controls compare all
+confirmed/unconfirmed bytes for 400 timed sequences and 400 single windows at
+ratios 0, 0.4, 0.6, plus repeated-phrase and periodic negatives at 0.4.
 
-Focused checks also passed: 4 ASR tests (including the complete real-source
-qualification), 4 bridge C/C++ callback/session lifecycle tests, and 20 upstream
-build/patch tooling tests.
+All six compiled mutations are killed: M4 one-word anchors, M5 three-word
+minimum, M7 mixed timed/untimed entry, M9 missing empty-canonical guard, accepting
+unbounded whole-window anchors, and ignoring confidence checks. M4/M5/M7/M9
+fail native cases; both new guard bypasses also fail differential negatives.
+The mutation script extends the audit's `mut/mut.py`, and the CRLF matrix extends
+`crlf.sh`/`crlf2.sh` with LF/CRLF source and autocrlf true/false, Windows-style
+patch checkout, idempotence and incorrect-postimage rejection.
 
-## Downstream adoption
+## Provenance, limits and retirement (#19)
 
-After review/merge and full qualification, publish a new immutable same-upstream
-rebuild `v0.18.0-N` (next available numeric rebuild; never `-native.N`), retaining
-the exact upstream SHA and recording the new native commit. Rebuild all eight
-source runtime targets (Android arm64/x64, iOS arm64/arm64-sim, Linux x64/arm64,
-macOS arm64, Windows x64), repackage their native archives and Apple SPM
-XCFramework zips, and regenerate checksums, manifest and release evidence.
-Official upstream assets/companion prebuilts retain their upstream bytes.
-llamadart then updates native hook pins and Apple SPM URLs/checksums together,
-after published-artifact CPU ASR/JFK exact-WER and timed-model qualification.
-Do not change Moonshine's default 0.4 overlap.
+The schema-2 manifest now records this workaround in `upstream.sourcePatches`,
+including its repository path, patch SHA-256 and LF-normalized pre/postimage
+SHA-256 values. Validation rejects missing or altered v0.18.0 patch provenance.
+Its scope explicitly excludes official upstream prebuilts; the patch is applied
+to source-built runtimes. Older compatibility fixtures retain their shape.
+This completes the ASR provenance item for [#19](https://github.com/leehack/litert-lm-native/issues/19),
+not the inventory of every carried workaround. See the
+[carried-fix tracking text](upstream_patch_audit.md) and
+[unposted upstream draft](asr_untimed_overlap_upstream_issue.md).
+
+Local follow-up evidence (macOS arm64, 2026-10-16): actual merger C++17 builds,
+behavioural replay and all six mutations pass. Tools discovery ran 298 tests:
+297 passed, one Linux-only loader test skipped. Diagnostics (21), actionlint,
+web self-test, Python compilation, schema-2 fixture byte comparison and
+`git diff --check` passed. Windows checkout/application
+behaviour was simulated with Git configuration; windows-latest itself was not
+run. Full runtime/Bazel linking, eight-platform packaging, device tests and
+model-backed JFK/Whisper/Qwen3-ASR inference were not run. The provided source
+slice is sufficient for the merger but lacks the full Bazel workspace/dependency
+closure. No weights or large artifacts were downloaded; no port 8080 was bound.
+The JFK repro remains constructed text, not captured Moonshine emissions.
+
+Retire the workaround when an upstream tagged equivalent passes these same
+replays, repetition/periodic controls and published-artifact model qualification.
+Requalification is required on source/version drift. A future immutable
+`v0.18.0-N` rebuild must qualify all source platforms and regenerate manifests,
+checksums, SPM archives and release evidence before downstream adoption. Keep
+Moonshine's default 0.4 overlap. No release or downstream pin change is part of
+this follow-up.

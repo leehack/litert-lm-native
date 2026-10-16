@@ -15,7 +15,7 @@ paths; affected GPU devices remain separate release-adoption evidence.
 | zlib download URL workaround | No additional rewrite for v0.18 | Upstream WORKSPACE already supplies the accepted mirror list; the helper preserves it. Retain the older-source URL fallback. |
 | Android Dawn rollback | Keep for v0.18 | Stock v0.18 loses the Vulkan device during Qwen inference on Pixel 9 Pro (API 35, Mali-G715). A controlled APK changing only arm64 Dawn to the checksum-pinned historical binary restores raw GPU inference. Extend the existing override to v0.18; this does not fix the separate Galaxy S24 allocation limit or qualify Android x64 hardware. See the linked device qualification record. |
 | v0.15 OpenCL sampler override | Inactive for v0.18 | Already restricted to v0.15.0; retain historical build support. |
-| Untimed ASR overlap alignment | Apply only to audited v0.18.0 source hash | A declarative patch aligns matching boundary words before the word-count fallback. Timed and single-window outputs are unchanged in differential replay; clean and repetition-heavy simulation has zero exact-to-inexact regressions. See [qualification and retirement gates](asr_untimed_overlap.md) and the [unposted upstream draft](asr_untimed_overlap_upstream_issue.md). Real-model packaged JFK validation remains required. |
+| Untimed ASR overlap alignment | Apply only to audited v0.18.0 source hash | A declarative patch aligns matching boundary words before the word-count fallback. Timed and single-window outputs are unchanged in differential replay; the revised confidence checks prevent the audited periodic collapse and avoid measured clean-corpus regressions, while garbled inputs retain small regressions and repetition gains are reduced. Applies to all untimed presets, including Whisper tiny and Qwen3-ASR. See [qualification and retirement gates](asr_untimed_overlap.md) and the [unposted upstream draft](asr_untimed_overlap_upstream_issue.md). Real-model packaged JFK validation remains required. |
 
 Primary sources:
 
@@ -24,3 +24,15 @@ Primary sources:
 - [LiteRT GPU registry](https://github.com/google-ai-edge/LiteRT/blob/26895c9fbcc25c43faa8c1a98cd1fd28951602c3/litert/runtime/accelerators/gpu_registry.cc)
 - [Sampler factory](https://github.com/google-ai-edge/LiteRT-LM/blob/b2f686e2ed4718fb84ec398a61dd59ca0f0aff27/runtime/components/sampler_factory.cc)
 - [Android GPU qualification](android_gpu_qualification.md)
+
+## #19 workaround tracking: untimed ASR alignment
+
+The ASR workaround is carried only on the audited v0.18.0 merger preimage.
+`upstream.sourcePatches` in schema-2 release manifests records the applied patch
+path, SHA-256 and LF-normalized source pre/postimage hashes for source-built
+runtimes; official prebuilts are outside that scope. Validators check the record.
+This closes this workaround's provenance item, not #19's inventory of all other
+source patches. Periodic/repeated-phrase ambiguity and empirical confidence
+cutoffs are explicit release risks; the full 5s/30s trade-off table is in the
+[qualification report](asr_untimed_overlap.md). Retirement requires an upstream
+tagged equivalent, the model-free negative suite and packaged real-model proof.

@@ -33,19 +33,35 @@ Raising the overlap is not a general solution: in a 5-second-window simulation
 with seeds 7/11/23, 400 utterances each, upstream 0.6 regressed 46 clean cases
 that were exact at 0.4, fixing 25. It also used 8,926 windows versus 6,534.
 
-A candidate fix first finds a canonical exact suffix/prefix of at least two
-words, allowing one corrupt trailing old word and two corrupt leading new
-words. It keeps the old overlap and new continuation without a second dedup
-pass; without an anchor, it retains the existing fallback. Restricting this to
-pairs of entirely untimed chunks leaves timed and single-window outputs
-unchanged. This produced 1,200/1,200 exact clean and 1,141/1,200 exact garbled
-cases, with zero exact-to-inexact regressions against 0.4 in either set. A
-separate repetition-heavy clean set also had zero such regressions. Clean
-inputs also had zero edit-distance increases. One already-inexact garbled case
-retained one additional garbage token; no claim of perfect corrupt-edge
-recovery is made. Untimed
-repeated phrases remain inherently ambiguous; this is bounded evidence, not a
-proof for arbitrary speech.
+The original candidate chose the longest canonical suffix/prefix anchor,
+allowing one corrupt old trailing word and two corrupt new leading words. An
+independent audit rejected it: periodic speech could retain only one window
+(192 counting-loop words became 24 versus upstream's 123). On clean 5s
+phrase-repeat inputs it regressed 462 exact cases while fixing 260; distant
+bigrams regressed 375 while fixing 123. The old "repetition-heavy" evidence
+covered adjacent single-word repeats and did not justify that general claim.
+
+The revision confirms a nonempty old prefix in the expected search region,
+requires a unique anchor and consistent candidate offsets, and uses conservative
+lexical-diversity/repetition guards. Skips/trims require at least three anchor
+words and cannot discard shared words. Ambiguous/low-diversity chunks retain
+upstream behaviour. It affects all untimed presets, including Moonshine,
+Whisper tiny and Qwen3-ASR; mixed/timed chunks bypass it.
+
+The constructed JFK fix remains. At 5s the revised phrase-repeat row is
+0 regressed / 5 fixed / 0 edit-distance-worse, distant bigrams 0 / 15 / 0.
+Periodic clean/garbled streams match upstream, including every intermediate
+event in the dedicated negatives. This sacrifices most repetition gains.
+Ordinary/natural/prose garbled 5s rows keep about 56–62% of the original exact
+fixes. At 30s small garbled regressions remain. There is no universal
+zero-regression claim; text alone cannot resolve all acoustic ambiguity.
+The complete per-corpus 5s/30s counts, seeds, methods and limits are in
+[the downstream qualification report](asr_untimed_overlap.md).
+
+Timed and single-window differential controls remain byte-identical. The
+model-free native tests kill the one-word-anchor, three-word-minimum,
+mixed-timestamp and empty-canonical mutations. Packaged real-model validation
+is still required; no weights were downloaded for these measurements.
 
 Downstream report: https://github.com/leehack/llamadart/issues/673
 Compatibility/retirement tracker: https://github.com/leehack/litert-lm-native/issues/19

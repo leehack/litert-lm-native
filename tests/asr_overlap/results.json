@@ -9,6 +9,11 @@
     ],
     "comparison": "every confirmed/unconfirmed output byte"
   },
+  "adversarial": {
+    "periodic_cases": 24,
+    "repeated_phrase_cases": 3,
+    "comparison": "every confirmed/unconfirmed byte against upstream@0.4"
+  },
   "rows": [
     {
       "seed": 7,
@@ -75,11 +80,11 @@
       "garbled": true,
       "variant": "fixed@0.4",
       "cases": 400,
-      "exact": 381,
-      "fixed": 178,
+      "exact": 320,
+      "fixed": 117,
       "regressed": 0,
       "windows": 2166,
-      "edit_distance_better": 186,
+      "edit_distance_better": 142,
       "edit_distance_worse": 0
     },
     {
@@ -111,11 +116,11 @@
       "garbled": false,
       "variant": "fixed@0.4",
       "cases": 400,
-      "exact": 400,
-      "fixed": 11,
+      "exact": 398,
+      "fixed": 9,
       "regressed": 0,
       "windows": 2183,
-      "edit_distance_better": 11,
+      "edit_distance_better": 9,
       "edit_distance_worse": 0
     },
     {
@@ -147,11 +152,11 @@
       "garbled": true,
       "variant": "fixed@0.4",
       "cases": 400,
-      "exact": 380,
-      "fixed": 187,
+      "exact": 311,
+      "fixed": 118,
       "regressed": 0,
       "windows": 2183,
-      "edit_distance_better": 199,
+      "edit_distance_better": 138,
       "edit_distance_worse": 0
     },
     {
@@ -183,11 +188,11 @@
       "garbled": false,
       "variant": "fixed@0.4",
       "cases": 400,
-      "exact": 400,
-      "fixed": 9,
+      "exact": 398,
+      "fixed": 7,
       "regressed": 0,
       "windows": 2185,
-      "edit_distance_better": 9,
+      "edit_distance_better": 7,
       "edit_distance_worse": 0
     },
     {
@@ -219,12 +224,12 @@
       "garbled": true,
       "variant": "fixed@0.4",
       "cases": 400,
-      "exact": 380,
-      "fixed": 188,
+      "exact": 311,
+      "fixed": 119,
       "regressed": 0,
       "windows": 2185,
-      "edit_distance_better": 201,
-      "edit_distance_worse": 1
+      "edit_distance_better": 143,
+      "edit_distance_worse": 2
     }
   ],
   "repeated_rows": [
@@ -257,11 +262,11 @@
       "garbled": false,
       "variant": "fixed@0.4",
       "cases": 400,
-      "exact": 374,
-      "fixed": 212,
+      "exact": 202,
+      "fixed": 40,
       "regressed": 0,
       "windows": 2166,
-      "edit_distance_better": 234,
+      "edit_distance_better": 67,
       "edit_distance_worse": 0
     },
     {
@@ -293,11 +298,11 @@
       "garbled": false,
       "variant": "fixed@0.4",
       "cases": 400,
-      "exact": 372,
-      "fixed": 213,
+      "exact": 192,
+      "fixed": 33,
       "regressed": 0,
       "windows": 2183,
-      "edit_distance_better": 239,
+      "edit_distance_better": 50,
       "edit_distance_worse": 0
     },
     {
@@ -329,12 +334,38 @@
       "garbled": false,
       "variant": "fixed@0.4",
       "cases": 400,
-      "exact": 379,
-      "fixed": 223,
+      "exact": 206,
+      "fixed": 50,
       "regressed": 0,
       "windows": 2185,
-      "edit_distance_better": 240,
+      "edit_distance_better": 65,
       "edit_distance_worse": 0
     }
-  ]
+  ],
+  "mutations": {
+    "M4_one_word": {
+      "native_killed": true,
+      "negative_killed": false
+    },
+    "M5_three_words": {
+      "native_killed": true,
+      "negative_killed": false
+    },
+    "M7_mixed_timed": {
+      "native_killed": true,
+      "negative_killed": false
+    },
+    "M9_empty_canonical": {
+      "native_killed": true,
+      "negative_killed": false
+    },
+    "P1_unbounded_anchor": {
+      "native_killed": true,
+      "negative_killed": true
+    },
+    "P2_ignore_confidence": {
+      "native_killed": true,
+      "negative_killed": true
+    }
+  }
 }
