@@ -136,6 +136,26 @@ PREBUILT_TARGETS = {
 LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 
 
+def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
+    """Carry #673 only on the audited v0.18 source; require review on drift."""
+    if upstream_tag != "v0.18.0":
+        return
+    source = source_root / "omni/asr/timestamp_text_merger.cc"
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    if digest == "a3eb4ffa6bb8558d477c6503f60216aa251e9af0a3096a7f2f981603b602a95a":
+        return
+    if digest != "6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826":
+        raise RuntimeError("ASR merger source changed; requalify untimed overlap patch")
+    patch_file = BRIDGE_PACKAGE_ROOT / "bridge/asr_untimed_overlap.patch"
+    command = ["git", "apply", str(patch_file)]
+    # Apply from the extracted root, including roots nested in a worktree.
+    # The preimage hash and git apply's check precede any source mutation.
+    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
+                   cwd=source_root)
+    subprocess.run(command, check=True, cwd=source_root)
+    print("Applied audited untimed ASR overlap patch", flush=True)
+
+
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
     ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
     return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
@@ -337,6 +357,7 @@ def build_runtime(
     jobs: str | None,
     upstream_ref: str | None = None,
 ) -> Path:
+    patch_asr_untimed_overlap(source_root, upstream_tag)
     if platform == "ios" and has_asr_bridge(upstream_tag):
         patch_upstream_ios_sampler_path(source_root)
     prebuilt_target = PREBUILT_TARGETS.get((platform, arch))

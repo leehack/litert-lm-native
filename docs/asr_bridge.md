@@ -83,6 +83,13 @@ SHA-256 digests. The manually dispatched native release workflow can run the
 real-model smoke on compatible host targets by setting `run_asr_smoke=true`.
 Large remote models stay out of default CI.
 
+For v0.18.0 untimed-word overlap merging, see the
+[scoped patch and model-free qualification](asr_untimed_overlap.md).
+The default overlap remains 0.4. Timed words and single-window input retain
+upstream behavior. The patch's JFK replay reproduces the reported boundary
+failure with constructed words; release qualification still needs real-model
+JFK exact-transcript validation against the packaged library.
+
 ## TTS boundary
 
 LiteRT-LM `v0.16.0` also contains TTS stages and synchronous/asynchronous
