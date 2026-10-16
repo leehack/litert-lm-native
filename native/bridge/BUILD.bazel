@@ -99,6 +99,10 @@ cc_test(
 cc_test(
     name = "litert_lm_asr_merger_test",
     srcs = ["litert_lm_asr_merger_test.cc"],
+    target_compatible_with = select({
+        ":asr_api": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         "//omni/asr:timestamp_text_merger",
         "//omni/asr:detokenizer",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from functools import lru_cache
 import random
 import shlex
 import shutil
@@ -15,23 +16,56 @@ from build_upstream_runtime import patch_asr_untimed_overlap
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "tests/asr_overlap"))
-from sim import ops, utter, windows  # noqa: E402
+from sim import utter, windows  # noqa: E402
 
 
-def compile_driver(source: Path, work: Path, merger: Path, output: Path) -> None:
-    flags = shlex.split(subprocess.check_output([
-        "pkg-config", "--cflags", "--libs", "absl_status", "absl_statusor",
-        "absl_status_macros", "absl_strings", "absl_synchronization",
-        "absl_log_internal_message", "absl_vlog_config_internal"], text=True))
+ABSL_PACKAGES = (
+    "absl_status", "absl_statusor", "absl_status_macros", "absl_strings",
+    "absl_synchronization", "absl_log_internal_message", "absl_vlog_config_internal",
+)
+
+
+@lru_cache(maxsize=1)
+def abseil_flags() -> tuple[list[str], list[str]]:
+    missing = [name for name in ABSL_PACKAGES if subprocess.run(
+        ["pkg-config", "--exists", name], capture_output=True).returncode]
+    if missing:
+        raise RuntimeError("Abseil pkg-config interface changed or is missing: "
+                           + ", ".join(missing) + "; install/requalify Abseil "
+                           "before updating the replay lane")
+    return tuple(shlex.split(subprocess.check_output(
+        ["pkg-config", option, *ABSL_PACKAGES], text=True))
+        for option in ("--cflags", "--libs"))
+
+
+def compiler_command(source: Path, work: Path) -> list[str]:
     compiler = shutil.which("clang++") or shutil.which("c++")
     if not compiler:
         raise RuntimeError("A C++17 compiler is required")
-    subprocess.run([
-        compiler, "-std=c++17", "-O2", "-Wall", "-Wextra",
-        "-I", str(source), "-I", str(work),
-        str(REPO / "native/bridge/litert_lm_asr_merger_test.cc"),
-        str(merger), str(source / "omni/asr/levenshtein_align.cc"),
-        *flags, "-o", str(output)], check=True)
+    cflags, _ = abseil_flags()
+    return [compiler, "-std=c++17", "-O2", "-Wall", "-Wextra",
+            "-I", str(source), "-I", str(work), *cflags]
+
+
+@lru_cache(maxsize=None)
+def compile_shared_objects(source: Path, work: Path) -> tuple[Path, Path]:
+    # Reuse only within this process, never stale objects from a previous run.
+    # Every mutant still compiles its own actual merger implementation.
+    outputs = []
+    for name, unit in (("driver", REPO / "native/bridge/litert_lm_asr_merger_test.cc"),
+                       ("levenshtein", source / "omni/asr/levenshtein_align.cc")):
+        output = work / (name + ".o")
+        subprocess.run([*compiler_command(source, work), "-c", str(unit),
+                        "-o", str(output)], check=True)
+        outputs.append(output)
+    return tuple(outputs)
+
+
+def compile_driver(source: Path, work: Path, merger: Path, output: Path) -> None:
+    shared = compile_shared_objects(source, work)
+    _, ldflags = abseil_flags()
+    subprocess.run([*compiler_command(source, work), str(merger),
+                    *map(str, shared), *ldflags, "-o", str(output)], check=True)
 
 
 def compile_replays(source: Path, work: Path) -> tuple[Path, Path]:
@@ -70,6 +104,9 @@ def replay(driver: Path, cases: list[list[str]], ratio: float,
 
 def evaluate(upstream: Path, fixed: Path, count: int = 400,
              repeated: bool = False) -> list[dict]:
+    # Same exact metric, using the bit-vector distance already validated against
+    # sim.ops by test_asr_untimed_overlap; Python's DP dominated lane runtime.
+    from evaluate_asr_overlap import distance
     rows = []
     for seed in (7, 11, 23):
         rng = random.Random(seed)
@@ -91,7 +128,7 @@ def evaluate(upstream: Path, fixed: Path, count: int = 400,
                 chunks = [windows(w, t, ratio, rng, garble) for w, t in cases]
                 out = replay(driver, chunks, ratio)
                 exact = [a == b for a, b in zip(out, refs)]
-                edits = [sum(ops(ref.split(), hyp.split())) for ref, hyp in zip(refs, out)]
+                edits = [distance(ref.split(), hyp.split()) for ref, hyp in zip(refs, out)]
                 if baseline is None:
                     baseline = exact
                     baseline_edits = edits
@@ -163,7 +200,26 @@ def check_adversarial(upstream: Path, fixed: Path) -> dict:
                 comparison="every confirmed/unconfirmed byte against upstream@0.4")
 
 
-def check_mutations(source: Path, work: Path, upstream: Path) -> dict:
+def check_confidence_fixtures(fixed: Path) -> dict:
+    fixtures = json.loads((REPO / "tests/asr_overlap/confidence_fixtures.json").read_text())
+    actual = replay(fixed, [f["chunks"] for f in fixtures], .4, True)
+    failures = [f["purpose"] for f, out in zip(fixtures, actual) if f["states"] != out]
+    assert not failures, f"Confidence fixtures changed: {failures}"
+    return dict(cases=len(fixtures), comparison="frozen confirmed/unconfirmed bytes")
+
+
+def check_clean_boundaries(upstream: Path, fixed: Path, cache: dict | None = None) -> list[dict]:
+    from evaluate_asr_overlap import evaluate as audit_evaluate
+    rows = audit_evaluate(upstream, fixed, corpora=(
+        "natural", "repeat_phrases", "periodic_bigram"), clean_only=True,
+        quiet=True, baseline_cache=cache)
+    failures = [row for row in rows if row["regressed"] or row["edit_worse"]]
+    assert not failures, f"Clean boundary regression against upstream@0.4: {failures}"
+    return rows
+
+
+def check_mutations(source: Path, work: Path, upstream: Path, fixed: Path,
+                    clean_cache: dict, equivalence_count: int = 40) -> dict:
     # Extends audit mut/mut.py. Mutations change the real merger source, then
     # compile and run the same native tests and negative differential controls.
     text = (work / "patched/omni/asr/timestamp_text_merger.cc").read_text()
@@ -176,11 +232,29 @@ def check_mutations(source: Path, work: Path, upstream: Path) -> dict:
         "P1_unbounded_anchor": ("best_start >= earliest && !ambiguous", "best_start >= 0"),
         "P2_ignore_confidence": ("best_start >= earliest && !ambiguous", "best_start >= earliest"),
     }
-    results = {}
+    from asr_overlap_mutations import AUDIT_MUTATIONS
+    mutations.update(AUDIT_MUTATIONS)
+    variants = {}
     for name, (before, after) in mutations.items():
+        # U16's alternative is proven equivalent. Test the reverse change if
+        # qualifying that implementation too; do not reject it on syntax alone.
+        if name == "U16_ties_prefer_later" and text.count(before) == 0 and text.count(after) == 1:
+            before, after = after, before
         assert text.count(before) == 1, name
+        variants[name] = text.replace(before, after)
+    # Exactly the auditor's combined weakening: retain floor=6, skip-shared,
+    # and the earliest bound (with its zero floor); remove eight other guards.
+    combined = text
+    for name in ("U1_no_offset_consistency", "U2_no_uniqueness", "U3_no_short_tolerant",
+                 "U5_no_half_distinct", "U6_no_repeated_bigram_short",
+                 "U7_no_repeated_half", "U9_no_trim_shared", "U10_earliest_zero_floor"):
+        before, after = AUDIT_MUTATIONS[name]
+        combined = combined.replace(before, after)
+    variants["COMBO_keep_floor6_skipshared"] = combined
+    results = {}
+    for name, variant in variants.items():
         mutant = work / (name + ".cc")
-        mutant.write_text(text.replace(before, after))
+        mutant.write_text(variant)
         binary = work / name
         compile_driver(source, work, mutant, binary)
         native = subprocess.run([str(binary)], capture_output=True, text=True)
@@ -189,9 +263,37 @@ def check_mutations(source: Path, work: Path, upstream: Path) -> dict:
             check_adversarial(upstream, binary)
         except AssertionError:
             negative = True
-        results[name] = dict(native_killed=native.returncode != 0, negative_killed=negative)
-        if not (native.returncode != 0 or negative):
-            raise AssertionError(f"Surviving mutation: {name}")
+        fixture = False
+        try:
+            check_confidence_fixtures(binary)
+        except AssertionError:
+            fixture = True
+        # Reuse generated references and upstream distances, never mutant
+        # results. Full 400-case seeds/schedules, both 5s and 30s, also in CI.
+        clean = None
+        if not (native.returncode != 0 or negative or fixture) or name.startswith("COMBO_"):
+            clean = False
+            try:
+                check_clean_boundaries(upstream, binary, clean_cache)
+            except AssertionError:
+                clean = True
+        results[name] = dict(native_killed=native.returncode != 0,
+                             negative_killed=negative, fixture_killed=fixture,
+                             clean_killed=clean)
+        if not (native.returncode != 0 or negative or fixture or clean):
+            if name != "U16_ties_prefer_later":
+                raise AssertionError(f"Surviving mutation: {name}")
+            # Equal-length ties cannot change an accepted candidate: see the
+            # proof in docs/asr_untimed_overlap.md. Check every corpus/condition
+            # at 40 cases/seed in CI; the full 400-case comparison is recorded
+            # in confidence_results.json. This keeps the lane model-free and fast.
+            from evaluate_asr_overlap import evaluate as audit_evaluate
+            rows = audit_evaluate(fixed, binary, count=equivalence_count, quiet=True, require_equal=True)
+            assert all(not any(row[k] for k in (
+                "regressed", "fixed", "edit_worse", "edit_better")) for row in rows)
+            results[name]["equivalent"] = dict(rows=len(rows),
+                utterances=sum(row["cases"] for row in rows), output_differences=0)
+        print(f"Mutation {name}: {results[name]}", file=sys.stderr, flush=True)
     return results
 
 
@@ -200,14 +302,25 @@ def main() -> None:
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--mutations", action="store_true")
+    parser.add_argument("--equivalence-count", type=int, default=40,
+                        help="Cases/seed for the equivalent tie mutation (400 for the full audit)")
     args = parser.parse_args()
+    if args.equivalence_count < 1:
+        parser.error("--equivalence-count must be positive")
     upstream, fixed = compile_replays(args.source_root.resolve(), args.work_dir.resolve())
-    result = dict(unchanged=check_unchanged(upstream, fixed),
+    clean_cache = {}
+    result = dict(abseil_pkg_versions=dict(zip(ABSL_PACKAGES, subprocess.check_output(
+                      ["pkg-config", "--modversion", *ABSL_PACKAGES], text=True).splitlines())),
+                  confidence_fixtures=check_confidence_fixtures(fixed),
+                  clean_boundaries=check_clean_boundaries(upstream, fixed, clean_cache),
+                  unchanged=check_unchanged(upstream, fixed),
                   adversarial=check_adversarial(upstream, fixed),
                   rows=evaluate(upstream, fixed),
                   repeated_rows=evaluate(upstream, fixed, repeated=True))
     if args.mutations:
-        result["mutations"] = check_mutations(args.source_root.resolve(), args.work_dir.resolve(), upstream)
+        result["mutations"] = check_mutations(args.source_root.resolve(), args.work_dir.resolve(),
+                                               upstream, fixed, clean_cache,
+                                               args.equivalence_count)
     (args.work_dir / "results.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
 

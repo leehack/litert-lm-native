@@ -19,6 +19,14 @@ NATIVE_COMMIT = "451ba0ce7c366972b4dc0e58f08ffe590958f943"
 
 
 class PackageReleaseTest(unittest.TestCase):
+    def test_newer_upstream_requires_asr_decision_before_release_io(self) -> None:
+        with patch.object(package_release, "iter_artifacts", side_effect=AssertionError("release I/O")):
+            with self.assertRaisesRegex(RuntimeError, "ASR untimed overlap has no explicit decision"):
+                package_release.build_manifest(
+                    upstream_tag="v0.19.0", upstream_commit=UPSTREAM_COMMIT,
+                    compatibility_tag="v0.19.0", release_tag="v0.19.0-1",
+                    native_commit=NATIVE_COMMIT, official_upstream_assets=True)
+
     def test_v018_source_patch_provenance_is_emitted_and_validated(self) -> None:
         import hashlib
         from asr_overlap_patch import PATCH_PATH, PREIMAGE_SHA256, POSTIMAGE_SHA256

@@ -80,6 +80,9 @@ jobs:
             omni/asr
             omni/base
           persist-credentials: false
+      # The stock Homebrew formula is unversioned; the qualifier guards every
+      # required .pc name, records versions and compiles the actual stage API.
+      # See docs/asr_untimed_overlap.md for the dependency policy.
       - name: Install model-free replay dependencies
         run: brew install abseil pkg-config
       - name: Qualify real merger behaviour and kill regression mutations

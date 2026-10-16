@@ -13,6 +13,29 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 class AsrUntimedOverlapTest(unittest.TestCase):
+    def test_missing_abseil_pkg_config_name_is_actionable(self):
+        import qualify_asr_untimed_overlap as qualifier
+        qualifier.abseil_flags.cache_clear()
+        def probe(command, **kwargs):
+            return subprocess.CompletedProcess(command, int(command[-1] == "absl_vlog_config_internal"))
+        try:
+            with patch.object(qualifier.subprocess, "run", side_effect=probe):
+                with self.assertRaisesRegex(RuntimeError, "absl_vlog_config_internal; install/requalify"):
+                    qualifier.abseil_flags()
+        finally:
+            qualifier.abseil_flags.cache_clear()
+
+    def test_newer_and_unknown_versions_require_explicit_patch_decision(self):
+        from asr_overlap_patch import source_patch_manifest
+        for tag in ("v0.18.1", "v0.19.0", "v1.0.0", "v0.19.0-rc.1", "main"):
+            with self.subTest(tag=tag):
+                # Check before source I/O or build, and on the release manifest
+                # path too. Updating a postimage hash cannot bypass this gate.
+                for gate in (lambda: build.patch_asr_untimed_overlap(Path("missing"), tag),
+                             lambda: source_patch_manifest(tag)):
+                    with self.assertRaisesRegex(RuntimeError, "no explicit decision.*" + tag):
+                        gate()
+
     def test_fast_evaluation_distance_matches_reference(self):
         import random
         from evaluate_asr_overlap import distance

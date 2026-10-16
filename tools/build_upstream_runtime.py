@@ -11,7 +11,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-from asr_overlap_patch import PREIMAGE_SHA256, POSTIMAGE_SHA256, source_sha256
+from asr_overlap_patch import PREIMAGE_SHA256, POSTIMAGE_SHA256, source_sha256, require_asr_patch_decision
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -139,6 +139,7 @@ LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 
 def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
     """Carry #673 only on the audited v0.18 source; require review on drift."""
+    require_asr_patch_decision(upstream_tag)
     if upstream_tag != "v0.18.0":
         return
     source = source_root / "omni/asr/timestamp_text_merger.cc"

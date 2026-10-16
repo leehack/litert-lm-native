@@ -1,5 +1,6 @@
 """Identity of the carried v0.18 untimed merger source transformation."""
 import hashlib
+import re
 from pathlib import Path
 
 PREIMAGE_SHA256 = "6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826"
@@ -12,7 +13,24 @@ def source_sha256(data: bytes) -> str:
     return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
 
 
+def require_asr_patch_decision(compatibility_tag: str) -> None:
+    """Older releases predate this carry; newer/unknown sources need a decision.
+
+    Deliberately no environment/CLI bypass: extending support means checking in
+    a revalidated patch or a documented, version-specific retirement decision.
+    """
+    version = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", compatibility_tag)
+    if version and tuple(map(int, version.groups())) <= (0, 18, 0):
+        return
+    raise RuntimeError(
+        f"ASR untimed overlap has no explicit decision for {compatibility_tag}; "
+        "revalidate the carried patch or record a version-specific opt-out with "
+        "evidence in tools/asr_overlap_patch.py and docs/asr_untimed_overlap.md "
+        "before building or releasing this version")
+
+
 def source_patch_manifest(compatibility_tag: str) -> list[dict]:
+    require_asr_patch_decision(compatibility_tag)
     if compatibility_tag != "v0.18.0":
         return []
     return [{

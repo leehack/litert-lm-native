@@ -216,6 +216,7 @@ def build_manifest(
     evidence_dir: Path | None = None,
     official_upstream_assets: bool = False,
 ) -> dict:
+    source_patches = source_patch_manifest(compatibility_tag)
     upstream = parse_upstream(
         upstream_tag=upstream_tag,
         upstream_commit=upstream_commit,
@@ -306,8 +307,7 @@ def build_manifest(
             "compatibilityTag": compatibility_tag,
             "developmentIdentity": f"g{upstream_commit[:12]}",
             "prebuiltOverrides": prebuilt_override_manifest(compatibility_tag),
-            **({"sourcePatches": source_patch_manifest(compatibility_tag)}
-               if compatibility_tag == "v0.18.0" else {}),
+            **({"sourcePatches": source_patches} if source_patches else {}),
         },
         "native": {
             "repository": "leehack/litert-lm-native",
