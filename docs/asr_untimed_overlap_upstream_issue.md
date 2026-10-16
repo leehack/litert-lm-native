@@ -45,8 +45,9 @@ The revision confirms a nonempty old prefix in the expected search region,
 requires a unique anchor and consistent candidate offsets, and uses conservative
 lexical-diversity/repetition guards. Skips/trims require at least three anchor
 words and cannot discard shared words. Ambiguous/low-diversity chunks retain
-upstream behaviour. It affects all untimed presets, including Moonshine,
-Whisper tiny and Qwen3-ASR; mixed/timed chunks bypass it.
+upstream behaviour. It affects untimed presets using `TimestampTextMerger`, including Moonshine,
+Whisper tiny and Qwen3-ASR (`tinygemma-asr` uses the Levenshtein merger);
+mixed/timed chunks bypass it.
 
 The constructed JFK fix remains. At 5s the revised phrase-repeat row is
 0 regressed / 5 fixed / 0 edit-distance-worse, distant bigrams 0 / 15 / 0.

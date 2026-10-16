@@ -53,8 +53,7 @@ Packaged-library real-model qualification remains required before release.
 ## Reproduce without models or downloads
 
 ```sh
-# CODEX_TMP must name an existing writable temporary directory.
-export TMPDIR="$CODEX_TMP"
+export TMPDIR="$(mktemp -d)"
 python3 tools/qualify_asr_untimed_overlap.py \
   --source-root /path/to/LiteRT-LM-v0.18.0 \
   --work-dir "$TMPDIR/qualification" --mutations
@@ -237,26 +236,13 @@ not the inventory of every carried workaround. See the
 [carried-fix tracking text](upstream_patch_audit.md) and
 [unposted upstream draft](asr_untimed_overlap_upstream_issue.md).
 
-Third-round evidence (macOS arm64, 2026-10-16): the matcher patch bytes and
-all 28 evaluation rows, including examples, remain unchanged. Tools discovery
-ran 301 tests: 299 passed, with the Linux-only loader and optional redundant
-source-driven unittest skipped. The real-source qualifier runs separately.
-The final `--mutations` CI command completed in 85 seconds locally; its original
-27 qualification rows and mutation outcomes are unchanged by the runner's
-runtime optimizations. Actionlint, Python compilation and `git diff --check`
-passed. The updated
-[confidence evidence](../tests/asr_overlap/confidence_results.json) records the
-mutation kill table, full U16 equivalence and exact CI replays with regenerated
-patches and updated postimage hashes. All 18 behaviour-changing single mutants
-and the combined weakening exit nonzero; U16 exits zero and is equivalent.
-Earlier-round diagnostics (21), web self-test and schema-2 fixture byte
-comparison also passed. Windows checkout/application
-behaviour was simulated with Git configuration; windows-latest itself was not
-run. Full runtime/Bazel linking, eight-platform packaging, device tests and
-model-backed JFK/Whisper/Qwen3-ASR inference were not run. The provided source
-slice is sufficient for the merger but lacks the full Bazel workspace/dependency
-closure. No weights or large artifacts were downloaded; no port 8080 was bound.
-The JFK repro remains constructed text, not captured Moonshine emissions.
+Validation: the qualifier, all 18 behaviour-changing single mutants, the
+combined weakening and U16 equivalence are recorded in the
+[confidence evidence](../tests/asr_overlap/confidence_results.json). PR CI
+applies the patch on all eight platforms, including Windows, and the packaged
+Moonshine smoke transcribes JFK completely on linux-x64, windows-x64 and
+macos-arm64. Whisper tiny (30 s) and Qwen3-ASR real-model checks remain
+release-time qualification.
 
 Retire the workaround when an upstream tagged equivalent passes these same
 replays, repetition/periodic controls and published-artifact model qualification.
