@@ -59,8 +59,42 @@ jobs:
           UBSAN_OPTIONS: halt_on_error=1
         run: python3 tools/qualify_sentencepiece_bpe_null.py --work-dir tokenizer-qualification --sanitize
 
+  asr-compatibility:
+    needs: [preflight, scope]
+    if: needs.scope.outputs.native == 'true'
+    name: Model-free ASR overlap behaviour and mutations
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Check out exact upstream merger and stage headers
+        uses: actions/checkout@v6
+        with:
+          repository: google-ai-edge/LiteRT-LM
+          ref: ${{ env.QUALIFICATION_UPSTREAM_COMMIT }}
+          path: asr-upstream
+          sparse-checkout: |
+            omni/asr
+            omni/base
+          persist-credentials: false
+      - name: Install model-free replay dependencies
+        run: brew install abseil pkg-config
+      - name: Qualify real merger behaviour and kill regression mutations
+        run: |
+          python3 tools/qualify_asr_untimed_overlap.py \
+            --source-root asr-upstream --work-dir asr-qualification --mutations
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: asr-model-free-qualification
+          path: asr-qualification/results.json
+          if-no-files-found: warn
+
   build:
-    needs: [preflight, scope, tokenizer-compatibility]
+    needs: [preflight, scope, tokenizer-compatibility, asr-compatibility]
     if: needs.scope.outputs.native == 'true'
     name: Build and smoke (${{ matrix.platform }}-${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
@@ -194,7 +228,7 @@ jobs:
 
   verify:
     name: ${{ needs.scope.outputs.full == 'true' && 'Verify full-platform candidate' || 'Verify affected-platform candidate' }}
-    needs: [preflight, scope, tokenizer-compatibility, build]
+    needs: [preflight, scope, tokenizer-compatibility, asr-compatibility, build]
     if: always() && needs.scope.outputs.native == 'true'
     runs-on: macos-latest
     steps:
@@ -202,11 +236,13 @@ jobs:
         shell: bash
         env:
           PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+          ASR_RESULT: ${{ needs.asr-compatibility.result }}
           TOKENIZER_RESULT: ${{ needs.tokenizer-compatibility.result }}
           BUILD_RESULT: ${{ needs.build.result }}
         run: |
           test "$PREFLIGHT_RESULT" = success
           test "$TOKENIZER_RESULT" = success
+          test "$ASR_RESULT" = success
           test "$BUILD_RESULT" = success
       - uses: actions/checkout@v6
         with:
@@ -366,7 +402,7 @@ jobs:
 
   qualification-result:
     if: always()
-    needs: [scope, preflight, tokenizer-compatibility, build, verify, qwen-inference]
+    needs: [scope, preflight, tokenizer-compatibility, asr-compatibility, build, verify, qwen-inference]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

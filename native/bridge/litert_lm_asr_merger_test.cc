@@ -92,6 +92,35 @@ int main(int argc, char** argv) {
     Expect({"Go go, never never stop."}, "Go go, never never stop.");
     Expect({"go go", "go go"}, "go go go go", 0.0f);
     Expect({"", "Go go, never never stop.", ""}, "Go go, never never stop.");
+    // P2a: a recurring phrase is not evidence for deleting the intervening by.
+    Expect({"of the people by", "by the people for the people"},
+           "of the people by the people for the people");
+    // M4: one matching word must retain the upstream fallback, including state.
+    Expect({"omicron xi mu beta iota kappa nu epsilon theta delta zeta lambda gamma",
+            "gamma yellow violet cyan orange white silver green"},
+           "omicron xi mu beta iota kappa nu epsilon theta delta zeta lambda gamma "
+           "violet cyan orange white silver green");
+    // M5: a clean unique two-word anchor preserves a legitimate boundary repeat.
+    Expect({"alpha beta gamma delta epsilon zeta eta theta",
+            "eta theta theta red blue green yellow orange silver"},
+           "alpha beta gamma delta epsilon zeta eta theta theta red blue green "
+           "yellow orange silver");
+    // M7: either side having timestamps excludes the untimed path.
+    Expect({"alpha@0 beta@100 gamma@200 delta@300 epsilon@400 zeta@500 "
+            "eta@600 theta@700 iota@800 uh@900",
+            "um oh zeta eta theta iota red red blue green yellow"},
+           "alpha beta gamma delta epsilon zeta eta theta iota uh oh zeta eta "
+           "theta iota red red blue green yellow");
+    Expect({"alpha beta gamma delta epsilon zeta eta theta iota uh",
+            "um@0 oh@100 zeta@200 eta@300 theta@400 iota@500 red@600 "
+            "red@700 blue@800 green@900 yellow@1000"},
+           "alpha beta gamma delta epsilon zeta eta theta iota uh oh zeta eta "
+           "theta iota red red blue green yellow");
+    // M9: punctuation with an empty canonical form cannot start an anchor.
+    Expect({"omicron iota kappa theta delta epsilon eta alpha mu ... gamma zeta beta",
+            "... gamma zeta beta blue green violet orange silver yellow red gray black"},
+           "omicron iota kappa theta delta epsilon eta alpha mu ... gamma zeta "
+           "blue green violet orange silver yellow red gray black");
     return 0;
   }
   float overlap = std::stof(argv[1]);

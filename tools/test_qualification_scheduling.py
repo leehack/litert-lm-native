@@ -24,7 +24,8 @@ class QualificationSchedulingTest(unittest.TestCase):
         # skipped dependencies cannot start these jobs. Guard against bypasses.
         for name, needs in (
             ('tokenizer-compatibility', '[preflight, scope]'),
-            ('build', '[preflight, scope, tokenizer-compatibility]'),
+            ('asr-compatibility', '[preflight, scope]'),
+            ('build', '[preflight, scope, tokenizer-compatibility, asr-compatibility]'),
         ):
             with self.subTest(job=name):
                 metadata = job(name).split('    steps:', 1)[0]
@@ -43,11 +44,19 @@ class QualificationSchedulingTest(unittest.TestCase):
         self.assertIn('test_linux_runtime_metadata.py', shared)
         self.assertNotIn('continue-on-error:', preflight)
 
+    def test_asr_job_executes_real_source_and_negative_mutations(self) -> None:
+        asr = job('asr-compatibility')
+        self.assertIn('ref: ${{ env.QUALIFICATION_UPSTREAM_COMMIT }}', asr)
+        self.assertIn('omni/asr', asr)
+        self.assertIn('tools/qualify_asr_untimed_overlap.py', asr)
+        self.assertIn('--source-root asr-upstream --work-dir asr-qualification --mutations', asr)
+        self.assertNotIn('continue-on-error:', asr)
+
     def test_candidate_check_reports_every_unsuccessful_prerequisite(self) -> None:
         verify = job('verify')
         metadata, steps = verify.split('    steps:\n', 1)
         self.assertIn('Verify full-platform candidate', metadata)
-        self.assertIn('needs: [preflight, scope, tokenizer-compatibility, build]', metadata)
+        self.assertIn('needs: [preflight, scope, tokenizer-compatibility, asr-compatibility, build]', metadata)
         self.assertIn("    if: always() && needs.scope.outputs.native == 'true'\n", metadata)
         self.assertNotIn('continue-on-error:', verify)
         guard = steps.split('\n      - uses:', 1)[0]
@@ -55,19 +64,20 @@ class QualificationSchedulingTest(unittest.TestCase):
         self.assertIn('        shell: bash\n', guard)
         for env, dependency in (('PREFLIGHT', 'preflight'),
                                 ('TOKENIZER', 'tokenizer-compatibility'),
+                                ('ASR', 'asr-compatibility'),
                                 ('BUILD', 'build')):
             self.assertIn(f'{env}_RESULT: ${{{{ needs.{dependency}.result }}}}', guard)
         script = textwrap.dedent(guard.split('        run: |\n', 1)[1])
         results = ('success', 'failure', 'cancelled', 'skipped')
-        for states in itertools.product(results, repeat=3):
+        for states in itertools.product(results, repeat=4):
             with self.subTest(results=states):
                 process = subprocess.run(
                     ['bash', '--noprofile', '--norc', '-eo', 'pipefail', '-c', script],
                     env={**os.environ, **dict(zip(
-                        ('PREFLIGHT_RESULT', 'TOKENIZER_RESULT', 'BUILD_RESULT'), states))},
+                        ('PREFLIGHT_RESULT', 'TOKENIZER_RESULT', 'ASR_RESULT', 'BUILD_RESULT'), states))},
                     capture_output=True, text=True,
                 )
-                self.assertEqual(process.returncode == 0, states == ('success',) * 3)
+                self.assertEqual(process.returncode == 0, states == ('success',) * 4)
         self.assertIn('    needs: [scope, verify]\n', job('qwen-inference'))
 
 

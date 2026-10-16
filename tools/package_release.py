@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from asr_overlap_patch import source_patch_manifest
+
 import argparse
 import hashlib
 import json
@@ -304,6 +306,8 @@ def build_manifest(
             "compatibilityTag": compatibility_tag,
             "developmentIdentity": f"g{upstream_commit[:12]}",
             "prebuiltOverrides": prebuilt_override_manifest(compatibility_tag),
+            **({"sourcePatches": source_patch_manifest(compatibility_tag)}
+               if compatibility_tag == "v0.18.0" else {}),
         },
         "native": {
             "repository": "leehack/litert-lm-native",

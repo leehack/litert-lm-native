@@ -18,6 +18,22 @@ sys.path.insert(0, str(REPO / "tests/asr_overlap"))
 from sim import ops, utter, windows  # noqa: E402
 
 
+def compile_driver(source: Path, work: Path, merger: Path, output: Path) -> None:
+    flags = shlex.split(subprocess.check_output([
+        "pkg-config", "--cflags", "--libs", "absl_status", "absl_statusor",
+        "absl_status_macros", "absl_strings", "absl_synchronization",
+        "absl_log_internal_message", "absl_vlog_config_internal"], text=True))
+    compiler = shutil.which("clang++") or shutil.which("c++")
+    if not compiler:
+        raise RuntimeError("A C++17 compiler is required")
+    subprocess.run([
+        compiler, "-std=c++17", "-O2", "-Wall", "-Wextra",
+        "-I", str(source), "-I", str(work),
+        str(REPO / "native/bridge/litert_lm_asr_merger_test.cc"),
+        str(merger), str(source / "omni/asr/levenshtein_align.cc"),
+        *flags, "-o", str(output)], check=True)
+
+
 def compile_replays(source: Path, work: Path) -> tuple[Path, Path]:
     work.mkdir(parents=True, exist_ok=True)
     patched = work / "patched"
@@ -31,22 +47,11 @@ def compile_replays(source: Path, work: Path) -> tuple[Path, Path]:
     shim.parent.mkdir(parents=True, exist_ok=True)
     shim.write_text('#include "absl/status/status_macros.h"\n'
                     '#define LITERT_ASSIGN_OR_RETURN ABSL_ASSIGN_OR_RETURN\n')
-    flags = shlex.split(subprocess.check_output([
-        "pkg-config", "--cflags", "--libs", "absl_status", "absl_statusor",
-        "absl_status_macros", "absl_strings", "absl_synchronization",
-        "absl_log_internal_message", "absl_vlog_config_internal"], text=True))
-    compiler = shutil.which("clang++") or shutil.which("c++")
-    if not compiler:
-        raise RuntimeError("A C++17 compiler is required")
     outputs = []
     for name, merger in (("upstream", source / "omni/asr/timestamp_text_merger.cc"),
                          ("fixed", target)):
         output = work / name
-        subprocess.run([compiler, "-std=c++17", "-O2", "-Wall", "-Wextra",
-                        "-I", str(source), "-I", str(work),
-                        str(REPO / "native/bridge/litert_lm_asr_merger_test.cc"),
-                        str(merger), str(source / "omni/asr/levenshtein_align.cc"),
-                        *flags, "-o", str(output)], check=True)
+        compile_driver(source, work, merger, output)
         outputs.append(output)
     subprocess.run([str(outputs[1])], check=True)
     return tuple(outputs)
@@ -122,15 +127,87 @@ def check_unchanged(upstream: Path, fixed: Path) -> dict:
                 comparison="every confirmed/unconfirmed output byte")
 
 
+def check_adversarial(upstream: Path, fixed: Path) -> dict:
+    # mono.py timing recipe, extended to both window lengths and corrupt cuts.
+    import sim
+    saved_window = sim.W
+    periodic = []
+    try:
+        for seconds in (5, 30):
+            sim.W = seconds
+            for n in (96, 192):
+                for phrase in (["no"], ["la"] * 4 + ["hey"], ["one", "two", "three"]):
+                    rng = random.Random(n)
+                    t, words = .2, []
+                    for w in (phrase * (n // len(phrase) + 1))[:n]:
+                        d = rng.uniform(.18, .4)
+                        words.append((w, t, t + d))
+                        t += d + rng.uniform(0, .15)
+                    for garble in (False, True):
+                        periodic.append(windows(words, t + .3, .4, random.Random(1), garble))
+        # Every event must fall back identically; checking final length alone
+        # misses a changed pending window that damages the next boundary.
+        assert replay(upstream, periodic, .4, True) == replay(fixed, periodic, .4, True)
+        # The 192-word counting repro progresses rather than stalling at 24 words.
+        for chunks, a, b in zip(periodic, replay(upstream, periodic, .4), replay(fixed, periodic, .4)):
+            assert len(b.split()) >= len(a.split())
+            if len(chunks) > 4:
+                assert len(b.split()) > len(chunks[0].split())
+    finally:
+        sim.W = saved_window
+    phrases = [["of the people by", "by the people for the people"],
+               ["we speak of the people by", "by the people for the people today"],
+               ["in the house we go by", "by in the house for in the house"]]
+    assert replay(upstream, phrases, .4, True) == replay(fixed, phrases, .4, True)
+    return dict(periodic_cases=len(periodic), repeated_phrase_cases=len(phrases),
+                comparison="every confirmed/unconfirmed byte against upstream@0.4")
+
+
+def check_mutations(source: Path, work: Path, upstream: Path) -> dict:
+    # Extends audit mut/mut.py. Mutations change the real merger source, then
+    # compile and run the same native tests and negative differential controls.
+    text = (work / "patched/omni/asr/timestamp_text_merger.cc").read_text()
+    mutations = {
+        "M4_one_word": ("min_anchor_words = 2", "min_anchor_words = 1"),
+        "M5_three_words": ("min_anchor_words = 2", "min_anchor_words = 3"),
+        "M7_mixed_timed": ("prev_timestamps_.empty() && curr_timestamps.empty()",
+                           "(prev_timestamps_.empty() || curr_timestamps.empty())"),
+        "M9_empty_canonical": ("!prev[start].empty() &&", ""),
+        "P1_unbounded_anchor": ("best_start >= earliest && !ambiguous", "best_start >= 0"),
+        "P2_ignore_confidence": ("best_start >= earliest && !ambiguous", "best_start >= earliest"),
+    }
+    results = {}
+    for name, (before, after) in mutations.items():
+        assert text.count(before) == 1, name
+        mutant = work / (name + ".cc")
+        mutant.write_text(text.replace(before, after))
+        binary = work / name
+        compile_driver(source, work, mutant, binary)
+        native = subprocess.run([str(binary)], capture_output=True, text=True)
+        negative = False
+        try:
+            check_adversarial(upstream, binary)
+        except AssertionError:
+            negative = True
+        results[name] = dict(native_killed=native.returncode != 0, negative_killed=negative)
+        if not (native.returncode != 0 or negative):
+            raise AssertionError(f"Surviving mutation: {name}")
+    return results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, required=True)
+    parser.add_argument("--mutations", action="store_true")
     args = parser.parse_args()
     upstream, fixed = compile_replays(args.source_root.resolve(), args.work_dir.resolve())
     result = dict(unchanged=check_unchanged(upstream, fixed),
+                  adversarial=check_adversarial(upstream, fixed),
                   rows=evaluate(upstream, fixed),
                   repeated_rows=evaluate(upstream, fixed, repeated=True))
+    if args.mutations:
+        result["mutations"] = check_mutations(args.source_root.resolve(), args.work_dir.resolve(), upstream)
     (args.work_dir / "results.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
 

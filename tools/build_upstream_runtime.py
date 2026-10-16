@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from asr_overlap_patch import PREIMAGE_SHA256, POSTIMAGE_SHA256, source_sha256
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -141,18 +142,20 @@ def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
     if upstream_tag != "v0.18.0":
         return
     source = source_root / "omni/asr/timestamp_text_merger.cc"
-    digest = hashlib.sha256(source.read_bytes()).hexdigest()
-    if digest == "a3eb4ffa6bb8558d477c6503f60216aa251e9af0a3096a7f2f981603b602a95a":
+    digest = source_sha256(source.read_bytes())
+    if digest == POSTIMAGE_SHA256:
         return
-    if digest != "6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826":
+    if digest != PREIMAGE_SHA256:
         raise RuntimeError("ASR merger source changed; requalify untimed overlap patch")
     patch_file = BRIDGE_PACKAGE_ROOT / "bridge/asr_untimed_overlap.patch"
-    command = ["git", "apply", str(patch_file)]
+    command = ["git", "apply", "--ignore-space-change", str(patch_file)]
     # Apply from the extracted root, including roots nested in a worktree.
     # The preimage hash and git apply's check precede any source mutation.
     subprocess.run([*command[:2], "--check", *command[2:]], check=True,
                    cwd=source_root)
     subprocess.run(command, check=True, cwd=source_root)
+    if source_sha256(source.read_bytes()) != POSTIMAGE_SHA256:
+        raise RuntimeError("ASR merger postimage mismatch; requalify untimed overlap patch")
     print("Applied audited untimed ASR overlap patch", flush=True)
 
 

@@ -42,14 +42,14 @@ def changed_paths(base, head='HEAD'):
 
 
 def results_ok(needs):
-    if set(needs) != {'scope','preflight','tokenizer-compatibility','build','verify','qwen-inference'}:
+    if set(needs) != {'scope','preflight','tokenizer-compatibility','asr-compatibility','build','verify','qwen-inference'}:
         return False
     if any(needs[key]['result'] != 'success' for key in ('scope','preflight')):
         return False
     scope=needs['scope']['outputs']
     if scope.get('native') not in ('true','false') or scope.get('qwen') not in ('true','false'):
         return False
-    for key in ('tokenizer-compatibility','build','verify','qwen-inference'):
+    for key in ('tokenizer-compatibility','asr-compatibility','build','verify','qwen-inference'):
         selected = scope['qwen'] if key == 'qwen-inference' else scope['native']
         if needs[key]['result'] != ('success' if selected=='true' else 'skipped'):
             return False
