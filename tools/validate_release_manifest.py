@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from asr_overlap_patch import source_patch_manifest
+
 import argparse
 import json
 from pathlib import Path
@@ -174,7 +176,7 @@ def validate_schema_2_payload(
             "compatibilityTag",
             "developmentIdentity",
             "prebuiltOverrides",
-        },
+        } | ({"sourcePatches"} if compatibility_tag == "v0.18.0" else set()),
         "upstream",
     )
     _require_exact_keys(native, {"repository", "commit"}, "native")
@@ -212,6 +214,8 @@ def validate_schema_2_payload(
         compatibility_tag
     ):
         raise SystemExit("Release manifest prebuilt override provenance is invalid")
+    if upstream.get("sourcePatches", []) != source_patch_manifest(compatibility_tag):
+        raise SystemExit("Release manifest source patch provenance is invalid")
     if native.get("commit") != native_commit or not FULL_SHA_RE.fullmatch(
         str(native.get("commit", ""))
     ):
@@ -699,6 +703,8 @@ def validate_schema_2_identity(
             "Release manifest prebuilt override provenance mismatch: "
             f"expected {expected_overrides}, got {upstream.get('prebuiltOverrides')}"
         )
+    if upstream.get("sourcePatches", []) != source_patch_manifest(manifest_compatibility):
+        raise SystemExit("Release manifest source patch provenance mismatch")
     capabilities = manifest.get("capabilities")
     if not isinstance(capabilities, dict):
         raise SystemExit("Release manifest is missing capabilities")

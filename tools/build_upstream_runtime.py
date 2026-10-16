@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from asr_overlap_patch import PREIMAGE_SHA256, POSTIMAGE_SHA256, source_sha256, require_asr_patch_decision
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -134,6 +135,29 @@ PREBUILT_TARGETS = {
     ("windows", "x64"): "windows_x86_64",
 }
 LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
+
+
+def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
+    """Carry #673 only on the audited v0.18 source; require review on drift."""
+    require_asr_patch_decision(upstream_tag)
+    if upstream_tag != "v0.18.0":
+        return
+    source = source_root / "omni/asr/timestamp_text_merger.cc"
+    digest = source_sha256(source.read_bytes())
+    if digest == POSTIMAGE_SHA256:
+        return
+    if digest != PREIMAGE_SHA256:
+        raise RuntimeError("ASR merger source changed; requalify untimed overlap patch")
+    patch_file = BRIDGE_PACKAGE_ROOT / "bridge/asr_untimed_overlap.patch"
+    command = ["git", "apply", "--ignore-space-change", str(patch_file)]
+    # Apply from the extracted root, including roots nested in a worktree.
+    # The preimage hash and git apply's check precede any source mutation.
+    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
+                   cwd=source_root)
+    subprocess.run(command, check=True, cwd=source_root)
+    if source_sha256(source.read_bytes()) != POSTIMAGE_SHA256:
+        raise RuntimeError("ASR merger postimage mismatch; requalify untimed overlap patch")
+    print("Applied audited untimed ASR overlap patch", flush=True)
 
 
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
@@ -337,6 +361,7 @@ def build_runtime(
     jobs: str | None,
     upstream_ref: str | None = None,
 ) -> Path:
+    patch_asr_untimed_overlap(source_root, upstream_tag)
     if platform == "ios" and has_asr_bridge(upstream_tag):
         patch_upstream_ios_sampler_path(source_root)
     prebuilt_target = PREBUILT_TARGETS.get((platform, arch))

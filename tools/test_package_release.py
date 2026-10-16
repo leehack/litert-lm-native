@@ -19,6 +19,45 @@ NATIVE_COMMIT = "451ba0ce7c366972b4dc0e58f08ffe590958f943"
 
 
 class PackageReleaseTest(unittest.TestCase):
+    def test_newer_upstream_requires_asr_decision_before_release_io(self) -> None:
+        with patch.object(package_release, "iter_artifacts", side_effect=AssertionError("release I/O")):
+            with self.assertRaisesRegex(RuntimeError, "ASR untimed overlap has no explicit decision"):
+                package_release.build_manifest(
+                    upstream_tag="v0.19.0", upstream_commit=UPSTREAM_COMMIT,
+                    compatibility_tag="v0.19.0", release_tag="v0.19.0-1",
+                    native_commit=NATIVE_COMMIT, official_upstream_assets=True)
+
+    def test_v018_source_patch_provenance_is_emitted_and_validated(self) -> None:
+        import hashlib
+        from asr_overlap_patch import PATCH_PATH, PREIMAGE_SHA256, POSTIMAGE_SHA256
+        from validate_release_manifest import validate_schema_2_identity
+        with tempfile.TemporaryDirectory() as temp:
+            with (patch.object(package_release, "iter_artifacts", return_value=[]),
+                  patch.object(package_release, "provider_free_ios", return_value=False),
+                  patch.object(package_release, "SHA256SUMS_PATH", Path(temp) / "SHA256SUMS")):
+                manifest = package_release.build_manifest(
+                    upstream_tag="v0.18.0", upstream_commit=UPSTREAM_COMMIT,
+                    compatibility_tag="v0.18.0", release_tag="v0.18.0-1",
+                    native_commit=NATIVE_COMMIT, official_upstream_assets=True)
+            records = manifest["upstream"]["sourcePatches"]
+            self.assertEqual(len(records), 1)
+            expected = hashlib.sha256((Path(__file__).resolve().parents[1] / PATCH_PATH).read_bytes()).hexdigest()
+            self.assertEqual(records[0]["sha256"], expected)
+            self.assertEqual(records[0]["preimageSha256Lf"], PREIMAGE_SHA256)
+            self.assertEqual(records[0]["postimageSha256Lf"], POSTIMAGE_SHA256)
+            def validate():
+                validate_schema_2_identity(
+                    manifest, upstream_tag="v0.18.0", upstream_commit=UPSTREAM_COMMIT,
+                    compatibility_tag="v0.18.0", native_commit=NATIVE_COMMIT,
+                    release_tag="v0.18.0-1")
+            validate()
+            records[0]["sha256"] = "0" * 64
+            with self.assertRaisesRegex(SystemExit, "source patch provenance"):
+                validate()
+            del manifest["upstream"]["sourcePatches"]
+            with self.assertRaisesRegex(SystemExit, "source patch provenance"):
+                validate()
+
     def test_official_assets_must_match_stable_or_development_identity(self) -> None:
         contradictions = (
             ("v0.16.0", "v0.16.0-3", False),

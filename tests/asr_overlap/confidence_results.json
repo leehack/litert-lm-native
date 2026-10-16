@@ -1,0 +1,436 @@
+{
+  "schemaVersion": 1,
+  "platform": "macos-arm64",
+  "date": "2026-10-16",
+  "patchSha256": "665fe85a8a4e7f9abde048b3038ede1b4385aaac016aa90438210352b865e589",
+  "preimageSha256Lf": "6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826",
+  "postimageSha256Lf": "c320a49202fcaed40ef2619e977b3a44303e7aa9aa04012c94a6ca07c016caee",
+  "matcherChanged": false,
+  "confidenceGuardsRemoved": [],
+  "abseilPkgVersions": {
+    "absl_status": "20260817",
+    "absl_statusor": "20260817",
+    "absl_status_macros": "20260817",
+    "absl_strings": "20260817",
+    "absl_synchronization": "20260817",
+    "absl_log_internal_message": "20260817",
+    "absl_vlog_config_internal": "20260817"
+  },
+  "confidenceFixtures": {
+    "cases": 15,
+    "comparison": "frozen confirmed/unconfirmed bytes"
+  },
+  "cleanBoundaries": [
+    {
+      "corpus": "natural",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2275,
+      "patched_exact": 2313,
+      "regressed": 0,
+      "fixed": 38,
+      "edit_worse": 0,
+      "edit_better": 38,
+      "examples": []
+    },
+    {
+      "corpus": "repeat_phrases",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 838,
+      "patched_exact": 843,
+      "regressed": 0,
+      "fixed": 5,
+      "edit_worse": 0,
+      "edit_better": 24,
+      "examples": []
+    },
+    {
+      "corpus": "periodic_bigram",
+      "seconds": 5,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2189,
+      "patched_exact": 2204,
+      "regressed": 0,
+      "fixed": 15,
+      "edit_worse": 0,
+      "edit_better": 16,
+      "examples": []
+    },
+    {
+      "corpus": "natural",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 2032,
+      "patched_exact": 2374,
+      "regressed": 0,
+      "fixed": 342,
+      "edit_worse": 0,
+      "edit_better": 350,
+      "examples": []
+    },
+    {
+      "corpus": "repeat_phrases",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 790,
+      "patched_exact": 797,
+      "regressed": 0,
+      "fixed": 7,
+      "edit_worse": 0,
+      "edit_better": 36,
+      "examples": []
+    },
+    {
+      "corpus": "periodic_bigram",
+      "seconds": 30,
+      "garbled": false,
+      "cases": 2400,
+      "upstream_exact": 1871,
+      "patched_exact": 2344,
+      "regressed": 0,
+      "fixed": 473,
+      "edit_worse": 0,
+      "edit_better": 483,
+      "examples": []
+    }
+  ],
+  "ciMutations": {
+    "M4_one_word": {
+      "native_killed": true,
+      "negative_killed": false,
+      "fixture_killed": false,
+      "clean_killed": null
+    },
+    "M5_three_words": {
+      "native_killed": true,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "M7_mixed_timed": {
+      "native_killed": true,
+      "negative_killed": false,
+      "fixture_killed": false,
+      "clean_killed": null
+    },
+    "M9_empty_canonical": {
+      "native_killed": true,
+      "negative_killed": false,
+      "fixture_killed": false,
+      "clean_killed": null
+    },
+    "P1_unbounded_anchor": {
+      "native_killed": true,
+      "negative_killed": true,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "P2_ignore_confidence": {
+      "native_killed": true,
+      "negative_killed": true,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U1_no_offset_consistency": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U2_no_uniqueness": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U3_no_short_tolerant": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U4_distinct_floor_2": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U5_no_half_distinct": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U6_no_repeated_bigram_short": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U7_no_repeated_half": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U8_no_skip_shared": {
+      "native_killed": true,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U9_no_trim_shared": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U10_earliest_zero_floor": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U11_no_search_window_slack": {
+      "native_killed": true,
+      "negative_killed": false,
+      "fixture_killed": false,
+      "clean_killed": null
+    },
+    "U12_no_skip": {
+      "native_killed": true,
+      "negative_killed": false,
+      "fixture_killed": false,
+      "clean_killed": null
+    },
+    "U13_no_trim": {
+      "native_killed": true,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U14_skip3": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U15_new_spelling": {
+      "native_killed": true,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U16_ties_prefer_later": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": false,
+      "clean_killed": false,
+      "equivalent": {
+        "rows": 28,
+        "utterances": 6080,
+        "output_differences": 0
+      }
+    },
+    "U17_distinct_floor_4": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U18_no_uniqueness_in_curr": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "U19_dedup_continuation": {
+      "native_killed": true,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": null
+    },
+    "COMBO_keep_floor6_skipshared": {
+      "native_killed": false,
+      "negative_killed": false,
+      "fixture_killed": true,
+      "clean_killed": true
+    }
+  },
+  "cleanMutationNullMeans": "Skipped because native, fixture or differential control already killed it",
+  "fullU16Equivalence": {
+    "rows": 28,
+    "utterances": 60800,
+    "output_differences": 0,
+    "cases_per_seed_schedule": 400,
+    "state_differences": 0,
+    "evaluation_differences": 0
+  },
+  "fullEvaluation": {
+    "rows": 28,
+    "utterances": 60800,
+    "identical_to": "audit_results.json conservative_patch, all fields including examples"
+  },
+  "regeneratedPatchesExactCI": {
+    "command": [
+      "python3",
+      "tools/qualify_asr_untimed_overlap.py",
+      "--source-root",
+      "asr-upstream",
+      "--work-dir",
+      "asr-qualification",
+      "--mutations"
+    ],
+    "mutations": {
+      "U10_earliest_zero_floor": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "c9b798f13fc8820afe53cd83967cff6a3e478db37319e4b925a4441ba7e57aa4",
+        "postimageSha256Lf": "c237ddf17a062c543e724ed4050dd7f20bb0278bf5e1619122509673b568f42f"
+      },
+      "U11_no_search_window_slack": {
+        "exit": 1,
+        "killed_by": "native",
+        "patchSha256": "281a2ab992193a39c6cfa6de9495554e403cd3555be855320024f23ac1674805",
+        "postimageSha256Lf": "510210487f123494cae16370c964e66b1920620a20b173ef8aa2826683386905"
+      },
+      "U12_no_skip": {
+        "exit": 1,
+        "killed_by": "native",
+        "patchSha256": "3edf53352c15c1ee4bd1936b62cc5c5c001aa97fbd65a68383aecf1cfc4c2a21",
+        "postimageSha256Lf": "23e3e9ac048001adc504d89f4f701da7d7563a47860909568a48e57f4ca43b9a"
+      },
+      "U13_no_trim": {
+        "exit": 1,
+        "killed_by": "native",
+        "patchSha256": "a2d43d09686bea777da13b352ed000f5a200c5555392d85afc8396a4cf974168",
+        "postimageSha256Lf": "cc7c023d5f962adeb9ddea5cf344c70ce511551a938da7dc7fa03b557a34dc2b"
+      },
+      "U14_skip3": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "a1ffcbbe0993234897786b30f45967e9b8bc60d529c0988f2866c8786d562c64",
+        "postimageSha256Lf": "a1a03ce9a53f39b8fa66c375de695caecfbacbdcd237109524fb6f64a1cb3137"
+      },
+      "U15_new_spelling": {
+        "exit": 1,
+        "killed_by": "native",
+        "patchSha256": "bba42b164d32d5b8b76aef45e76bfc53b7faf152dcb3e6ab595b02c9723c6693",
+        "postimageSha256Lf": "e260c589db86c8ccb73670a156d1c925056f9e4e34e93dc693c65883035add5b"
+      },
+      "U16_ties_prefer_later": {
+        "exit": 0,
+        "equivalent": true,
+        "patchSha256": "3a87357cb4e56d1b6d2c48f06afd4e97ba9d37f59cdf670fe6612783eacd6bfd",
+        "postimageSha256Lf": "86cbe959a69777fedee2474c20c9522cff6332de233f0cb0b1d822c3874c35c8"
+      },
+      "U17_distinct_floor_4": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "951502f23a23a5ea01754f9c7f2317b1701f2c9682c4c04054e9a49ceb4db0de",
+        "postimageSha256Lf": "ba49b0410be9bf8f6449eff7540163b1216f3e8c47291a4142477803fbaa62ad"
+      },
+      "U18_no_uniqueness_in_curr": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "357bc1b6d7941608ed24d4c586032d0dce38d5ca1e2f3981555d8fa484f94c0e",
+        "postimageSha256Lf": "30d91dd1e110df5b1b8ca7f413715d267337714bac096c9fad4dd8408ed71891"
+      },
+      "U19_dedup_continuation": {
+        "exit": 1,
+        "killed_by": "native",
+        "patchSha256": "243584a24da7e52476fb9bcf74275022f1d9b070100d8aaf10ed55054765a7dc",
+        "postimageSha256Lf": "805037f629c6fd82915183cf073b78a76902f0511615adcb18f8373528953714"
+      },
+      "U1_no_offset_consistency": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "ab07c573e25244a2ada5411db10151f1b63688687e4beb2ec8f2027159d03306",
+        "postimageSha256Lf": "3d72583ae968ecad34fc9194910653458d93ff9ed6f6a346c07ef5209b283e6a"
+      },
+      "U2_no_uniqueness": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "d425fdf9a3e697e71e5cb3b0d959056e318d09ab0ffd82636ee968d3789485f2",
+        "postimageSha256Lf": "16a1f4ad1dc683341c0a409545df1cabb0e7d9015f507579a72cf20de3170027"
+      },
+      "U3_no_short_tolerant": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "d08e3888ffade12b6d00a62ff32672579f44202ad19bcf8176a44273de49b323",
+        "postimageSha256Lf": "a326ee073107823ca84767922703b2145e3a1c577e8c6b6569d6b5e1be4cc920"
+      },
+      "U4_distinct_floor_2": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "7601e2af07cb0f7e0c8df22f119f0d329c80123e974a970e52a3031901a63cf5",
+        "postimageSha256Lf": "b9335901f96b44f2e15c4f00ccb9b26051ef6df6cfc1bb3a5afec7a9b945672e"
+      },
+      "U5_no_half_distinct": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "dbe28543f3484df70c8cd65c6fdc19b91145e6904f852ae05749b95794ea8244",
+        "postimageSha256Lf": "96dcce85f2bee42155bd8b3cf87ee480379af59ecfc619422f6a87dcddcc7905"
+      },
+      "U6_no_repeated_bigram_short": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "631022d219ad73d6895bb97f3e5ad9fe587fa900e44b44adcabc34581023c34b",
+        "postimageSha256Lf": "f2ca7e914dcef297992a33323a7502e4c28e4286a8eac95eea5af787b12ea07c"
+      },
+      "U7_no_repeated_half": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "68b34f001e410bbe88d1968512150b5b48f4dc787310d68c5a51f3dbc4b42edb",
+        "postimageSha256Lf": "abbe1a2248bea50f85e4c1d7a13bd868836c99b7219438d19a2b9f6ac653802b"
+      },
+      "U8_no_skip_shared": {
+        "exit": 1,
+        "killed_by": "native",
+        "patchSha256": "4bef9858406a0d58f3aba99c8d4d32a40264cc0c21148b8b80715e7adc8ee98e",
+        "postimageSha256Lf": "38ddc7cb61d667b11bfe2fcdd8f425f65abd84b26b1a03e5fc24aeb4631b51d1"
+      },
+      "U9_no_trim_shared": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "7131316059cfbae4556ccfe08f0b209234a6a9a662ba859b44d3a898b4b2f9c4",
+        "postimageSha256Lf": "a9f3a9e9553225a403eb235f2e14080d642d368aa2b76a6d843bea2ab1d8569e"
+      },
+      "COMBO_keep_floor6_skipshared": {
+        "exit": 1,
+        "killed_by": "confidence fixture",
+        "patchSha256": "857102ec2705d8cf06036614148083c168c51ca7a03c63b7c167baae208c1170",
+        "postimageSha256Lf": "4ea43895004f5f45640b03f0497b7fbcbd62b1d02f2b4be25d4cb5073c301f8b"
+      }
+    }
+  },
+  "gates": {
+    "tool_tests": {
+      "ran": 301,
+      "passed": 299,
+      "skipped": 2
+    },
+    "qualifier": {
+      "status": "passed",
+      "seconds": 84.98
+    },
+    "actionlint": "passed",
+    "py_compile": "passed",
+    "diff_check": "passed"
+  },
+  "notRun": [
+    "Bazel cc_test target and full runtime linking/packaging",
+    "Model-backed Moonshine JFK, Whisper tiny and Qwen3-ASR inference",
+    "Device tests and windows-latest runner"
+  ],
+  "originalQualification": {
+    "rows": 27,
+    "identical_to_previous": true
+  }
+}

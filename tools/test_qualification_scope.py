@@ -52,12 +52,12 @@ class ScopeTest(unittest.TestCase):
             self.assertLess(workflow.index(f'Exclude unselected {label} prebuilts'), workflow.index('Qualify Apple SwiftPM archives'))
 
     def test_all_aggregate_states_fail_closed(self):
-        names=['scope','preflight','tokenizer-compatibility','build','verify','qwen-inference']
+        names=['scope','preflight','tokenizer-compatibility','asr-compatibility','build','verify','qwen-inference']
         for native,qwen in [('false','false'),('true','false'),('true','true')]:
-            for states in itertools.product(['success','failure','cancelled','skipped'],repeat=6):
+            for states in itertools.product(['success','failure','cancelled','skipped'],repeat=7):
                 needs={name:{'result':state} for name,state in zip(names,states)}
                 needs['scope']['outputs']={'native':native,'qwen':qwen}
-                expected=['success','success']+(['success']*3 if native=='true' else ['skipped']*3)+['success' if qwen=='true' else 'skipped']
+                expected=['success','success']+(['success']*4 if native=='true' else ['skipped']*4)+['success' if qwen=='true' else 'skipped']
                 self.assertEqual(results_ok(needs),list(states)==expected)
         self.assertFalse(results_ok({}))
 

@@ -1,0 +1,8 @@
+{
+  "recipe": "audit adv/real.py: LICENSE plus first 120 sorted website/docs/**/*.md paths; strip fenced code and retain Latin prose tokens",
+  "repository": "https://github.com/leehack/llamadart",
+  "snapshotCommit": "3de86a38175b0494b4f18f55816e22697f99cfec",
+  "tokens": 33177,
+  "sha256": "5d2c9e07bbc8ce23de645e35f6bc700934acc03164b81b2ad629ac71e6bf0efd",
+  "note": "Frozen token stream makes replay independent of the adjacent checkout. This is simulated windowing of documentation prose, not recorded speech."
+}
