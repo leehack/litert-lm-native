@@ -45,16 +45,17 @@ class PackageReleaseTest(unittest.TestCase):
             )
             records = manifest["upstream"]["sourcePatches"]
             self.assertEqual([record["id"] for record in records],
-                             ["asr-untimed-overlap"]
+                             ["asr-untimed-overlap"] + ["asr-litertlm-container"] * 3
                              + ["stream-finish-reason"] * len(FINISH_REASON_SOURCES))
+            finish_records = records[-len(FINISH_REASON_SOURCES):]
             finish_reason_sha256 = hashlib.sha256(
                 (Path(__file__).resolve().parents[1] / FINISH_REASON_PATCH_PATH).read_bytes()
             ).hexdigest()
             self.assertEqual(
                 {record["source"]: (record["preimageSha256Lf"], record["postimageSha256Lf"])
-                 for record in records[1:]},
+                 for record in finish_records},
                 FINISH_REASON_SOURCES)
-            self.assertEqual({record["sha256"] for record in records[1:]},
+            self.assertEqual({record["sha256"] for record in finish_records},
                              {finish_reason_sha256})
             expected = hashlib.sha256((Path(__file__).resolve().parents[1] / PATCH_PATH).read_bytes()).hexdigest()
             self.assertEqual(records[0]["sha256"], expected)

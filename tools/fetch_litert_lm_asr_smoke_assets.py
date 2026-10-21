@@ -44,6 +44,57 @@ ASSETS = (
         ),
         sha256="59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
     ),
+    Asset(
+        filename="whisper_tiny_30s_i8.litertlm",
+        url=(
+            "https://huggingface.co/litert-community/whisper-tiny/resolve/"
+            "d0662bbcb13106e6f740632b9ff961c8e22f7a13/"
+            "whisper_tiny_30s_i8.litertlm"
+        ),
+        sha256="92f194600d98e1d94b1ff6f636d109c0f4ac66f3f6a1803f7a665e93daf78012",
+    ),
+    Asset(
+        filename="whisper_tokenizer.json",
+        url=(
+            "https://huggingface.co/openai/whisper-tiny/resolve/"
+            "169d4a4341b33bc18d8881c4b69c2e104e1cc0af/tokenizer.json"
+        ),
+        sha256="27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566",
+    ),
+)
+
+
+@dataclass(frozen=True)
+class DerivedAsset:
+    filename: str
+    source: str
+    offset: int
+    original: bytes
+    replacement: bytes
+    sha256: str
+
+
+# Malformed variants of the pinned Whisper container for routing negatives.
+DERIVED_ASSETS = (
+    # Hides the encoder-decoder section's model_type item, so the loader keys
+    # it as a legacy LLM section while AsrMetadata still declares Whisper.
+    DerivedAsset(
+        filename="whisper_tiny_30s_i8_missing_asr_model.litertlm",
+        source="whisper_tiny_30s_i8.litertlm",
+        offset=176,
+        original=b"model_type",
+        replacement=b"model_typx",
+        sha256="e924824c6cf9d0900cbe192d73eee552b9198fdcf94b1a10d550c622ef30c360",
+    ),
+    # Declares Qwen3-ASR in AsrMetadata, which must keep the LLM route.
+    DerivedAsset(
+        filename="whisper_tiny_30s_i8_qwen3_metadata.litertlm",
+        source="whisper_tiny_30s_i8.litertlm",
+        offset=16384,
+        original=bytes.fromhex("0a020a00"),
+        replacement=bytes.fromhex("0a022200"),
+        sha256="9b1f38b80cbf4e81f0f6198fcb38df66bb4d64ed7eeaeef8b82e028b32c1e7c4",
+    ),
 )
 
 
@@ -76,6 +127,26 @@ def fetch_asset(asset: Asset, output_dir: Path) -> Path:
     return destination
 
 
+def derive_asset(asset: DerivedAsset, output_dir: Path) -> Path:
+    destination = output_dir / asset.filename
+    if destination.is_file() and sha256(destination) == asset.sha256:
+        print(f"Verified cached {destination}", flush=True)
+        return destination
+    data = bytearray((output_dir / asset.source).read_bytes())
+    end = asset.offset + len(asset.original)
+    if bytes(data[asset.offset:end]) != asset.original:
+        raise RuntimeError(f"{asset.source} does not match the {asset.filename} recipe")
+    data[asset.offset:end] = asset.replacement
+    partial = destination.with_name(destination.name + ".part")
+    partial.write_bytes(data)
+    if sha256(partial) != asset.sha256:
+        partial.unlink()
+        raise RuntimeError(f"Checksum mismatch for derived {asset.filename}")
+    partial.replace(destination)
+    print(f"Derived and verified {destination}", flush=True)
+    return destination
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Fetch immutable real-model assets for the LiteRT-LM ASR smoke."
@@ -84,6 +155,8 @@ def main() -> int:
     args = parser.parse_args()
     for asset in ASSETS:
         fetch_asset(asset, args.output_dir)
+    for derived in DERIVED_ASSETS:
+        derive_asset(derived, args.output_dir)
     return 0
 
 

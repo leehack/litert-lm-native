@@ -3,6 +3,7 @@ import hashlib
 import re
 from pathlib import Path
 
+from asr_litertlm_container_patch import container_patch_manifest
 from stream_finish_reason_patch import finish_reason_patch_manifest
 
 PREIMAGE_SHA256 = "6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826"
@@ -34,7 +35,7 @@ def require_asr_patch_decision(compatibility_tag: str) -> None:
 def source_patch_manifest(compatibility_tag: str) -> list[dict]:
     require_asr_patch_decision(compatibility_tag)
     if compatibility_tag != "v0.18.0":
-        return []
+        return container_patch_manifest(compatibility_tag)
     return [{
         "id": "asr-untimed-overlap",
         "path": PATCH_PATH,
@@ -43,4 +44,5 @@ def source_patch_manifest(compatibility_tag: str) -> list[dict]:
         "preimageSha256Lf": PREIMAGE_SHA256,
         "postimageSha256Lf": POSTIMAGE_SHA256,
         "scope": "source-built runtimes only; excludes official upstream prebuilts",
-    }, *finish_reason_patch_manifest(compatibility_tag)]
+    }, *container_patch_manifest(compatibility_tag),
+        *finish_reason_patch_manifest(compatibility_tag)]

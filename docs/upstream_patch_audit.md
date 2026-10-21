@@ -17,6 +17,7 @@ paths; affected GPU devices remain separate release-adoption evidence.
 | v0.15 OpenCL sampler override | Inactive for v0.18 | Already restricted to v0.15.0; retain historical build support. |
 | Stream finish reasons | Apply only to audited v0.18.0 source hashes | Upstream reports a stop token, the output-token budget and a full context identically, so consumers cannot detect truncation ([#78](https://github.com/leehack/litert-lm-native/issues/78)). See the tracking section below. |
 | Untimed ASR overlap alignment | Apply only to audited v0.18.0 source hash | A declarative patch aligns matching boundary words before the word-count fallback. Timed and single-window outputs are unchanged in differential replay; the revised confidence checks prevent the audited periodic collapse and avoid measured clean-corpus regressions, while garbled inputs retain small regressions and repetition gains are reduced. Applies to untimed presets using `TimestampTextMerger` (Moonshine, Whisper tiny, Qwen3-ASR); `tinygemma-asr` uses the Levenshtein merger and is unaffected. See [qualification and retirement gates](asr_untimed_overlap.md) and the [unposted upstream draft](asr_untimed_overlap_upstream_issue.md). Real-model packaged JFK validation remains required. |
+| ASR `.litertlm` container routing | Backport to audited v0.18.0 source hashes | Stock v0.18.0 `AsrEngine::Create` sends every `.litertlm` path to the LLM runner, so the published Whisper tiny container (one `tf_lite_encoder_decoder` section plus AsrMetadata and an HF tokenizer) fails with `tf_lite_prefill_decode not found` ([#77](https://github.com/leehack/litert-lm-native/issues/77)). Upstream [`bfdec21732`](https://github.com/google-ai-edge/LiteRT-LM/commit/bfdec21732) selects the decoder from AsrMetadata and loads the container's ASR section and tokenizer; it landed on `main` after the v0.18 branch, and v0.18.1 still lacks it. The backport is that commit's `asr_engine` change without the `kUnspecified` enum. Qwen3-ASR and LLM-only containers keep the LLM route. PR qualification runs the pinned container on CPU plus two derived negatives. |
 
 Primary sources:
 
@@ -37,6 +38,15 @@ source patches. Periodic/repeated-phrase ambiguity and empirical confidence
 cutoffs are explicit release risks; the full 5s/30s trade-off table is in the
 [qualification report](asr_untimed_overlap.md). Retirement requires an upstream
 tagged equivalent, the model-free negative suite and packaged real-model proof.
+
+## #77 workaround tracking: ASR `.litertlm` container routing
+
+`tools/asr_litertlm_container_patch.py` pins the three patched v0.18.0 sources;
+any other source fails closed and newer tags need an explicit decision. The
+manifest records one `sourcePatches` entry per patched file. Retire the patch
+when a tagged upstream release contains `bfdec21732`; upstream `main` has since
+replaced `AsrEngine` with the Omni engine, so retirement moves with the bridge's
+Omni migration.
 
 ## #78 workaround tracking: stream finish reasons
 

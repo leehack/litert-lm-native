@@ -19,6 +19,8 @@ STATUS_CANCELLED = 7
 STATUS_NEEDS_MORE_AUDIO = 10
 STATUS_END_OF_STREAM = 11
 STATUS_WOULD_BLOCK = 12
+# LitertLmAsrModelPreset values from native/bridge/litert_lm_asr_bridge.h.
+MODEL_PRESETS = {"moonshine-tiny": 3, "whisper-tiny": 4}
 
 _DLL_DIRECTORY_HANDLES: list[object] = []
 
@@ -186,17 +188,18 @@ def read_pcm16_mono(path: Path) -> tuple[int, list[float]]:
     return sample_rate, samples
 
 
-def configure_moonshine(
+def configure_preset(
     library: ctypes.CDLL,
+    preset: str,
     model_path: Path,
     tokenizer_path: Path,
 ) -> AsrConfig:
     config = AsrConfig()
     status = library.litert_lm_asr_config_init_for_model_preset(
-        ctypes.byref(config), 3
+        ctypes.byref(config), MODEL_PRESETS[preset]
     )
     if status != STATUS_OK:
-        raise RuntimeError(f"Could not initialize Moonshine ASR preset: {status}")
+        raise RuntimeError(f"Could not initialize {preset} ASR preset: {status}")
     config.model_path = str(model_path).encode()
     config.tokenizer_path = str(tokenizer_path).encode()
     config.backend = 0  # CPU.
@@ -248,10 +251,17 @@ def main() -> int:
         description="Run the exported LiteRT-LM native ASR bridge on a WAV file."
     )
     parser.add_argument("--library", type=Path, required=True)
+    parser.add_argument(
+        "--preset", choices=sorted(MODEL_PRESETS), default="moonshine-tiny"
+    )
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--tokenizer", type=Path, required=True)
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--expect", help="Case-insensitive transcript substring.")
+    parser.add_argument(
+        "--expect-engine-error",
+        help="Require engine creation to fail with this message substring.",
+    )
     parser.add_argument("--evidence-json", type=Path)
     parser.add_argument("--platform")
     parser.add_argument("--arch")
@@ -273,6 +283,10 @@ def main() -> int:
             "--evidence-json requires --platform, --arch, --upstream-commit, "
             "--native-commit, --release-tag, and --expect"
         )
+    if args.evidence_json and args.preset != "moonshine-tiny":
+        parser.error("--evidence-json records the moonshine-tiny release smoke only")
+    if args.expect_engine_error and (args.expect or args.evidence_json):
+        parser.error("--expect-engine-error excludes --expect and --evidence-json")
     pinned_sources = None
     if args.evidence_json:
         pinned_sources = pinned_asset_sources(args.model, args.tokenizer, args.audio)
@@ -289,12 +303,25 @@ def main() -> int:
     if sample_rate != 16000:
         raise ValueError(f"Expected 16000 Hz fixture, got {sample_rate} Hz.")
 
-    config = configure_moonshine(library, args.model, args.tokenizer)
+    config = configure_preset(library, args.preset, args.model, args.tokenizer)
     engine = ctypes.c_void_p()
     error = ctypes.c_void_p()
     status = library.litert_lm_asr_engine_create(
         ctypes.byref(config), ctypes.byref(engine), ctypes.byref(error)
     )
+    if args.expect_engine_error:
+        if status == STATUS_OK:
+            library.litert_lm_asr_engine_delete(engine)
+            raise RuntimeError("engine_create succeeded; expected a load error.")
+        message = take_error(library, error)
+        if args.expect_engine_error not in message:
+            raise RuntimeError(
+                f"engine_create failed ({status}) without "
+                f"{args.expect_engine_error!r}: {message}"
+            )
+        print("RESULT litert_lm_asr_engine_error " + json.dumps(
+            {"status": status, "message": message}, sort_keys=True))
+        return 0
     check_status(library, status, error, "engine_create")
 
     session = ctypes.c_void_p()
