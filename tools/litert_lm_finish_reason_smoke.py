@@ -2,7 +2,8 @@
 """Opt-in real-model check of the stream finish-reason bridge ABI (#78).
 
 Each scenario streams one conversation turn through stream_proxy_* and checks
-the reason reported after the final callback.
+the reason reported after the final callback. With --abi-only it only checks
+that a built runtime reports the finish-reason ABI version its tag requires.
 """
 from __future__ import annotations
 
@@ -15,6 +16,8 @@ import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+
+from stream_finish_reason_patch import require_finish_reason_patch_decision
 
 FINISH_REASONS = {
     0: "unknown",
@@ -186,12 +189,23 @@ def mismatches(results: list[dict[str, object]]) -> list[str]:
     ]
 
 
+def expected_abi_version(upstream_tag: str) -> int:
+    return 1 if require_finish_reason_patch_decision(upstream_tag) else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--library", type=Path, required=True)
-    parser.add_argument("--model", type=Path, required=True)
+    parser.add_argument("--model", type=Path)
     parser.add_argument("--backend", default="cpu")
+    parser.add_argument("--abi-only", action="store_true")
+    parser.add_argument("--upstream-tag",
+                        help="Compatibility tag whose ABI version --abi-only expects.")
     args = parser.parse_args()
+    if args.abi_only != bool(args.upstream_tag):
+        parser.error("--abi-only and --upstream-tag go together")
+    if not args.abi_only and args.model is None:
+        parser.error("--model is required unless --abi-only is set")
 
     try:
         library = bind(args.library.resolve())
@@ -200,6 +214,11 @@ def main() -> int:
               file=sys.stderr)
         return 1
     version = library.stream_proxy_finish_reason_abi_version()
+    if args.abi_only:
+        expected = expected_abi_version(args.upstream_tag)
+        print(f"stream_proxy_finish_reason_abi_version() = {version}; "
+              f"{args.upstream_tag} expects {expected}")
+        return 0 if version == expected else 1
     if version != 1:
         print(f"stream_proxy_finish_reason_abi_version() = {version}; "
               "this runtime does not report finish reasons", file=sys.stderr)

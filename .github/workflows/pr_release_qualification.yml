@@ -172,7 +172,7 @@ jobs:
           (matrix.platform == 'macos' && matrix.arch == 'arm64' && runner.arch == 'ARM64')
         run: python3 tools/fetch_litert_lm_asr_smoke_assets.py --output-dir asr-smoke-assets
 
-      - name: Run Unix ASR real-model smoke
+      - name: Run Unix ASR real-model smoke and finish-reason ABI check
         if: >-
           (matrix.platform == 'linux' && matrix.arch == 'x64') ||
           (matrix.platform == 'macos' && matrix.arch == 'arm64' && runner.arch == 'ARM64')
@@ -187,6 +187,10 @@ jobs:
             export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/bin/macos/arm64${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
             library="bin/macos/arm64/libLiteRtLm.dylib"
           fi
+          python3 tools/litert_lm_finish_reason_smoke.py \
+            --library "$library" \
+            --abi-only \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG"
           python3 tools/litert_lm_asr_smoke.py \
             --library "$library" \
             --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite \
@@ -200,13 +204,18 @@ jobs:
             --native-commit "$PR_HEAD_SHA" \
             --release-tag "$QUALIFICATION_RELEASE_TAG"
 
-      - name: Run Windows ASR real-model smoke
+      - name: Run Windows ASR real-model smoke and finish-reason ABI check
         if: matrix.platform == 'windows' && matrix.arch == 'x64'
         shell: pwsh
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           $env:PATH = "$pwd\bin\windows\x64;$env:PATH"
+          python tools/litert_lm_finish_reason_smoke.py `
+            --library bin/windows/x64/LiteRtLm.dll `
+            --abi-only `
+            --upstream-tag "$env:QUALIFICATION_UPSTREAM_TAG"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/litert_lm_asr_smoke.py `
             --library bin/windows/x64/LiteRtLm.dll `
             --model asr-smoke-assets/moonshine_tiny_5s_i8.tflite `

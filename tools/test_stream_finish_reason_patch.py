@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import tempfile
 import unittest
@@ -93,6 +94,50 @@ class StreamFinishReasonPatchTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "requalify the stream finish-reason patch"):
                 build_upstream_runtime.patch_stream_finish_reason(root, "v0.18.0")
             build_upstream_runtime.patch_stream_finish_reason(root, "v0.17.1")
+
+    def _fake_sources(self, root: Path) -> dict[str, tuple[str, str]]:
+        sources = {}
+        for name in ("a.cc", "b.h"):
+            sources[name] = (
+                hashlib.sha256(f"pre {name}\n".encode()).hexdigest(),
+                hashlib.sha256(f"post {name}\n".encode()).hexdigest(),
+            )
+        return sources
+
+    def _apply(self, root: Path, contents: dict[str, str], git_apply_writes: str):
+        sources = self._fake_sources(root)
+        for name, prefix in contents.items():
+            (root / name).write_text(f"{prefix} {name}\n")
+
+        def git_apply(command, **_kwargs):
+            if "--check" not in command:
+                for name in sources:
+                    (root / name).write_text(f"{git_apply_writes} {name}\n")
+
+        with patch.object(build_upstream_runtime, "FINISH_REASON_PATCH_SOURCES", sources), \
+             patch.object(build_upstream_runtime.subprocess, "run", side_effect=git_apply) as run:
+            build_upstream_runtime.patch_stream_finish_reason(root, "v0.18.0")
+        return run
+
+    def test_patch_applies_to_preimage_and_checks_postimage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            run = self._apply(Path(temp), {"a.cc": "pre", "b.h": "pre"}, "post")
+            self.assertEqual(run.call_count, 2)
+
+    def test_patch_rejects_an_unexpected_postimage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, self.assertRaisesRegex(
+            RuntimeError, "postimage mismatch"
+        ):
+            self._apply(Path(temp), {"a.cc": "pre", "b.h": "pre"}, "drifted")
+
+    def test_patch_skips_only_when_every_source_is_patched(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            run = self._apply(Path(temp), {"a.cc": "post", "b.h": "post"}, "post")
+            run.assert_not_called()
+        with tempfile.TemporaryDirectory() as temp, self.assertRaisesRegex(
+            RuntimeError, "requalify the stream finish-reason patch"
+        ):
+            self._apply(Path(temp), {"a.cc": "post", "b.h": "pre"}, "post")
 
 
 if __name__ == "__main__":

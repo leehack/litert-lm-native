@@ -39,6 +39,12 @@ class FinishReasonSmokeTest(unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": "hi"}]},
         )
 
+    def test_abi_only_expects_version_one_only_for_patched_tags(self) -> None:
+        self.assertEqual(smoke.expected_abi_version("v0.18.0"), 1)
+        self.assertEqual(smoke.expected_abi_version("v0.17.1"), 0)
+        with self.assertRaisesRegex(RuntimeError, "no explicit decision"):
+            smoke.expected_abi_version("v0.19.0")
+
 
 if __name__ == "__main__":
     unittest.main()

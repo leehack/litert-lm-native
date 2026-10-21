@@ -191,9 +191,11 @@ LITERT_LM_BRIDGE_EXPORT void *stream_proxy_create(
   return context;
 }
 
-// Returns the finish reason recorded from the stream's final callback, or
-// STREAM_PROXY_FINISH_REASON_UNKNOWN before it, for a NULL context, or when
-// stream_proxy_finish_reason_abi_version() is 0.
+// Returns the finish reason recorded by the latest final callback on this
+// proxy. A fresh proxy, a NULL context or ABI version 0 returns UNKNOWN; a
+// reused proxy keeps the previous turn's value until the next final callback.
+// A turn whose final callback races another message sent on the same
+// conversation may report UNKNOWN.
 LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_get_finish_reason(
     const void *callback_data) {
   if (callback_data == NULL) {

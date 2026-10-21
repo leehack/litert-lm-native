@@ -352,7 +352,11 @@ See [the precise platform restriction and qualification gates](docs/platform_str
 When `stream_proxy_finish_reason_abi_version()` returns 1, the final callback
 of a `litert_lm_conversation_send_message_stream` turn carries why the turn
 ended. Read it with `stream_proxy_get_finish_reason(callback_data)` after that
-callback and before `stream_proxy_delete`:
+callback and before `stream_proxy_delete`. A fresh proxy returns 0 until its
+final callback; a reused proxy keeps the previous turn's value until then, so
+use one proxy per turn or read only after the final callback. If another
+message is sent on the same conversation before a turn's final callback, that
+turn may report 0.
 
 | Value | Meaning |
 | --- | --- |
@@ -367,4 +371,7 @@ A missing symbol or version 0 means the runtime never reports a cause; treat
 it as unknown, never infer truncation from output length. Version 1 requires
 the carried v0.18.0 patch described in
 [`docs/upstream_patch_audit.md`](docs/upstream_patch_audit.md); Session-API
-streams always report 0.
+streams always report 0. The patch's
+`litert_lm_native_stream_chunk_get_finish_reason` can appear in the runtime's
+exported symbols (it does on macOS); it is internal to the bridge, not a
+consumer API, and may change without notice.
