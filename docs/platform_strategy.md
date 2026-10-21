@@ -39,7 +39,9 @@ LiteRtLmBridge is limited to narrow FFI helpers around that runtime surface. It
 exports the `stream_proxy_*` compatibility symbols used by downstream streaming
 callbacks. LiteRT-LM 0.15+ opaque stream chunks are translated to that stable
 callback contract inside the bridge. Consumers can probe
-`stream_proxy_callback_abi_version` before registering callbacks. Source-built
+`stream_proxy_callback_abi_version` before registering callbacks. Runtimes built
+with the carried v0.18.0 finish-reason patch also report why a conversation
+stream ended; consumers probe `stream_proxy_finish_reason_abi_version`. Source-built
 native runtimes use Bazel `--package_path` on Unix-like runners and copy the
 bridge package into the extracted source tree on Windows to avoid Bazel's
 Windows package-path parser, without patching upstream source files in the

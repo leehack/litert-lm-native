@@ -15,6 +15,7 @@ paths; affected GPU devices remain separate release-adoption evidence.
 | zlib download URL workaround | No additional rewrite for v0.18 | Upstream WORKSPACE already supplies the accepted mirror list; the helper preserves it. Retain the older-source URL fallback. |
 | Android Dawn rollback | Keep for v0.18 | Stock v0.18 loses the Vulkan device during Qwen inference on Pixel 9 Pro (API 35, Mali-G715). A controlled APK changing only arm64 Dawn to the checksum-pinned historical binary restores raw GPU inference. Extend the existing override to v0.18; this does not fix the separate Galaxy S24 allocation limit or qualify Android x64 hardware. See the linked device qualification record. |
 | v0.15 OpenCL sampler override | Inactive for v0.18 | Already restricted to v0.15.0; retain historical build support. |
+| Stream finish reasons | Apply only to audited v0.18.0 source hashes | Upstream reports a stop token, the output-token budget and a full context identically, so consumers cannot detect truncation ([#78](https://github.com/leehack/litert-lm-native/issues/78)). See the tracking section below. |
 | Untimed ASR overlap alignment | Apply only to audited v0.18.0 source hash | A declarative patch aligns matching boundary words before the word-count fallback. Timed and single-window outputs are unchanged in differential replay; the revised confidence checks prevent the audited periodic collapse and avoid measured clean-corpus regressions, while garbled inputs retain small regressions and repetition gains are reduced. Applies to untimed presets using `TimestampTextMerger` (Moonshine, Whisper tiny, Qwen3-ASR); `tinygemma-asr` uses the Levenshtein merger and is unaffected. See [qualification and retirement gates](asr_untimed_overlap.md) and the [unposted upstream draft](asr_untimed_overlap_upstream_issue.md). Real-model packaged JFK validation remains required. |
 
 Primary sources:
@@ -36,3 +37,22 @@ source patches. Periodic/repeated-phrase ambiguity and empirical confidence
 cutoffs are explicit release risks; the full 5s/30s trade-off table is in the
 [qualification report](asr_untimed_overlap.md). Retirement requires an upstream
 tagged equivalent, the model-free negative suite and packaged real-model proof.
+
+## #78 workaround tracking: stream finish reasons
+
+Upstream `ShouldStop` (`runtime/core/tasks.cc`) folds a stop token, the
+output-token budget and a full KV cache into `TaskState::kDone`, and the
+conversation C API forwards only text, final and error. Step counts cannot
+recover the cause: a stop token sampled exactly at the budget step ends with
+the same count as a cut-off reply. `native/bridge/stream_finish_reason.patch`
+records which `ShouldStop` branch fired, in upstream precedence order, and
+carries it through `Conversation` to the final conversation stream chunk.
+`stream_proxy_finish_reason_abi_version()` returns 1 only for runtimes built
+with the patch; see the [README](../README.md#bridge-finish-reasons).
+
+`tools/stream_finish_reason_patch.py` pins the six patched v0.18.0 sources;
+any other source fails closed and newer tags need an explicit decision. The
+manifest records one `sourcePatches` entry per patched file. Session-API
+streams and Web (`@litert-lm/core`) still report no cause. Retire the patch
+when a tagged upstream release exposes an equivalent terminal cause.
+`tools/litert_lm_finish_reason_smoke.py` is the opt-in real-model check.

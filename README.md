@@ -346,3 +346,25 @@ unavailable in these candidate artifacts; ordinary inference and generic
 function calling remain enabled. Artifact, model, and minimum-OS qualification
 is still required before claiming iOS 16.4 compatibility or updating consumers.
 See [the precise platform restriction and qualification gates](docs/platform_strategy.md#provider-free-ios-source-build-candidate).
+
+### Bridge finish reasons
+
+When `stream_proxy_finish_reason_abi_version()` returns 1, the final callback
+of a `litert_lm_conversation_send_message_stream` turn carries why the turn
+ended. Read it with `stream_proxy_get_finish_reason(callback_data)` after that
+callback and before `stream_proxy_delete`:
+
+| Value | Meaning |
+| --- | --- |
+| 0 | Unknown: not finished, not reported, or an older runtime |
+| 1 | Stop token or stop sequence |
+| 2 | Output-token budget (`max_output_tokens`) reached |
+| 3 | Context window (KV cache) full |
+| 4 | Cancelled |
+| 5 | Error |
+
+A missing symbol or version 0 means the runtime never reports a cause; treat
+it as unknown, never infer truncation from output length. Version 1 requires
+the carried v0.18.0 patch described in
+[`docs/upstream_patch_audit.md`](docs/upstream_patch_audit.md); Session-API
+streams always report 0.

@@ -52,7 +52,23 @@ class LiteRtLmBridgeTest(unittest.TestCase):
     def test_stream_chunk_callback_adapter(self) -> None:
         self._compile_and_run(stream_chunk_api=True)
 
-    def _compile_and_run(self, *, stream_chunk_api: bool) -> None:
+    def test_stream_chunk_finish_reason(self) -> None:
+        self._compile_and_run(stream_chunk_api=True, finish_reason_api=True)
+
+    def test_finish_reason_requires_stream_chunk_api(self) -> None:
+        compiler = shutil.which("cc") or shutil.which("clang")
+        if compiler is None:
+            self.skipTest("A C compiler is required for bridge validation")
+        result = subprocess.run(
+            [compiler, "-std=c11", "-fsyntax-only",
+             "-DLITERT_LM_FINISH_REASON_API=1", str(BRIDGE_SOURCE)],
+            capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires LITERT_LM_STREAM_CHUNK_API", result.stderr)
+
+    def _compile_and_run(
+        self, *, stream_chunk_api: bool, finish_reason_api: bool = False
+    ) -> None:
         compiler = shutil.which("cc") or shutil.which("clang")
         if compiler is None:
             self.skipTest("A C compiler is required for bridge validation")
@@ -68,6 +84,8 @@ class LiteRtLmBridgeTest(unittest.TestCase):
             ]
             if stream_chunk_api:
                 command.append("-DLITERT_LM_STREAM_CHUNK_API=1")
+            if finish_reason_api:
+                command.append("-DLITERT_LM_FINISH_REASON_API=1")
             command.extend(
                 [
                     str(BRIDGE_SOURCE),

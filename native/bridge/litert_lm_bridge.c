@@ -26,6 +26,30 @@ LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_callback_abi_version(void) {
 #endif
 }
 
+#if defined(LITERT_LM_FINISH_REASON_API) && !defined(LITERT_LM_STREAM_CHUNK_API)
+#error "LITERT_LM_FINISH_REASON_API requires LITERT_LM_STREAM_CHUNK_API"
+#endif
+
+// Finish-reason wire values returned by stream_proxy_get_finish_reason.
+enum {
+  STREAM_PROXY_FINISH_REASON_UNKNOWN = 0,
+  STREAM_PROXY_FINISH_REASON_STOP = 1,
+  STREAM_PROXY_FINISH_REASON_LENGTH = 2,
+  STREAM_PROXY_FINISH_REASON_CONTEXT_EXHAUSTED = 3,
+  STREAM_PROXY_FINISH_REASON_CANCELLED = 4,
+  STREAM_PROXY_FINISH_REASON_ERROR = 5,
+};
+
+// 0 means this runtime never reports a finish reason; consumers must not
+// infer one. 1 means a conversation stream's final callback carries one.
+LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_finish_reason_abi_version(void) {
+#if defined(LITERT_LM_FINISH_REASON_API)
+  return 1;
+#else
+  return 0;
+#endif
+}
+
 typedef void (*stream_proxy_dart_callback_t)(
     void *callback_data,
     char *chunk,
@@ -41,6 +65,11 @@ extern bool litert_lm_stream_chunk_is_final(
     const LiteRtLmStreamChunk *chunk);
 extern const char *litert_lm_stream_chunk_get_error(
     const LiteRtLmStreamChunk *chunk);
+#if defined(LITERT_LM_FINISH_REASON_API)
+// Defined in the runtime by stream_finish_reason.patch.
+extern int litert_lm_native_stream_chunk_get_finish_reason(
+    const LiteRtLmStreamChunk *chunk);
+#endif
 
 typedef void (*stream_proxy_upstream_callback_t)(
     void *callback_data,
@@ -52,6 +81,7 @@ typedef stream_proxy_dart_callback_t stream_proxy_upstream_callback_t;
 typedef struct stream_proxy_context {
   stream_proxy_dart_callback_t dart_callback;
   void *dart_data;
+  int32_t finish_reason;
 } stream_proxy_context_t;
 
 static char *stream_proxy_copy_string(const char *value) {
@@ -86,6 +116,18 @@ static void stream_proxy_forward(
     error_message = litert_lm_stream_chunk_get_error(stream_chunk);
     is_final = litert_lm_stream_chunk_is_final(stream_chunk);
   }
+#if defined(LITERT_LM_FINISH_REASON_API)
+  // Stored before the final callback so a consumer reading it after that
+  // callback (or after a message posted from it) observes the value.
+  if (is_final) {
+    int reason = litert_lm_native_stream_chunk_get_finish_reason(stream_chunk);
+    context->finish_reason =
+        reason >= STREAM_PROXY_FINISH_REASON_UNKNOWN &&
+                reason <= STREAM_PROXY_FINISH_REASON_ERROR
+            ? reason
+            : STREAM_PROXY_FINISH_REASON_UNKNOWN;
+  }
+#endif
 
   char *chunk_copy = stream_proxy_copy_string(chunk);
   char *error_copy = stream_proxy_copy_string(error_message);
@@ -147,6 +189,17 @@ LITERT_LM_BRIDGE_EXPORT void *stream_proxy_create(
   context->dart_data = dart_data;
   *out_proxy_callback = stream_proxy_forward;
   return context;
+}
+
+// Returns the finish reason recorded from the stream's final callback, or
+// STREAM_PROXY_FINISH_REASON_UNKNOWN before it, for a NULL context, or when
+// stream_proxy_finish_reason_abi_version() is 0.
+LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_get_finish_reason(
+    const void *callback_data) {
+  if (callback_data == NULL) {
+    return STREAM_PROXY_FINISH_REASON_UNKNOWN;
+  }
+  return ((const stream_proxy_context_t *)callback_data)->finish_reason;
 }
 
 LITERT_LM_BRIDGE_EXPORT void stream_proxy_delete(void *callback_data) {
