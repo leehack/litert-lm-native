@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -47,7 +48,7 @@ class AsrLitertLmContainerPatchTest(unittest.TestCase):
             for source, data in patched.items():
                 self.assertEqual((root / source).read_bytes(), data)
 
-    def test_rejects_drift_and_partial_postimage_without_mutation(self):
+    def test_rejects_drift_without_mutation(self):
         for drifted in SOURCES:
             with self.subTest(drifted=drifted), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
@@ -59,6 +60,33 @@ class AsrLitertLmContainerPatchTest(unittest.TestCase):
                     build.patch_asr_litertlm_container(root, "v0.18.0")
                 for source, data in before.items():
                     self.assertEqual((root / source).read_bytes(), data)
+
+    def test_rejects_partial_postimage_without_mutation(self):
+        for patched in SOURCES:
+            with self.subTest(patched=patched), tempfile.TemporaryDirectory() as temp:
+                complete = Path(temp) / "complete"
+                stage_preimage(complete)
+                build.patch_asr_litertlm_container(complete, "v0.18.0")
+                root = Path(temp) / "partial"
+                stage_preimage(root)
+                (root / patched).write_bytes((complete / patched).read_bytes())
+                before = {source: (root / source).read_bytes() for source in SOURCES}
+                with self.assertRaisesRegex(RuntimeError, "requalify .litertlm container patch"):
+                    build.patch_asr_litertlm_container(root, "v0.18.0")
+                for source, data in before.items():
+                    self.assertEqual((root / source).read_bytes(), data)
+
+    def test_patch_applies_inside_a_worktree_without_touching_its_root(self):
+        # Windows builds extract upstream under REPO_ROOT/.tmp, inside a checkout.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            upstream = root / ".tmp/upstream"
+            stage_preimage(upstream)
+            build.patch_asr_litertlm_container(upstream, "v0.18.0")
+            for source, (_, postimage) in SOURCES.items():
+                self.assertEqual(source_sha256((upstream / source).read_bytes()), postimage)
+            self.assertFalse((root / "omni").exists())
 
     def test_postimage_verification_rejects_incorrect_apply(self):
         with tempfile.TemporaryDirectory() as temp:
