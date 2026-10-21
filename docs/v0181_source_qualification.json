@@ -1,0 +1,125 @@
+{
+  "baseline": "b2f686e2ed4718fb84ec398a61dd59ca0f0aff27",
+  "candidate": "bda624851d74be34d4e1f7fac1fc4155939539c7",
+  "commits": [
+    "bda624851d74be34d4e1f7fac1fc4155939539c7 Update LiteRT-LM Swift package to v0.18.1.",
+    "22884c8b9df00aa3cd272b095e1b8e0ce385b5d9 Fix macOS prebuilt release packaging for litert_lm_main.",
+    "fde9765940ce622194f70fdb4b1e3b3bba334a96 Update LiteRT-LM Web demos",
+    "984426a2573bf19983910141616dacd9e680b4f9 Update dependencies of litert_lm"
+  ],
+  "effectivePins": {
+    "LITERT_REF": "ca21dc99de51c76bdcc572afeea1dd937d3c9e5c",
+    "LITERT_SHA256": "d3c0455b405fadc597c840c8d708ced4f2a89c78eae21d9c0252f744b94c7fbc",
+    "TENSORFLOW_REF": "a1179d3c224967bd979950b823d5ce2a7e8f4c94",
+    "TENSORFLOW_SHA256": "c99256ecac35ee2d7795de8ee8976afbcc47308edf2c8a04a20a5bd8ffd5b8ae"
+  },
+  "runtimeCAndOmniDiff": "",
+  "prebuiltPointerInventory": {
+    "prebuilt/android_arm64/libGemmaModelConstraintProvider.so": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:f2aa38cecc5c728050652ffdbaed4c6f2d444e098e1ca3ecf8b85be46baae5b9\nsize 19606552",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:c7c7188b831ae75fcc7ec6fe613118365b311995805423a4ca265372f07f4783\nsize 19415656",
+      "identical": false
+    },
+    "prebuilt/android_arm64/libwebgpu_dawn.so": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:657b2beb6456d50d7f6c86b315d5c2e97ad5a3870b134bcfcc2aa682ef467977\nsize 19702160",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:657b2beb6456d50d7f6c86b315d5c2e97ad5a3870b134bcfcc2aa682ef467977\nsize 19702160",
+      "identical": true
+    },
+    "prebuilt/android_x86_64/libGemmaModelConstraintProvider.so": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:6651c72d64a8927c039caaa205294c9bcdeb70cf59a1d2adc8c356876c406521\nsize 17447096",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:bf6ba9677729631005c921abdd75bb95396b3549814a1b5c3bdf74b5f6ae3a7d\nsize 17285384",
+      "identical": false
+    },
+    "prebuilt/android_x86_64/libwebgpu_dawn.so": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:ffc5ad473840f98b7f50fae1189b1e6c67a0a78e324253326adfb56706769b59\nsize 17949648",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:ffc5ad473840f98b7f50fae1189b1e6c67a0a78e324253326adfb56706769b59\nsize 17949648",
+      "identical": true
+    },
+    "prebuilt/ios_arm64/libGemmaModelConstraintProvider.dylib": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:066b777fe896bf0db8fb2f0d3248d6d6f0d1910b6ea3109b755a3bebc811cb7e\nsize 21054392",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:e48e50292062c42af77ff6676a955825140e36d43948e96273071c544ddb634e\nsize 21146928",
+      "identical": false
+    },
+    "prebuilt/ios_sim_arm64/libGemmaModelConstraintProvider.dylib": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:8bc6e2ebca796fe079fb970a9a8192032d191bbbc770e39dd480d3cd138bfdd9\nsize 20421648",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:835d6bc2fc4d8967f49297c2b6ecfee6b556c9fb14e277bf59d3e6231df54291\nsize 20493872",
+      "identical": false
+    },
+    "prebuilt/linux_arm64/libGemmaModelConstraintProvider.so": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:3ec0e7429045bf18f2cde599f28d66a93f035a2e6a3badcc7455672ac20e3f71\nsize 22694888",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:4685001be31d57f71f6407990276ff5378bb631e7571cfe4be99387bb767134a\nsize 22564512",
+      "identical": false
+    },
+    "prebuilt/linux_arm64/libwebgpu_dawn.so": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:8cc5774974c74dd0ec86378fc66fadd90116aba3ef965e582b91977f24c21d4a\nsize 13412424",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:8cc5774974c74dd0ec86378fc66fadd90116aba3ef965e582b91977f24c21d4a\nsize 13412424",
+      "identical": true
+    },
+    "prebuilt/linux_x86_64/libGemmaModelConstraintProvider.so": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:f5970d283f648f15531361bff2ad110d5bcb972563bd560483fc65fffb01f3d3\nsize 22627960",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:fc4e17a9e84712be278da4ba49b7accdf5ba35aff2515426cddf7cef670239b6\nsize 22497392",
+      "identical": false
+    },
+    "prebuilt/linux_x86_64/libwebgpu_dawn.so": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:f4f932cace524639b3610a2a97039b69bf2308825c9fc65e7a0ee24fa3a5a379\nsize 13806536",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:f4f932cace524639b3610a2a97039b69bf2308825c9fc65e7a0ee24fa3a5a379\nsize 13806536",
+      "identical": true
+    },
+    "prebuilt/macos_arm64/libGemmaModelConstraintProvider.dylib": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:d7d5d6c482429ec057a2a18231610d54375d4be39e8635359850b3df4c76a74b\nsize 9386608",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:f98767361b14bb4ad12866b32d62611875134c8f2de7e64d071df5f4510fe64a\nsize 9141936",
+      "identical": false
+    },
+    "prebuilt/macos_arm64/libwebgpu_dawn.dylib": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:9e563f1b1af75d5d3375f08097d72e96a1484e56e7cdcf6224815c960e36bd1e\nsize 15255968",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:9e563f1b1af75d5d3375f08097d72e96a1484e56e7cdcf6224815c960e36bd1e\nsize 15255968",
+      "identical": true
+    },
+    "prebuilt/windows_x86_64/libGemmaModelConstraintProvider.dll": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:373d666c3afb9541763b49b193e867c997b53844763d3fb51cddf1b884661f1a\nsize 12997120",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:49ca48d969ffcde4b56e0ef7a604d9cc5c7ad37a599f00dc81f093a687796d52\nsize 12998656",
+      "identical": false
+    },
+    "prebuilt/windows_x86_64/libGemmaModelConstraintProvider.lib": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:29c5ec68c097726a659d15cfff10d3344348f6d2094e2335c69b94bd9dcab786\nsize 2930",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:29c5ec68c097726a659d15cfff10d3344348f6d2094e2335c69b94bd9dcab786\nsize 2930",
+      "identical": true
+    },
+    "prebuilt/windows_x86_64/libwebgpu_dawn.dll": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:3b16ef13395e1b1885384f21f09f5f338089cb0465c17313842152d413a1bb8d\nsize 11906048",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:3b16ef13395e1b1885384f21f09f5f338089cb0465c17313842152d413a1bb8d\nsize 11906048",
+      "identical": true
+    },
+    "prebuilt/windows_x86_64/webgpu_dawn.dll": {
+      "baseline": "version https://git-lfs.github.com/spec/v1\noid sha256:60798a109eac1128a2fbe02b96b2150498d35eb54b31623e0e549c9de9db2146\nsize 11909120",
+      "candidate": "version https://git-lfs.github.com/spec/v1\noid sha256:60798a109eac1128a2fbe02b96b2150498d35eb54b31623e0e549c9de9db2146\nsize 11909120",
+      "identical": true
+    }
+  },
+  "sourceAudit": {
+    "runtime_c_omni_diff": "",
+    "source_hashes": {
+      "omni/asr/timestamp_text_merger.cc": {
+        "baseline": "6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826",
+        "candidate": "6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826",
+        "equal": true
+      },
+      "omni/asr/BUILD": {
+        "baseline": "495b4b4821fc768ca2733bdb18a45a0f6aac300771f9b1f1fa7bf76c98ee9b97",
+        "candidate": "495b4b4821fc768ca2733bdb18a45a0f6aac300771f9b1f1fa7bf76c98ee9b97",
+        "equal": true
+      },
+      "omni/asr/asr_engine.cc": {
+        "baseline": "96132de1f1d665d70585a2ef5ff64f5b432992c116f8f31b5f084679cc1f47d4",
+        "candidate": "96132de1f1d665d70585a2ef5ff64f5b432992c116f8f31b5f084679cc1f47d4",
+        "equal": true
+      },
+      "omni/asr/asr_engine.h": {
+        "baseline": "ace689b9bf490bee06e740d5965a99ee402bb194ed4ee29d425f2e651e365cf3",
+        "candidate": "ace689b9bf490bee06e740d5965a99ee402bb194ed4ee29d425f2e651e365cf3",
+        "equal": true
+      }
+    },
+    "original_v0181_build_gate": "ASR untimed overlap has no explicit decision for v0.18.1; revalidate the carried patch or record a version-specific opt-out with evidence in tools/asr_overlap_patch.py and docs/asr_untimed_overlap.md before building or releasing this version"
+  }
+}

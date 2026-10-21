@@ -94,6 +94,9 @@ PREBUILT_OVERRIDES: dict[str, tuple[PrebuiltOverride, ...]] = {
     # Stock v0.18 still loses the Vulkan device on Pixel Mali-G715.
     # A single-library comparison restores inference with the pinned Dawn.
     "v0.18.0": ANDROID_DAWN_ROLLBACKS,
+    # v0.18.1 updates LiteRT/provider dependencies but not Dawn payloads.
+    # No affected Pixel/Mali device requalification permits retirement.
+    "v0.18.1": ANDROID_DAWN_ROLLBACKS,
 }
 
 
