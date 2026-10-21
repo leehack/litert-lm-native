@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 from asr_litertlm_container_patch import SOURCES as CONTAINER_PATCH_SOURCES, require_container_patch_decision
-from asr_overlap_patch import PREIMAGE_SHA256, POSTIMAGE_SHA256, source_sha256, require_asr_patch_decision
+from asr_overlap_patch import AUDITED_OVERLAP_TAGS, PREIMAGE_SHA256, POSTIMAGE_SHA256, source_sha256, require_asr_patch_decision
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -141,7 +141,7 @@ LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
     """Carry #673 only on the audited v0.18 source; require review on drift."""
     require_asr_patch_decision(upstream_tag)
-    if upstream_tag != "v0.18.0":
+    if upstream_tag not in AUDITED_OVERLAP_TAGS:
         return
     source = source_root / "omni/asr/timestamp_text_merger.cc"
     digest = source_sha256(source.read_bytes())
@@ -234,14 +234,15 @@ def needs_gpu_environment_teardown_patch(
     # The decision follows the pinned LiteRT commit, not the LiteRT-LM version:
     # a development build of a later upstream commit keeps the 0.17
     # compatibility tag but already pins a LiteRT with the reordering.
-    match = re.search(
+    matches = re.findall(
         r'^LITERT_REF = "([0-9a-f]{40})"$', workspace_text, re.MULTILINE
     )
-    if match is None:
+    if not matches:
         if is_at_least(compatibility_tag, (0, 17, 0)):
             raise RuntimeError("Expected a pinned LITERT_REF in the upstream WORKSPACE")
         return False
-    return match.group(1) in LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING
+    # Starlark uses the last assignment; v0.18.1 keeps its old pin above it.
+    return matches[-1] in LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING
 
 
 def patch_upstream_workspace(

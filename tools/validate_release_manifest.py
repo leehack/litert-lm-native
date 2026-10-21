@@ -176,7 +176,7 @@ def validate_schema_2_payload(
             "compatibilityTag",
             "developmentIdentity",
             "prebuiltOverrides",
-        } | ({"sourcePatches"} if compatibility_tag == "v0.18.0" else set()),
+        } | ({"sourcePatches"} if source_patch_manifest(compatibility_tag) else set()),
         "upstream",
     )
     _require_exact_keys(native, {"repository", "commit"}, "native")

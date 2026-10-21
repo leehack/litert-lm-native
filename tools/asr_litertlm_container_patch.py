@@ -3,6 +3,7 @@ import hashlib
 import re
 from pathlib import Path
 
+AUDITED_CONTAINER_TAGS = frozenset({"v0.18.0", "v0.18.1"})
 PATCH_PATH = "native/bridge/asr_litertlm_container.patch"
 # Upstream google-ai-edge/LiteRT-LM bfdec21732 ("Support ASR models in
 # .litertlm") landed on main after the v0.18 release branch was cut.
@@ -29,7 +30,7 @@ def require_container_patch_decision(compatibility_tag: str) -> bool:
     version = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", compatibility_tag)
     if version and tuple(map(int, version.groups())) < (0, 18, 0):
         return False
-    if compatibility_tag == "v0.18.0":
+    if compatibility_tag in AUDITED_CONTAINER_TAGS:
         return True
     raise RuntimeError(
         f"ASR .litertlm container routing has no explicit decision for "

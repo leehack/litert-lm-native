@@ -46,3 +46,10 @@ manifest records one `sourcePatches` entry per patched file. Retire the patch
 when a tagged upstream release contains `bfdec21732`; upstream `main` has since
 replaced `AsrEngine` with the Omni engine, so retirement moves with the bridge's
 Omni migration.
+
+## Stable v0.18.1 candidate
+
+The explicit v0.18.1 carry decisions, dependency/provider delta, full inventory,
+source controls and missing binary/device gates are in the
+[local qualification report](v0181_qualification.md). No uncertain carry is
+retired and draft terminal-cause PR #80 remains separate.
