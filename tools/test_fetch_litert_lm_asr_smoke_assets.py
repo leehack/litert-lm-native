@@ -61,6 +61,39 @@ class FetchLiteRtLmAsrSmokeAssetsTest(unittest.TestCase):
             self.assertFalse((output_dir / asset.filename).exists())
             self.assertFalse((output_dir / "model.tflite.part").exists())
 
+    def test_derives_verified_variant_and_rejects_unexpected_source(self) -> None:
+        source = b"headermodel_typebody"
+        derived = source.replace(b"model_type", b"model_typx")
+        asset = assets.DerivedAsset(
+            filename="variant.litertlm",
+            source="source.litertlm",
+            offset=6,
+            original=b"model_type",
+            replacement=b"model_typx",
+            sha256=hashlib.sha256(derived).hexdigest(),
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            output_dir = Path(temp)
+            (output_dir / asset.source).write_bytes(source)
+            self.assertEqual(assets.derive_asset(asset, output_dir).read_bytes(), derived)
+            (output_dir / asset.filename).unlink()
+            (output_dir / asset.source).write_bytes(b"header-other-body!!!")
+            with self.assertRaisesRegex(RuntimeError, "does not match"):
+                assets.derive_asset(asset, output_dir)
+            (output_dir / asset.source).write_bytes(source)
+            wrong = assets.DerivedAsset(**{**asset.__dict__, "sha256": "0" * 64})
+            with self.assertRaisesRegex(RuntimeError, "Checksum mismatch"):
+                assets.derive_asset(wrong, output_dir)
+            self.assertEqual(sorted(path.name for path in output_dir.iterdir()),
+                             [asset.source])
+
+    def test_derived_variants_patch_pinned_container(self) -> None:
+        pinned = {asset.filename for asset in assets.ASSETS}
+        for derived in assets.DERIVED_ASSETS:
+            self.assertIn(derived.source, pinned)
+            self.assertEqual(len(derived.original), len(derived.replacement))
+            self.assertNotEqual(derived.original, derived.replacement)
+
 
 if __name__ == "__main__":
     unittest.main()
