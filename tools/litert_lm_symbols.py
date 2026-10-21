@@ -44,6 +44,8 @@ BRIDGE_SYMBOLS = [
     b"stream_proxy_create",
     b"stream_proxy_delete",
     b"stream_proxy_free_string",
+    b"stream_proxy_finish_reason_abi_version",
+    b"stream_proxy_get_finish_reason",
 ]
 
 V0_16_ASR_BRIDGE_SYMBOLS = [

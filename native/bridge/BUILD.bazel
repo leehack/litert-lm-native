@@ -5,11 +5,18 @@ exports_files([
     "litert_gpu_environment_destroy_callback.patch",
     "litert_ios_framework_paths.patch",
     "sentencepiece_bpe_null.patch",
+    "stream_finish_reason.patch",
 ])
 
 config_setting(
     name = "stream_chunk_api",
     define_values = {"litert_lm_stream_chunk_api": "true"},
+)
+
+# Set only when stream_finish_reason.patch is applied to the upstream source.
+config_setting(
+    name = "finish_reason_api",
+    define_values = {"litert_lm_finish_reason_api": "true"},
 )
 
 config_setting(
@@ -34,6 +41,9 @@ cc_library(
     alwayslink = True,
     defines = select({
         ":stream_chunk_api": ["LITERT_LM_STREAM_CHUNK_API=1"],
+        "//conditions:default": [],
+    }) + select({
+        ":finish_reason_api": ["LITERT_LM_FINISH_REASON_API=1"],
         "//conditions:default": [],
     }),
     linkopts = select({

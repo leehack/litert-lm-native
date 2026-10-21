@@ -39,9 +39,24 @@ class PackageReleaseTest(unittest.TestCase):
                     upstream_tag="v0.18.0", upstream_commit=UPSTREAM_COMMIT,
                     compatibility_tag="v0.18.0", release_tag="v0.18.0-1",
                     native_commit=NATIVE_COMMIT, official_upstream_assets=True)
+            from stream_finish_reason_patch import (
+                PATCH_PATH as FINISH_REASON_PATCH_PATH,
+                SOURCES as FINISH_REASON_SOURCES,
+            )
             records = manifest["upstream"]["sourcePatches"]
             self.assertEqual([record["id"] for record in records],
-                             ["asr-untimed-overlap"] + ["asr-litertlm-container"] * 3)
+                             ["asr-untimed-overlap"] + ["asr-litertlm-container"] * 3
+                             + ["stream-finish-reason"] * len(FINISH_REASON_SOURCES))
+            finish_records = records[-len(FINISH_REASON_SOURCES):]
+            finish_reason_sha256 = hashlib.sha256(
+                (Path(__file__).resolve().parents[1] / FINISH_REASON_PATCH_PATH).read_bytes()
+            ).hexdigest()
+            self.assertEqual(
+                {record["source"]: (record["preimageSha256Lf"], record["postimageSha256Lf"])
+                 for record in finish_records},
+                FINISH_REASON_SOURCES)
+            self.assertEqual({record["sha256"] for record in finish_records},
+                             {finish_reason_sha256})
             expected = hashlib.sha256((Path(__file__).resolve().parents[1] / PATCH_PATH).read_bytes()).hexdigest()
             self.assertEqual(records[0]["sha256"], expected)
             self.assertEqual(records[0]["preimageSha256Lf"], PREIMAGE_SHA256)
@@ -52,6 +67,11 @@ class PackageReleaseTest(unittest.TestCase):
                     compatibility_tag="v0.18.0", native_commit=NATIVE_COMMIT,
                     release_tag="v0.18.0-1")
             validate()
+            tampered = deepcopy(records)
+            records[-1]["postimageSha256Lf"] = "0" * 64
+            with self.assertRaisesRegex(SystemExit, "source patch provenance"):
+                validate()
+            records[:] = deepcopy(tampered)
             records[0]["sha256"] = "0" * 64
             with self.assertRaisesRegex(SystemExit, "source patch provenance"):
                 validate()

@@ -1,0 +1,307 @@
+--- a/c/conversation.cc
++++ b/c/conversation.cc
+@@ -40,15 +40,44 @@
+ 
+ namespace {
+ 
++// litert-lm-native stream_proxy finish-reason wire values.
++enum FinishReason : int {
++  kFinishReasonUnknown = 0,
++  kFinishReasonStop = 1,
++  kFinishReasonLength = 2,
++  kFinishReasonContextExhausted = 3,
++  kFinishReasonCancelled = 4,
++  kFinishReasonError = 5,
++};
++
++int ToFinishReason(litert::lm::DecodeStopReason reason) {
++  switch (reason) {
++    case litert::lm::DecodeStopReason::kStopToken:
++      return kFinishReasonStop;
++    case litert::lm::DecodeStopReason::kMaxOutputTokens:
++      return kFinishReasonLength;
++    case litert::lm::DecodeStopReason::kMaxNumTokens:
++      return kFinishReasonContextExhausted;
++    case litert::lm::DecodeStopReason::kUnspecified:
++      return kFinishReasonUnknown;
++  }
++  return kFinishReasonUnknown;
++}
++
+ absl::AnyInvocable<void(absl::StatusOr<litert::lm::Message>)>
+-CreateConversationCallback(LiteRtLmStreamCallback callback, void* user_data) {
+-  return [callback, user_data](absl::StatusOr<litert::lm::Message> message) {
++CreateConversationCallback(LiteRtLmStreamCallback callback, void* user_data,
++                           const litert::lm::Conversation* conversation) {
++  return [callback, user_data,
++          conversation](absl::StatusOr<litert::lm::Message> message) {
+     if (!message.ok()) {
+       std::string error_str = message.status().ToString();
+       LiteRtLmStreamChunk chunk;
+       chunk.text = nullptr;
+       chunk.is_final = true;
+       chunk.error_msg = error_str.c_str();
++      chunk.finish_reason = absl::IsCancelled(message.status())
++                                ? kFinishReasonCancelled
++                                : kFinishReasonError;
+       callback(user_data, &chunk);
+       return;
+     }
+@@ -57,6 +86,8 @@ CreateConversationCallback(LiteRtLmStreamCallback callback, void* user_data) {
+       chunk.text = nullptr;
+       chunk.is_final = true;
+       chunk.error_msg = nullptr;
++      chunk.finish_reason =
++          ToFinishReason(conversation->GetLastDecodeStopReason());
+       callback(user_data, &chunk);
+     } else {
+       std::string json_str = message->dump();
+@@ -606,7 +637,9 @@ int litert_lm_conversation_send_message_stream(
+       conversation->conversation.get(), extra_context, optional_args);
+ 
+   absl::Status status = conversation->conversation->SendMessageAsync(
+-      json_message, CreateConversationCallback(callback, callback_data),
++      json_message,
++      CreateConversationCallback(callback, callback_data,
++                                 conversation->conversation.get()),
+       std::move(litert_lm_optional_args));
+ 
+   if (!status.ok()) {
+@@ -617,6 +650,12 @@ int litert_lm_conversation_send_message_stream(
+   return 0;
+ }
+ 
++// Not part of the upstream C API: the litert-lm-native bridge reads it.
++int litert_lm_native_stream_chunk_get_finish_reason(
++    const LiteRtLmStreamChunk* chunk) {
++  return chunk == nullptr ? kFinishReasonUnknown : chunk->finish_reason;
++}
++
+ const char* litert_lm_conversation_render_message_to_string(
+     LiteRtLmConversation* conversation, const char* message_json) {
+   if (!conversation || !conversation->conversation || !message_json) {
+--- a/c/engine_internal.h
++++ b/c/engine_internal.h
+@@ -47,6 +47,8 @@ struct LiteRtLmStreamChunk {
+   const char* text = nullptr;
+   bool is_final = false;
+   const char* error_msg = nullptr;
++  // litert-lm-native finish-reason wire value; 0 when not reported.
++  int finish_reason = 0;
+ };
+ 
+ struct LiteRtLmRepetitionPenaltyConfig {
+--- a/runtime/conversation/conversation.cc
++++ b/runtime/conversation/conversation.cc
+@@ -565,6 +565,7 @@ absl::Status Conversation::SendMessageAsync(
+     const Message& message,
+     absl::AnyInvocable<void(absl::StatusOr<Message>)> user_callback,
+     OptionalArgs optional_args) {
++  last_decode_stop_reason_.store(DecodeStopReason::kUnspecified);
+   if (optional_args.args.has_value() &&
+       engine_.GetEngineSettings().GetMaxVisionTokensPerImage().has_value()) {
+     ABSL_RETURN_IF_ERROR(ValidateVisualTokenBudget(
+@@ -719,14 +720,30 @@ absl::Status Conversation::SendMessageAsync(
+ 
+   auto internal_callback =
+       std::make_shared<absl::AnyInvocable<void(absl::StatusOr<Responses>)>>(
+-          CreateInternalCallback(
+-              *model_data_processor_,
+-              optional_args.args.value_or(std::monostate()),
+-              config_.GetChannels(), std::move(user_callback),
+-              std::move(cancel_callback), std::move(complete_message_callback),
+-              open_channel_name, config_.return_error_on_max_tokens_reached(),
+-              config_.stream_tool_calls(),
+-              config_.stream_tool_calls_channel_name()));
++          [this,
++           callback = CreateInternalCallback(
++               *model_data_processor_,
++               optional_args.args.value_or(std::monostate()),
++               config_.GetChannels(), std::move(user_callback),
++               std::move(cancel_callback),
++               std::move(complete_message_callback), open_channel_name,
++               config_.return_error_on_max_tokens_reached(),
++               config_.stream_tool_calls(),
++               config_.stream_tool_calls_channel_name())](
++              absl::StatusOr<Responses> responses) mutable {
++            if (responses.ok() &&
++                IsTaskEndState(responses->GetTaskState())) {
++              DecodeStopReason reason = responses->GetDecodeStopReason();
++              // A prefill can fill the context before any decode step.
++              if (reason == DecodeStopReason::kUnspecified &&
++                  responses->GetTaskState() ==
++                      TaskState::kMaxNumTokensReached) {
++                reason = DecodeStopReason::kMaxNumTokens;
++              }
++              last_decode_stop_reason_.store(reason);
++            }
++            callback(std::move(responses));
++          });
+ 
+   ABSL_ASSIGN_OR_RETURN(
+       auto decode_config,
+--- a/runtime/conversation/conversation.h
++++ b/runtime/conversation/conversation.h
+@@ -15,6 +15,7 @@
+ #ifndef THIRD_PARTY_ODML_LITERT_LM_RUNTIME_CONVERSATION_CONVERSATION_H_
+ #define THIRD_PARTY_ODML_LITERT_LM_RUNTIME_CONVERSATION_CONVERSATION_H_
+ 
++#include <atomic>
+ #include <memory>
+ #include <optional>
+ #include <string>
+@@ -618,6 +619,12 @@ class Conversation {
+   // decode).
+   absl::StatusOr<int> GetTokenCount() const;
+ 
++  // Returns why the latest SendMessageAsync decode stopped. It is set before
++  // the final user callback and reset when the next message is sent.
++  DecodeStopReason GetLastDecodeStopReason() const {
++    return last_decode_stop_reason_.load();
++  }
++
+   // Returns the benchmark info for the conversation. Under the hood, this
+   // method triggers the benchmark info collection from the Session. Returns:
+   // - The benchmark info for the conversation.
+@@ -791,6 +798,9 @@ class Conversation {
+   // Whether the current conversation is in message appending state.
+   bool is_appending_message_ ABSL_GUARDED_BY(history_mutex_) = false;
+ 
++  std::atomic<DecodeStopReason> last_decode_stop_reason_{
++      DecodeStopReason::kUnspecified};
++
+   // Mutex for task_controllers_.
+   mutable absl::Mutex task_controllers_mutex_;
+   // Map of task group id to task controllers.
+--- a/runtime/core/tasks.cc
++++ b/runtime/core/tasks.cc
+@@ -89,28 +89,30 @@ int TryGetMaxNumTokens(const LlmExecutor& executor) {
+   return settings->GetMaxNumTokens();
+ }
+ 
+-// Check whether the decoding loop should stop.
+-bool ShouldStop(bool hit_stop_tokens, int benchmark_decode_token_count,
+-                int num_decoded_steps, int current_step, int max_num_tokens,
+-                int max_output_tokens) {
++// Check whether the decoding loop should stop, and why.
++// Returns kUnspecified when decoding should continue.
++DecodeStopReason ShouldStop(bool hit_stop_tokens,
++                            int benchmark_decode_token_count,
++                            int num_decoded_steps, int current_step,
++                            int max_num_tokens, int max_output_tokens) {
+   // Stopping conditions.
+   if (hit_stop_tokens && benchmark_decode_token_count == 0) {
+     // Only early stop if no decode step
+     // is requested by benchmark.
+-    return true;
++    return DecodeStopReason::kStopToken;
+   } else if (benchmark_decode_token_count > 0 &&
+              num_decoded_steps >= benchmark_decode_token_count) {
+     // Stop when the number of decode steps is equal to the
+     // benchmark_decode_token_count (when specified).
+-    return true;
++    return DecodeStopReason::kMaxOutputTokens;
+   } else if (current_step >= max_num_tokens) {
+     // Reaching maximum number of kv-cache size.
+-    return true;
++    return DecodeStopReason::kMaxNumTokens;
+   } else if (num_decoded_steps >= max_output_tokens) {
+     // Reaching maximum number of output tokens.
+-    return true;
++    return DecodeStopReason::kMaxOutputTokens;
+   }
+-  return false;
++  return DecodeStopReason::kUnspecified;
+ }
+ 
+ // A helper class to filter the token stream based on stop tokens.
+@@ -662,6 +664,7 @@ absl::StatusOr<Responses> Decode(
+           benchmark_info, sampler, std::move(repetition_penalty_config),
+           std::move(no_repeat_ngram_config), std::move(suppress_tokens_config),
+           constraint, cancelled, enable_speculative_decoding));
++  DecodeStopReason stop_reason = DecodeStopReason::kUnspecified;
+   while (true) {
+     if (cancelled != nullptr && cancelled->load()) {
+       if (benchmark_info.has_value()) {
+@@ -748,8 +751,10 @@ absl::StatusOr<Responses> Decode(
+ 
+     ABSL_ASSIGN_OR_RETURN(int current_step, executor.GetCurrentStep());
+     int num_decode_steps = current_step - executor_step_before_decode;
+-    if (ShouldStop(*all_done, benchmark_decode_token_count, num_decode_steps,
+-                   current_step, max_num_tokens, max_output_tokens)) {
++    stop_reason =
++        ShouldStop(*all_done, benchmark_decode_token_count, num_decode_steps,
++                   current_step, max_num_tokens, max_output_tokens);
++    if (stop_reason != DecodeStopReason::kUnspecified) {
+       break;
+     }
+   }
+@@ -827,10 +832,11 @@ absl::StatusOr<Responses> Decode(
+   }
+ 
+   if (is_streaming) {
+-    if (executor.GetCurrentStep().value() >= max_num_tokens) {
+-      return Responses(TaskState::kMaxNumTokensReached);
+-    }
+-    return Responses(TaskState::kDone);
++    Responses responses(executor.GetCurrentStep().value() >= max_num_tokens
++                            ? TaskState::kMaxNumTokensReached
++                            : TaskState::kDone);
++    responses.SetDecodeStopReason(stop_reason);
++    return responses;
+   }
+ 
+   // Finalize scores for non-streaming custom sampling.
+@@ -846,9 +852,11 @@ absl::StatusOr<Responses> Decode(
+   TaskState task_state = executor.GetCurrentStep().value() >= max_num_tokens
+                              ? TaskState::kMaxNumTokensReached
+                              : TaskState::kDone;
+-  return Responses(std::move(task_state), std::move(final_texts),
+-                   std::move(final_scores), /*token_lengths=*/{},
+-                   std::move(final_token_ids));
++  Responses responses(std::move(task_state), std::move(final_texts),
++                      std::move(final_scores), /*token_lengths=*/{},
++                      std::move(final_token_ids));
++  responses.SetDecodeStopReason(stop_reason);
++  return responses;
+ }
+ 
+ absl::StatusOr<Responses> Score(
+--- a/runtime/engine/io_types.h
++++ b/runtime/engine/io_types.h
+@@ -89,6 +89,14 @@ enum class TaskState {
+ };
+ std::ostream& operator<<(std::ostream& os, const TaskState& task_state);
+ 
++// Why a decode loop stopped, in upstream ShouldStop precedence order.
++enum class DecodeStopReason {
++  kUnspecified,      // Not a finished decode.
++  kStopToken,        // A stop token or stop sequence was decoded.
++  kMaxOutputTokens,  // The output-token budget was reached.
++  kMaxNumTokens,     // The KV cache (context window) is full.
++};
++
+ bool IsTaskEndState(const TaskState& task_state);
+ 
+ // A container to host the model responses.
+@@ -114,6 +122,11 @@ class Responses {
+   // Sets the task state.
+   void SetTaskState(TaskState task_state) { task_state_ = task_state; }
+ 
++  DecodeStopReason GetDecodeStopReason() const { return decode_stop_reason_; }
++  void SetDecodeStopReason(DecodeStopReason reason) {
++    decode_stop_reason_ = reason;
++  }
++
+   // Returns the const texts vector.
+   // The returned vector contains the response texts for each candidate output
+   // string. In most cases, the candidate number is 1, the vector will contain a
+@@ -166,6 +179,8 @@ class Responses {
+   // The state of the task.
+   TaskState task_state_;
+ 
++  DecodeStopReason decode_stop_reason_ = DecodeStopReason::kUnspecified;
++
+   // The output vector of response tokens (as strings).
+   std::vector<std::string> response_texts_;
+ 

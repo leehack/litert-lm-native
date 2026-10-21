@@ -33,6 +33,11 @@ from runtime_dependency_utils import (
     is_elf,
     is_system_needed,
 )
+from stream_finish_reason_patch import (
+    BAZEL_DEFINE as FINISH_REASON_DEFINE,
+    SOURCES as FINISH_REASON_PATCH_SOURCES,
+    require_finish_reason_patch_decision,
+)
 from windows_dxc import stage_windows_dxc
 from upstream_archive import github_source_archive_url
 
@@ -182,6 +187,34 @@ def patch_asr_litertlm_container(source_root: Path, upstream_tag: str) -> None:
         if source_sha256((source_root / name).read_bytes()) != post:
             raise RuntimeError(".litertlm container patch postimage mismatch; requalify")
     print("Applied audited ASR .litertlm container routing patch", flush=True)
+
+
+def patch_stream_finish_reason(source_root: Path, upstream_tag: str) -> None:
+    """Report why streamed generation ended (#78) on the audited v0.18 source."""
+    if not require_finish_reason_patch_decision(upstream_tag):
+        return
+    digests = {
+        name: source_sha256((source_root / name).read_bytes())
+        for name in FINISH_REASON_PATCH_SOURCES
+    }
+    if all(digests[name] == post
+           for name, (_, post) in FINISH_REASON_PATCH_SOURCES.items()):
+        return
+    if any(digests[name] != pre
+           for name, (pre, _) in FINISH_REASON_PATCH_SOURCES.items()):
+        raise RuntimeError(
+            "Decode or conversation source changed; requalify the stream "
+            "finish-reason patch")
+    patch_file = BRIDGE_PACKAGE_ROOT / "bridge/stream_finish_reason.patch"
+    command = ["git", "apply", "--ignore-space-change", str(patch_file)]
+    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
+                   cwd=source_root)
+    subprocess.run(command, check=True, cwd=source_root)
+    for name, (_, post) in FINISH_REASON_PATCH_SOURCES.items():
+        if source_sha256((source_root / name).read_bytes()) != post:
+            raise RuntimeError(
+                "Stream finish-reason patch postimage mismatch; requalify")
+    print("Applied audited stream finish-reason patch", flush=True)
 
 
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
@@ -387,6 +420,7 @@ def build_runtime(
 ) -> Path:
     patch_asr_untimed_overlap(source_root, upstream_tag)
     patch_asr_litertlm_container(source_root, upstream_tag)
+    patch_stream_finish_reason(source_root, upstream_tag)
     if platform == "ios" and has_asr_bridge(upstream_tag):
         patch_upstream_ios_sampler_path(source_root)
     prebuilt_target = PREBUILT_TARGETS.get((platform, arch))
@@ -438,6 +472,8 @@ def build_runtime(
         command.append("--define=litert_lm_capabilities_in_c_engine=true")
     if has_asr_bridge(upstream_tag):
         command.append("--define=litert_lm_asr_api=true")
+    if require_finish_reason_patch_decision(upstream_tag):
+        command.append(FINISH_REASON_DEFINE)
     if platform == "macos":
         command.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
     if platform == "ios":
