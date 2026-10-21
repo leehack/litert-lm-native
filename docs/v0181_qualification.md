@@ -40,7 +40,7 @@ not reruns on v0.18.1.
 
 | Surface / original trigger and owner revision | Upstream equivalent / first release | v0.18.1 decision, provenance and decisive validation |
 | --- | --- | --- |
-| `litert_gpu_environment_destroy_callback.patch`: OpenCL load failure loses WebGPU destroy callback; `e486b51` (#67) | LiteRT `9c8ae4e0fc`; first audited LM release v0.18.0 | Already inactive; keep historical allowlist and Android disassembly validator. Actual candidate LiteRT source sets `options_` before `InitializeOpenCl`; no device retirement claim. |
+| `litert_gpu_environment_destroy_callback.patch`: OpenCL load failure loses WebGPU destroy callback; `e486b51` (#67) | [LiteRT `9c8ae4e0fcdb3865a9b194509d0b69cb389af035`](https://github.com/google-ai-edge/LiteRT/commit/9c8ae4e0fcdb3865a9b194509d0b69cb389af035); first audited LM release v0.18.0 | Already inactive; keep historical allowlist and Android disassembly validator. Actual candidate LiteRT source sets `options_` before `InitializeOpenCl`; no device retirement claim. |
 | `sentencepiece_bpe_null.patch`: untouched Qwen BPE NORMAL NUL rejected by SentencePiece 0.2.2; `5ca3c79` (#43) | Unverified; candidate still pins exact 0.2.2 archive `92381f71…8e1bcf1` | Keep all three source edits. Workspace hash/version guard accepts candidate. Existing sanitizer/token-ID/malformed-model qualifier remains required; not rerun here because its default downloads a model. |
 | `litert_ios_framework_paths.patch`: accelerator dylib lookup cannot find bundled framework; `baef0ee` | Partial bare-name fallback exists in baseline and candidate LiteRT; complete bundle-path equivalent/first release unverified | Keep. `git apply --check --unidiff-zero` passes on actual candidate registry. Preserve upstream fallback. Physical device and Simulator unpatched bundle lookup are still missing. |
 | Imperative iOS sampler path rewrite: dylib name differs from packaged framework; `baef0ee` | Unverified; candidate sampler source is unchanged | Keep. Production helper transforms candidate's actual source successfully. Still imperative and outside manifest `sourcePatches`; declaration/provenance follow-up remains #19. |
@@ -86,6 +86,10 @@ No claim is made that dependency changes repair it without a model rerun.
   workspace transformation, iOS sampler transformation, iOS accelerator patch
   check and all six #80 preimages pass.
 
+No three-way packaged-runtime comparison of published v0.18.0-2, unpatched
+v0.18.1 and patched v0.18.1 was performed. The before/after controls above
+are source/tooling and real-merger replays only.
+
 Not run: a complete source build; packaged export/dependency/signature/OS-floor
 validation; EmbeddingGemma 2 CPU/GPU model inference; packaged Whisper/Moonshine/
 Qwen-ASR; real multiwindow Whisper corruption/repetition; Qwen3.5 fresh-conversation
@@ -93,7 +97,7 @@ state reuse; Android Pixel/Mali, Galaxy S24, physical iOS16.4, Simulator, Window
 and Linux execution. Existing local Bazel storage had no reusable target execroot;
 this bounded pass does not download a full new build closure or models.
 
-The workflow now pins exact stable v0.18.1 for future read-only qualification.
+The workflow now pins exact stable v0.18.1 for future CI qualification.
 It still requires every existing platform, model, patch, artifact and publication
 gate. Later/unknown compatibility tags fail closed. Source-patch records still
 cover the ASR transformations only: the older source edits above remain a
