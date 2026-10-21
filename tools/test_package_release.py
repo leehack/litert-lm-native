@@ -40,7 +40,8 @@ class PackageReleaseTest(unittest.TestCase):
                     compatibility_tag="v0.18.0", release_tag="v0.18.0-1",
                     native_commit=NATIVE_COMMIT, official_upstream_assets=True)
             records = manifest["upstream"]["sourcePatches"]
-            self.assertEqual(len(records), 1)
+            self.assertEqual([record["id"] for record in records],
+                             ["asr-untimed-overlap"] + ["asr-litertlm-container"] * 3)
             expected = hashlib.sha256((Path(__file__).resolve().parents[1] / PATCH_PATH).read_bytes()).hexdigest()
             self.assertEqual(records[0]["sha256"], expected)
             self.assertEqual(records[0]["preimageSha256Lf"], PREIMAGE_SHA256)

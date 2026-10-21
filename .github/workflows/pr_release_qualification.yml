@@ -200,6 +200,32 @@ jobs:
             --native-commit "$PR_HEAD_SHA" \
             --release-tag "$QUALIFICATION_RELEASE_TAG"
 
+      - name: Run Unix Whisper .litertlm container routing smoke
+        if: >-
+          (matrix.platform == 'linux' && matrix.arch == 'x64') ||
+          (matrix.platform == 'macos' && matrix.arch == 'arm64' && runner.arch == 'ARM64')
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = linux ]; then
+            export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/bin/linux/x64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            library="bin/linux/x64/libLiteRtLm.so"
+          else
+            export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/bin/macos/arm64${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+            library="bin/macos/arm64/libLiteRtLm.dylib"
+          fi
+          whisper() {
+            python3 tools/litert_lm_asr_smoke.py --library "$library" \
+              --preset whisper-tiny --model "asr-smoke-assets/$1" \
+              --tokenizer asr-smoke-assets/whisper_tokenizer.json \
+              --audio asr-smoke-assets/jfk.wav "${@:2}"
+          }
+          whisper whisper_tiny_30s_i8.litertlm \
+            --expect "ask what you can do for your country"
+          whisper whisper_tiny_30s_i8_missing_asr_model.litertlm \
+            --expect-engine-error "tf_lite_audio_encoder not found"
+          whisper whisper_tiny_30s_i8_qwen3_metadata.litertlm \
+            --expect-engine-error "tf_lite_prefill_decode not found"
+
       - name: Run Windows ASR real-model smoke
         if: matrix.platform == 'windows' && matrix.arch == 'x64'
         shell: pwsh
@@ -219,6 +245,27 @@ jobs:
             --upstream-commit "$env:QUALIFICATION_UPSTREAM_COMMIT" `
             --native-commit "$env:PR_HEAD_SHA" `
             --release-tag "$env:QUALIFICATION_RELEASE_TAG"
+
+      - name: Run Windows Whisper .litertlm container routing smoke
+        if: matrix.platform == 'windows' && matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $env:PATH = "$pwd\bin\windows\x64;$env:PATH"
+          $cases = @(
+            @("whisper_tiny_30s_i8.litertlm", "--expect", "ask what you can do for your country"),
+            @("whisper_tiny_30s_i8_missing_asr_model.litertlm", "--expect-engine-error", "tf_lite_audio_encoder not found"),
+            @("whisper_tiny_30s_i8_qwen3_metadata.litertlm", "--expect-engine-error", "tf_lite_prefill_decode not found")
+          )
+          foreach ($case in $cases) {
+            python tools/litert_lm_asr_smoke.py `
+              --library bin/windows/x64/LiteRtLm.dll `
+              --preset whisper-tiny `
+              --model "asr-smoke-assets/$($case[0])" `
+              --tokenizer asr-smoke-assets/whisper_tokenizer.json `
+              --audio asr-smoke-assets/jfk.wav `
+              $case[1] $case[2]
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - uses: actions/upload-artifact@v4
         with:

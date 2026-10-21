@@ -40,6 +40,17 @@ It deliberately does not claim:
 The downstream client owns input conversion to the configured sample rate and
 model/tokenizer download integrity. ABI version 1 accepts mono PCM only.
 
+`model_path` may name a `.tflite` model or a `.litertlm` container. A container
+whose AsrMetadata declares Whisper, Moonshine or Parakeet loads its ASR TFLite
+section and its embedded tokenizer, and the container's model type overrides
+`decoder_type`. Containers that declare Qwen3-ASR, or carry only LLM metadata,
+use the LLM route. `tokenizer_path` stays required by ABI version 1 validation
+but is not read for containers. A container that declares a speech model
+without an ASR section fails at engine creation with `NOT_FOUND`. v0.18.0
+carries this routing as a backport
+([#77](https://github.com/leehack/litert-lm-native/issues/77),
+[audit](upstream_patch_audit.md)).
+
 ## Flow control
 
 `litert_lm_asr_session_push_audio_f32` reports the number of samples accepted.
@@ -81,6 +92,9 @@ transcript substring. `tools/fetch_litert_lm_asr_smoke_assets.py` downloads the
 Moonshine model, tokenizer, and WAV from immutable revisions and verifies their
 SHA-256 digests. The manually dispatched native release workflow can run the
 real-model smoke on compatible host targets by setting `run_asr_smoke=true`.
+PR qualification also runs the pinned Whisper tiny `.litertlm` container
+(`--preset whisper-tiny`) and two derived malformed containers that must fail at
+engine creation (`--expect-engine-error`).
 Large remote models stay out of default CI.
 
 For v0.18.0 untimed-word overlap merging, see the

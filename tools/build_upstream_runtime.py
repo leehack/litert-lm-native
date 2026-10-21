@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from asr_litertlm_container_patch import SOURCES as CONTAINER_PATCH_SOURCES, require_container_patch_decision
 from asr_overlap_patch import PREIMAGE_SHA256, POSTIMAGE_SHA256, source_sha256, require_asr_patch_decision
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
@@ -158,6 +159,29 @@ def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
     if source_sha256(source.read_bytes()) != POSTIMAGE_SHA256:
         raise RuntimeError("ASR merger postimage mismatch; requalify untimed overlap patch")
     print("Applied audited untimed ASR overlap patch", flush=True)
+
+
+def patch_asr_litertlm_container(source_root: Path, upstream_tag: str) -> None:
+    """Carry upstream's ASR container routing (#77) on the audited v0.18 source."""
+    if not require_container_patch_decision(upstream_tag):
+        return
+    digests = {
+        name: source_sha256((source_root / name).read_bytes())
+        for name in CONTAINER_PATCH_SOURCES
+    }
+    if all(digests[name] == post for name, (_, post) in CONTAINER_PATCH_SOURCES.items()):
+        return
+    if any(digests[name] != pre for name, (pre, _) in CONTAINER_PATCH_SOURCES.items()):
+        raise RuntimeError("ASR engine source changed; requalify .litertlm container patch")
+    patch_file = BRIDGE_PACKAGE_ROOT / "bridge/asr_litertlm_container.patch"
+    command = ["git", "apply", "--ignore-space-change", str(patch_file)]
+    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
+                   cwd=source_root)
+    subprocess.run(command, check=True, cwd=source_root)
+    for name, (_, post) in CONTAINER_PATCH_SOURCES.items():
+        if source_sha256((source_root / name).read_bytes()) != post:
+            raise RuntimeError(".litertlm container patch postimage mismatch; requalify")
+    print("Applied audited ASR .litertlm container routing patch", flush=True)
 
 
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
@@ -362,6 +386,7 @@ def build_runtime(
     upstream_ref: str | None = None,
 ) -> Path:
     patch_asr_untimed_overlap(source_root, upstream_tag)
+    patch_asr_litertlm_container(source_root, upstream_tag)
     if platform == "ios" and has_asr_bridge(upstream_tag):
         patch_upstream_ios_sampler_path(source_root)
     prebuilt_target = PREBUILT_TARGETS.get((platform, arch))
