@@ -212,8 +212,10 @@ inference and ASR real-model smokes on Linux x64, Windows x64, and macOS arm64. 
 runtime/evidence artifacts for review but has no publication input or write
 permission.
 
-Pull-request qualification targets upstream `v0.18.0` at
-`b2f686e2ed4718fb84ec398a61dd59ca0f0aff27`. This qualification baseline
+Pull-request qualification targets upstream `v0.18.1` at
+`bda624851d74be34d4e1f7fac1fc4155939539c7`. Stock v0.18.1 does not build
+with Bazel, so builds carry a WORKSPACE repair equal to upstream main
+`d99b438f`. This qualification baseline
 does not publish a release or move downstream pins. The iOS accelerator path
 patch applies to both the v0.17 and v0.18 LiteRT registry layouts, preserving
 the framework path and the newer upstream framework-name fallback. See the
@@ -369,7 +371,7 @@ turn may report 0.
 
 A missing symbol or version 0 means the runtime never reports a cause; treat
 it as unknown, never infer truncation from output length. Version 1 requires
-the carried v0.18.0 patch described in
+the carried v0.18.0/v0.18.1 patch described in
 [`docs/upstream_patch_audit.md`](docs/upstream_patch_audit.md); Session-API
 streams always report 0. The patch's
 `litert_lm_native_stream_chunk_get_finish_reason` can appear in the runtime's

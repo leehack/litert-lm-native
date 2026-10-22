@@ -5,6 +5,8 @@ from pathlib import Path
 
 PATCH_PATH = "native/bridge/stream_finish_reason.patch"
 BAZEL_DEFINE = "--define=litert_lm_finish_reason_api=true"
+# v0.18.1 changes dependencies only; all six preimages equal v0.18.0.
+AUDITED_FINISH_REASON_TAGS = frozenset({"v0.18.0", "v0.18.1"})
 # LF-normalized (preimage, postimage) SHA-256 per patched v0.18.0 source.
 SOURCES = {
     "c/conversation.cc": (
@@ -42,7 +44,7 @@ def require_finish_reason_patch_decision(compatibility_tag: str) -> bool:
     version = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", compatibility_tag)
     if version and tuple(map(int, version.groups())) < (0, 18, 0):
         return False
-    if compatibility_tag == "v0.18.0":
+    if compatibility_tag in AUDITED_FINISH_REASON_TAGS:
         return True
     raise RuntimeError(
         f"Stream finish reasons have no explicit decision for "

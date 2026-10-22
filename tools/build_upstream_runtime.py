@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 from asr_litertlm_container_patch import SOURCES as CONTAINER_PATCH_SOURCES, require_container_patch_decision
-from asr_overlap_patch import PREIMAGE_SHA256, POSTIMAGE_SHA256, source_sha256, require_asr_patch_decision
+from asr_overlap_patch import AUDITED_OVERLAP_TAGS, PREIMAGE_SHA256, POSTIMAGE_SHA256, source_sha256, require_asr_patch_decision
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -39,6 +39,11 @@ from stream_finish_reason_patch import (
     require_finish_reason_patch_decision,
 )
 from windows_dxc import stage_windows_dxc
+from workspace_build_patch import (
+    PATCH_PATH as WORKSPACE_BUILD_PATCH_PATH,
+    SOURCES as WORKSPACE_BUILD_PATCH_SOURCES,
+    require_workspace_build_patch_decision,
+)
 from upstream_archive import github_source_archive_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -146,7 +151,7 @@ LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
     """Carry #673 only on the audited v0.18 source; require review on drift."""
     require_asr_patch_decision(upstream_tag)
-    if upstream_tag != "v0.18.0":
+    if upstream_tag not in AUDITED_OVERLAP_TAGS:
         return
     source = source_root / "omni/asr/timestamp_text_merger.cc"
     digest = source_sha256(source.read_bytes())
@@ -217,6 +222,26 @@ def patch_stream_finish_reason(source_root: Path, upstream_tag: str) -> None:
     print("Applied audited stream finish-reason patch", flush=True)
 
 
+def patch_workspace_build(source_root: Path, compatibility_tag: str) -> None:
+    """Repair the v0.18.1 Bazel WORKSPACE before other WORKSPACE edits."""
+    if not require_workspace_build_patch_decision(compatibility_tag):
+        return
+    for name, (pre, _) in WORKSPACE_BUILD_PATCH_SOURCES.items():
+        if source_sha256((source_root / name).read_bytes()) != pre:
+            raise RuntimeError(
+                "Upstream WORKSPACE or .bazelrc changed; requalify the "
+                "WORKSPACE build repair")
+    command = ["git", "apply", str(REPO_ROOT / WORKSPACE_BUILD_PATCH_PATH)]
+    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
+                   cwd=source_root)
+    subprocess.run(command, check=True, cwd=source_root)
+    for name, (_, post) in WORKSPACE_BUILD_PATCH_SOURCES.items():
+        if source_sha256((source_root / name).read_bytes()) != post:
+            raise RuntimeError(
+                "WORKSPACE build repair postimage mismatch; requalify")
+    print("Applied audited v0.18.1 WORKSPACE build repair", flush=True)
+
+
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
     ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
     return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
@@ -249,6 +274,7 @@ def download_upstream(
     if len(candidates) != 1:
         raise RuntimeError(f"Expected one extracted source directory, got {candidates}")
     source_root = candidates[0]
+    patch_workspace_build(source_root, compatibility_tag)
     patch_upstream_workspace(
         source_root,
         patch_ios_framework_paths=has_asr_bridge(compatibility_tag),
@@ -267,14 +293,15 @@ def needs_gpu_environment_teardown_patch(
     # The decision follows the pinned LiteRT commit, not the LiteRT-LM version:
     # a development build of a later upstream commit keeps the 0.17
     # compatibility tag but already pins a LiteRT with the reordering.
-    match = re.search(
+    matches = re.findall(
         r'^LITERT_REF = "([0-9a-f]{40})"$', workspace_text, re.MULTILINE
     )
-    if match is None:
+    if not matches:
         if is_at_least(compatibility_tag, (0, 17, 0)):
             raise RuntimeError("Expected a pinned LITERT_REF in the upstream WORKSPACE")
         return False
-    return match.group(1) in LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING
+    # Starlark uses the last assignment; v0.18.1 keeps its old pin above it.
+    return matches[-1] in LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING
 
 
 def patch_upstream_workspace(

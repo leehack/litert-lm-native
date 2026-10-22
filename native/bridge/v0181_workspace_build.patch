@@ -1,0 +1,107 @@
+--- a/.bazelrc
++++ b/.bazelrc
+@@ -294,6 +294,16 @@ build:windows --host_copt=/d2ReducedOptimizeHugeFunctions
+ build:windows --copt=-D_ENABLE_EXTENDED_ALIGNED_STORAGE
+ build:windows --host_copt=-D_ENABLE_EXTENDED_ALIGNED_STORAGE
+ 
++# XNNPACK's AVX512-BF16 GEMM configuration unconditionally references assembly
++# microkernels (`..._asm_amd64_avx512bf16_broadcast`) that are not assembled
++# under MSVC, so enabling the feature here fails to link. XNNPACK enabled it by
++# default for the whole x86 family in
++# https://github.com/google/XNNPACK/commit/0363fd2f2b, and its `x86` config
++# setting matches plain `windows_x86_64` (MSVC) whereas the previous `x86_64`
++# setting only matched the clang-cl, clang and mingw variants. Opt back out to
++# keep the behavior this build had before that change.
++build:windows --define=xnn_enable_avx512bf16=false
++
+ # Enable the runfiles symlink tree on Windows. This makes it possible to build
+ # the pip package on Windows without an intermediate data-file archive, as the
+ # build_pip_package script in its current form (as of Aug 2023) uses the
+--- a/WORKSPACE
++++ b/WORKSPACE
+@@ -2,19 +2,6 @@
+ 
+ workspace(name = "litert_lm")
+ 
+-# UPDATED = 2026-09-25
+-LITERT_REF = "26895c9fbcc25c43faa8c1a98cd1fd28951602c3"
+-
+-LITERT_SHA256 = "698811a8ec56f6a9bd7705ffaa75ff792cae03a67d3a759dbc84f2023493ee6f"
+-
+-# Keep TensorFlow at this commit for now. Newer commits load
+-# `compatibility_proxy_repo` from `@rules_cc//cc:extensions.bzl` in
+-# `tensorflow/workspace1.bzl`, which the rules_cc version resolved by this
+-# WORKSPACE does not provide, breaking the bazel build (as of 2026-09-15).
+-TENSORFLOW_REF = "d9a8da74b4c3de28a39ab34ad007838d6bc30c67"
+-
+-TENSORFLOW_SHA256 = "cd46b37c0f722d5a48c0accc9618cc5684c553332b913091023703461f318d9b"
+-
+ # UPDATED = 2026-10-09
+ LITERT_REF = "ca21dc99de51c76bdcc572afeea1dd937d3c9e5c"
+ 
+@@ -26,6 +13,18 @@ TENSORFLOW_SHA256 = "c99256ecac35ee2d7795de8ee8976afbcc47308edf2c8a04a20a5bd8ffd
+ 
+ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+ 
++# Declared before `rules_shell_dependencies()` and `apple_rules_dependencies()`
++# because those macros also declare `bazel_skylib`, and the first declaration of
++# a repository wins. The pinned TensorFlow expects 1.9.0: its `@rules_cc` uses
++# the `scope` attribute on `bool_flag`, which older bazel_skylib releases do not
++# define. Keep this in sync with the version in TensorFlow's
++# `tensorflow/workspace3.bzl`.
++http_archive(
++    name = "bazel_skylib",
++    sha256 = "3b5b49006181f5f8ff626ef8ddceaa95e9bb8ad294f7b5d7b11ea9f7ddaf8c59",
++    urls = ["https://github.com/bazelbuild/bazel-skylib/releases/download/1.9.0/bazel-skylib-1.9.0.tar.gz"],
++)
++
+ http_archive(
+     name = "rules_shell",
+     sha256 = "bc61ef94facc78e20a645726f64756e5e285a045037c7a61f65af2941f4c25e1",
+@@ -120,6 +119,16 @@ http_archive(
+     url = "https://github.com/bazel-contrib/rules_kotlin/releases/download/v2.4.10/rules_kotlin-v2.4.10.tar.gz",
+ )
+ 
++# Android rules (must be declared before kotlin_repositories and tf_workspace to override
++# older versions whose com_android_dex and apksig archives lacked sha256 and mirror URLs;
++# pinned to v0.7.2 because v0.7.3+ requires @protobuf_maven for @com_google_protobuf//java/util)
++http_archive(
++    name = "rules_android",
++    sha256 = "0da7198c7c8bac7e11e08dca3c434617b8593075858716595672e9aeefbef2a7",
++    strip_prefix = "rules_android-0.7.2",
++    url = "https://github.com/bazelbuild/rules_android/releases/download/v0.7.2/rules_android-v0.7.2.tar.gz",
++)
++
+ # Go rules and Gazelle for rules_android (must be declared before tf_workspace to override ancient versions)
+ http_archive(
+     name = "io_bazel_rules_go",
+@@ -139,10 +148,6 @@ http_archive(
+     ],
+ )
+ 
+-load("@io_bazel_rules_go//go:deps.bzl", "go_rules_dependencies")
+-
+-go_rules_dependencies()
+-
+ # TensorFlow
+ http_archive(
+     name = "org_tensorflow",
+@@ -162,6 +167,18 @@ load("@org_tensorflow//tensorflow:workspace3.bzl", "tf_workspace3")
+ 
+ tf_workspace3()
+ 
++load("@bazel_features//:deps.bzl", "bazel_features_deps")
++
++bazel_features_deps()
++
++load("@rules_cc//cc:extensions.bzl", "compatibility_proxy_repo")
++
++compatibility_proxy_repo()
++
++load("@io_bazel_rules_go//go:deps.bzl", "go_rules_dependencies")
++
++go_rules_dependencies()
++
+ load(
+     "@rules_ml_toolchain//cc/deps:cc_toolchain_deps.bzl",
+     "cc_toolchain_deps",

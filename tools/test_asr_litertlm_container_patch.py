@@ -97,7 +97,7 @@ class AsrLitertLmContainerPatchTest(unittest.TestCase):
                     build.patch_asr_litertlm_container(root, "v0.18.0")
 
     def test_newer_and_unknown_versions_require_explicit_decision(self):
-        for tag in ("v0.18.1", "v0.19.0", "main"):
+        for tag in ("v0.18.2", "v0.19.0", "main"):
             with self.subTest(tag=tag):
                 for gate in (lambda: build.patch_asr_litertlm_container(Path("missing"), tag),
                              lambda: container_patch_manifest(tag)):

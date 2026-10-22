@@ -27,7 +27,7 @@ class AsrUntimedOverlapTest(unittest.TestCase):
 
     def test_newer_and_unknown_versions_require_explicit_patch_decision(self):
         from asr_overlap_patch import source_patch_manifest
-        for tag in ("v0.18.1", "v0.19.0", "v1.0.0", "v0.19.0-rc.1", "main"):
+        for tag in ("v0.18.2", "v0.19.0", "v1.0.0", "v0.19.0-rc.1", "main"):
             with self.subTest(tag=tag):
                 # Check before source I/O or build, and on the release manifest
                 # path too. Updating a postimage hash cannot bypass this gate.

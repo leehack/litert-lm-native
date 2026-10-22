@@ -46,8 +46,8 @@ section and its embedded tokenizer, and the container's model type overrides
 `decoder_type`. Containers that declare Qwen3-ASR, or carry only LLM metadata,
 use the LLM route. `tokenizer_path` stays required by ABI version 1 validation
 but is not read for containers. A container that declares a speech model
-without an ASR section fails at engine creation with `NOT_FOUND`. v0.18.0
-carries this routing as a backport
+without an ASR section fails at engine creation with `NOT_FOUND`. v0.18.0 and v0.18.1
+carry this routing as a backport
 ([#77](https://github.com/leehack/litert-lm-native/issues/77),
 [audit](upstream_patch_audit.md)).
 

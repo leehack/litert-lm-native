@@ -256,3 +256,11 @@ environment bypass. Older tags retain their pre-workaround behavior. A future im
 checksums, SPM archives and release evidence before downstream adoption. Keep
 Moonshine's default 0.4 overlap. No release or downstream pin change is part of
 this follow-up.
+
+## v0.18.1 decision
+
+The exact v0.18.1 merger preimage is byte-identical to v0.18.0. Retain the same
+patch and pre/postimage hashes for these two explicit tags; v0.18.2 and later
+still require a decision. Actual candidate source replay and mutation checks
+pass; packaged model and device gates remain in the
+[v0.18.1 qualification report](v0181_qualification.md).
