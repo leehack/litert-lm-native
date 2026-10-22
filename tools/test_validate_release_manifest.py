@@ -88,6 +88,40 @@ class ValidateReleaseManifestTest(unittest.TestCase):
     def test_owner_generated_manifest_satisfies_final_contract(self) -> None:
         self.validate(deepcopy(self.valid))
 
+    def test_v0181_manifest_may_carry_source_patches(self) -> None:
+        from asr_overlap_patch import source_patch_manifest
+
+        manifest = deepcopy(self.valid)
+        manifest["upstream"]["compatibilityTag"] = "v0.18.1"
+        manifest["upstream"]["sourcePatches"] = source_patch_manifest("v0.18.1")
+        with self.assertRaises(SystemExit) as raised:
+            validate_schema_2_payload(
+                manifest,
+                upstream_tag="v0.18.1",
+                upstream_commit=UPSTREAM_COMMIT,
+                compatibility_tag="v0.18.1",
+                native_commit=NATIVE_COMMIT,
+                release_tag="v0.18.1-3",
+            )
+        self.assertNotIn("keys do not match", str(raised.exception))
+
+    def test_source_patches_are_rejected_where_no_patch_is_audited(self) -> None:
+        manifest = deepcopy(self.valid)
+        manifest["upstream"]["sourcePatches"] = [{"id": "unaudited"}]
+        with self.assertRaisesRegex(SystemExit, "keys do not match"):
+            self.validate(manifest)
+        manifest = deepcopy(self.valid)
+        manifest["upstream"]["compatibilityTag"] = "v0.18.2"
+        with self.assertRaisesRegex(RuntimeError, "no explicit decision"):
+            validate_schema_2_payload(
+                manifest,
+                upstream_tag="v0.18.2",
+                upstream_commit=UPSTREAM_COMMIT,
+                compatibility_tag="v0.18.2",
+                native_commit=NATIVE_COMMIT,
+                release_tag="v0.18.2-3",
+            )
+
     def test_development_manifest_excludes_official_upstream_artifacts(self) -> None:
         development, release_tag = self.development_manifest()
         validate_schema_2_payload(

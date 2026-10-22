@@ -91,6 +91,15 @@ class WorkspaceBuildPatchTest(unittest.TestCase):
                 build.patch_workspace_build(root, "v0.18.1")
         build.patch_workspace_build(Path("missing"), "v0.18.0")
 
+    def test_repair_fails_when_the_applied_postimage_is_wrong(self) -> None:
+        wrong = {name: (pre, "0" * 64) for name, (pre, _) in SOURCES.items()}
+        with tempfile.TemporaryDirectory() as temp, \
+             patch.object(build, "WORKSPACE_BUILD_PATCH_SOURCES", wrong):
+            root = Path(temp)
+            stage_v0181(root)
+            with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
+                build.patch_workspace_build(root, "v0.18.1")
+
     def test_download_repairs_workspace_before_owner_workspace_edits(self) -> None:
         def fake_download(_url, path, **_kwargs):
             with tarfile.open(path, "w:gz") as archive:
