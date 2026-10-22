@@ -39,6 +39,11 @@ from stream_finish_reason_patch import (
     require_finish_reason_patch_decision,
 )
 from windows_dxc import stage_windows_dxc
+from workspace_build_patch import (
+    PATCH_PATH as WORKSPACE_BUILD_PATCH_PATH,
+    SOURCES as WORKSPACE_BUILD_PATCH_SOURCES,
+    require_workspace_build_patch_decision,
+)
 from upstream_archive import github_source_archive_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -217,6 +222,26 @@ def patch_stream_finish_reason(source_root: Path, upstream_tag: str) -> None:
     print("Applied audited stream finish-reason patch", flush=True)
 
 
+def patch_workspace_build(source_root: Path, compatibility_tag: str) -> None:
+    """Repair the v0.18.1 Bazel WORKSPACE before other WORKSPACE edits."""
+    if not require_workspace_build_patch_decision(compatibility_tag):
+        return
+    for name, (pre, _) in WORKSPACE_BUILD_PATCH_SOURCES.items():
+        if source_sha256((source_root / name).read_bytes()) != pre:
+            raise RuntimeError(
+                "Upstream WORKSPACE or .bazelrc changed; requalify the "
+                "WORKSPACE build repair")
+    command = ["git", "apply", str(REPO_ROOT / WORKSPACE_BUILD_PATCH_PATH)]
+    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
+                   cwd=source_root)
+    subprocess.run(command, check=True, cwd=source_root)
+    for name, (_, post) in WORKSPACE_BUILD_PATCH_SOURCES.items():
+        if source_sha256((source_root / name).read_bytes()) != post:
+            raise RuntimeError(
+                "WORKSPACE build repair postimage mismatch; requalify")
+    print("Applied audited v0.18.1 WORKSPACE build repair", flush=True)
+
+
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
     ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
     return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
@@ -249,6 +274,7 @@ def download_upstream(
     if len(candidates) != 1:
         raise RuntimeError(f"Expected one extracted source directory, got {candidates}")
     source_root = candidates[0]
+    patch_workspace_build(source_root, compatibility_tag)
     patch_upstream_workspace(
         source_root,
         patch_ios_framework_paths=has_asr_bridge(compatibility_tag),

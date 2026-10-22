@@ -27,6 +27,11 @@ its original trigger passing. Source equivalence does not qualify binaries.
 - WORKSPACE assigns LiteRT/TensorFlow twice; Starlark's final assignment wins.
   Teardown patch selection now follows the final LiteRT assignment. Bidirectional
   regression controls detect selecting the stale first pin.
+- Stock v0.18.1 does not build with Bazel: the loading phase fails because the
+  resolved `rules_cc` lacks `compatibility_proxy_repo`, which TensorFlow
+  `a1179d3c` loads. The owner carries a WORKSPACE/.bazelrc repair whose
+  postimages equal upstream main `d99b438f` (same change, same pins); see the
+  [audit](upstream_patch_audit.md#v0181-workspace-build-repair).
 
 The [source inventory](v0181_source_qualification.json) records exact commits,
 all provider/Dawn LFS pointer identities, effective pins and four ASR preimages.
@@ -61,6 +66,7 @@ not reruns on v0.18.1.
 | Immutable downloads/LFS materialization/retries, historical Intel rules_rust patches | Acquisition/historical support; no broad removal authority | Retain hash verification and drift rejection. Only supported eight source targets are qualified by current workflow; historical Intel logic does not restore macOS x64 support. |
 | `stream_proxy_*` copied string ownership, callback ABI versions, global plugin loader; `008e851`, `b44761f`, `945ba69` | Permanent consumer FFI contract | Keep, including consumer freeing copied strings and proxy lifetime through final callback. Stable C headers are unchanged. Never substitute raw upstream callback ABI. |
 | `litert_lm_asr_*` ABI v1, bounded push PCM, backpressure, final flush/reset, cancellation; `5c24b35` (#18) | No official equivalent through stable v0.18.1 | Keep [ASR contract](asr_bridge.md), C/C++ tests and symbol inventory. Cancellation is between windows; reset/delete follow caller serialization. Official Apple C archives remain provenance inputs, not speech runtime substitutes. |
+| `v0181_workspace_build.patch`: stock v0.18.1 Bazel loading fails on `compatibility_proxy_repo` | Upstream main `d99b438f` (same RevId and pins); no tagged release | New, v0.18.1 only. Pre/postimage-hashed; postimages equal `d99b438f`. Applied before owner WORKSPACE edits; recorded per file in `sourcePatches`. |
 | `stream_finish_reason.patch`: stop/length/context-exhausted causes folded into `kDone`; `8182448` (#80, #78) | No stable equivalent through v0.18.1 | Keep. All six LF preimages equal v0.18.0, so the gate admits v0.18.1 explicitly with unchanged pre/postimage hashes; real v0.18.1 sources patch cleanly and idempotently. CI ABI-only check and the opt-in real-model smoke remain the binary gates. |
 
 [Issues #19](https://github.com/leehack/litert-lm-native/issues/19),

@@ -5,6 +5,7 @@ from pathlib import Path
 
 from asr_litertlm_container_patch import container_patch_manifest
 from stream_finish_reason_patch import finish_reason_patch_manifest
+from workspace_build_patch import workspace_build_patch_manifest
 
 PREIMAGE_SHA256 = "6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826"
 AUDITED_OVERLAP_TAGS = frozenset({"v0.18.0", "v0.18.1"})
@@ -48,4 +49,5 @@ def source_patch_manifest(compatibility_tag: str) -> list[dict]:
         "postimageSha256Lf": POSTIMAGE_SHA256,
         "scope": "source-built runtimes only; excludes official upstream prebuilts",
     }, *container_patch_manifest(compatibility_tag),
-        *finish_reason_patch_manifest(compatibility_tag)]
+        *finish_reason_patch_manifest(compatibility_tag),
+        *workspace_build_patch_manifest(compatibility_tag)]

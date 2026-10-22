@@ -11,6 +11,7 @@ import package_release
 from asr_litertlm_container_patch import SOURCES
 from asr_overlap_patch import POSTIMAGE_SHA256, source_patch_manifest, source_sha256
 from stream_finish_reason_patch import BAZEL_DEFINE as FINISH_REASON_DEFINE, finish_reason_patch_manifest
+from workspace_build_patch import workspace_build_patch_manifest
 from prebuilt_overrides import ANDROID_DAWN_ROLLBACKS, prebuilt_overrides
 from test_asr_litertlm_container_patch import stage_preimage
 from validate_release_manifest import validate_schema_2_identity
@@ -59,9 +60,10 @@ class V0181QualificationTest(unittest.TestCase):
                     upstream_tag="v0.18.1", upstream_commit=UPSTREAM_COMMIT,
                     compatibility_tag="v0.18.1", release_tag="v0.18.1",
                     native_commit=NATIVE_COMMIT, official_upstream_assets=True)
-        self.assertEqual(manifest["upstream"]["sourcePatches"], source_patch_manifest("v0.18.0"))
+        self.assertEqual(manifest["upstream"]["sourcePatches"],
+                         source_patch_manifest("v0.18.0") + workspace_build_patch_manifest("v0.18.1"))
         self.assertEqual(finish_reason_patch_manifest("v0.18.1"), finish_reason_patch_manifest("v0.18.0"))
-        self.assertTrue({"stream-finish-reason", "asr-untimed-overlap"}
+        self.assertTrue({"stream-finish-reason", "asr-untimed-overlap", "workspace-build"}
                         <= {entry["id"] for entry in manifest["upstream"]["sourcePatches"]})
         self.assertEqual(prebuilt_overrides("v0.18.1"), ANDROID_DAWN_ROLLBACKS)
         def validate(value):

@@ -213,7 +213,9 @@ runtime/evidence artifacts for review but has no publication input or write
 permission.
 
 Pull-request qualification targets upstream `v0.18.1` at
-`bda624851d74be34d4e1f7fac1fc4155939539c7`. This qualification baseline
+`bda624851d74be34d4e1f7fac1fc4155939539c7`. Stock v0.18.1 does not build
+with Bazel, so builds carry a WORKSPACE repair equal to upstream main
+`d99b438f`. This qualification baseline
 does not publish a release or move downstream pins. The iOS accelerator path
 patch applies to both the v0.17 and v0.18 LiteRT registry layouts, preserving
 the framework path and the newer upstream framework-name fallback. See the
