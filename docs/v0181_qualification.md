@@ -6,11 +6,13 @@ its original trigger passing. Source equivalence does not qualify binaries.
 
 ## Exact inputs and stable delta
 
-- Owner base: `3f8bce748387b3ff5dcd78d7c8f7d56e2b9418f5` (live main,
-  merged [#79](https://github.com/leehack/litert-lm-native/pull/79)).
-- Published owner control: `v0.18.0-2`, owner
-  `497e5ce0958dbd8927532af5acdeeaa0730495e6`, upstream
-  `b2f686e2ed4718fb84ec398a61dd59ca0f0aff27`.
+- Owner base: `8182448814867ad329be7e995b4e8aab5efd79c8` (main after
+  [#79](https://github.com/leehack/litert-lm-native/pull/79) and
+  [#80](https://github.com/leehack/litert-lm-native/pull/80)).
+- Published owner baseline: [`v0.18.0-3`](https://github.com/leehack/litert-lm-native/releases/tag/v0.18.0-3),
+  built from that same owner commit on upstream
+  `b2f686e2ed4718fb84ec398a61dd59ca0f0aff27`, with overlap, container and
+  finish-reason source patches.
 - Stable candidate: upstream `v0.18.1`,
   `bda624851d74be34d4e1f7fac1fc4155939539c7`.
 - [Upstream release](https://github.com/google-ai-edge/LiteRT-LM/releases/tag/v0.18.1)
@@ -59,7 +61,7 @@ not reruns on v0.18.1.
 | Immutable downloads/LFS materialization/retries, historical Intel rules_rust patches | Acquisition/historical support; no broad removal authority | Retain hash verification and drift rejection. Only supported eight source targets are qualified by current workflow; historical Intel logic does not restore macOS x64 support. |
 | `stream_proxy_*` copied string ownership, callback ABI versions, global plugin loader; `008e851`, `b44761f`, `945ba69` | Permanent consumer FFI contract | Keep, including consumer freeing copied strings and proxy lifetime through final callback. Stable C headers are unchanged. Never substitute raw upstream callback ABI. |
 | `litert_lm_asr_*` ABI v1, bounded push PCM, backpressure, final flush/reset, cancellation; `5c24b35` (#18) | No official equivalent through stable v0.18.1 | Keep [ASR contract](asr_bridge.md), C/C++ tests and symbol inventory. Cancellation is between windows; reset/delete follow caller serialization. Official Apple C archives remain provenance inputs, not speech runtime substitutes. |
-| Terminal-cause draft [#80](https://github.com/leehack/litert-lm-native/pull/80), head `680f937dde5a6abcbf5b3b26985872b15df83c58` | No stable equivalent; #78 still open | Separate lane; no implementation copied. All six draft patch preimages match v0.18.1, but its explicit v0.18.0 gate rejects the new tag. Its author must requalify and explicitly extend the gate if combined later. This candidate reports no terminal-cause capability. |
+| `stream_finish_reason.patch`: stop/length/context-exhausted causes folded into `kDone`; `8182448` (#80, #78) | No stable equivalent through v0.18.1 | Keep. All six LF preimages equal v0.18.0, so the gate admits v0.18.1 explicitly with unchanged pre/postimage hashes; real v0.18.1 sources patch cleanly and idempotently. CI ABI-only check and the opt-in real-model smoke remain the binary gates. |
 
 [Issues #19](https://github.com/leehack/litert-lm-native/issues/19),
 [#70](https://github.com/leehack/litert-lm-native/issues/70),
@@ -69,6 +71,10 @@ The linear-attention reuse bug has no stable runtime source change here.
 No claim is made that dependency changes repair it without a model rerun.
 
 ## Local evidence and missing release gates
+
+Exact-head evidence for this candidate (CI, local macOS arm64 build, packaged
+checks and model runs) is recorded in the pull request, not here. The notes
+below are the earlier source-only preparation pass.
 
 - Owner tooling: 319 tests pass, 2 optional tests skipped. The first sandboxed
   run failed loopback HTTP binding; the authorized unrestricted rerun passes.

@@ -369,7 +369,7 @@ turn may report 0.
 
 A missing symbol or version 0 means the runtime never reports a cause; treat
 it as unknown, never infer truncation from output length. Version 1 requires
-the carried v0.18.0 patch described in
+the carried v0.18.0/v0.18.1 patch described in
 [`docs/upstream_patch_audit.md`](docs/upstream_patch_audit.md); Session-API
 streams always report 0. The patch's
 `litert_lm_native_stream_chunk_get_finish_reason` can appear in the runtime's

@@ -10,17 +10,18 @@ import build_upstream_runtime as build
 import package_release
 from asr_litertlm_container_patch import SOURCES
 from asr_overlap_patch import POSTIMAGE_SHA256, source_patch_manifest, source_sha256
+from stream_finish_reason_patch import BAZEL_DEFINE as FINISH_REASON_DEFINE, finish_reason_patch_manifest
 from prebuilt_overrides import ANDROID_DAWN_ROLLBACKS, prebuilt_overrides
 from test_asr_litertlm_container_patch import stage_preimage
 from validate_release_manifest import validate_schema_2_identity
 
 REPO = Path(__file__).resolve().parents[1]
 UPSTREAM_COMMIT = "bda624851d74be34d4e1f7fac1fc4155939539c7"
-NATIVE_COMMIT = "3f8bce748387b3ff5dcd78d7c8f7d56e2b9418f5"
+NATIVE_COMMIT = "8182448814867ad329be7e995b4e8aab5efd79c8"
 
 
 class V0181QualificationTest(unittest.TestCase):
-    def test_v0181_production_build_applies_both_asr_carries_before_bazel(self):
+    def test_v0181_production_build_applies_all_three_source_carries_before_bazel(self):
         # These fixtures are byte-identical in exact v0.18.0 and v0.18.1.
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -28,10 +29,15 @@ class V0181QualificationTest(unittest.TestCase):
             merger = root / "omni/asr/timestamp_text_merger.cc"
             merger.write_bytes((REPO / "tools/fixtures/timestamp_text_merger_v018.cc").read_bytes())
             with (patch.object(build, "materialize_git_lfs_libraries", return_value=0),
+                  patch.object(build, "patch_stream_finish_reason") as finish_reason,
                   patch.object(build, "bazel_command", return_value=["bazel"]),
                   patch.object(build, "run", side_effect=RuntimeError("reached Bazel")) as run):
                 with self.assertRaisesRegex(RuntimeError, "reached Bazel"):
                     build.build_runtime(root, "macos", "arm64", "v0.18.1", "2")
+            # Finish-reason source application is covered with fixtures in
+            # test_stream_finish_reason_patch; here only its v0.18.1 wiring.
+            finish_reason.assert_called_once_with(root, "v0.18.1")
+            self.assertIn(FINISH_REASON_DEFINE, run.call_args.args[0])
             self.assertEqual(source_sha256(merger.read_bytes()), POSTIMAGE_SHA256)
             for source, (_, postimage) in SOURCES.items():
                 self.assertEqual(source_sha256((root / source).read_bytes()), postimage)
@@ -40,7 +46,8 @@ class V0181QualificationTest(unittest.TestCase):
             build.patch_asr_untimed_overlap(root, "v0.18.1")
             build.patch_asr_litertlm_container(root, "v0.18.1")
             merger.write_bytes(merger.read_bytes() + b"// drift\n")
-            with self.assertRaisesRegex(RuntimeError, "requalify untimed overlap"):
+            with (patch.object(build, "patch_stream_finish_reason"),
+                  self.assertRaisesRegex(RuntimeError, "requalify untimed overlap")):
                 build.build_runtime(root, "macos", "arm64", "v0.18.1", "2")
 
     def test_v0181_manifest_keeps_all_patch_and_dawn_records_and_rejects_loss(self):
@@ -53,6 +60,9 @@ class V0181QualificationTest(unittest.TestCase):
                     compatibility_tag="v0.18.1", release_tag="v0.18.1",
                     native_commit=NATIVE_COMMIT, official_upstream_assets=True)
         self.assertEqual(manifest["upstream"]["sourcePatches"], source_patch_manifest("v0.18.0"))
+        self.assertEqual(finish_reason_patch_manifest("v0.18.1"), finish_reason_patch_manifest("v0.18.0"))
+        self.assertTrue({"stream-finish-reason", "asr-untimed-overlap"}
+                        <= {entry["id"] for entry in manifest["upstream"]["sourcePatches"]})
         self.assertEqual(prebuilt_overrides("v0.18.1"), ANDROID_DAWN_ROLLBACKS)
         def validate(value):
             validate_schema_2_identity(value, upstream_tag="v0.18.1", upstream_commit=UPSTREAM_COMMIT,

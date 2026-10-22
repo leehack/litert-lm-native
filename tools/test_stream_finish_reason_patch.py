@@ -27,8 +27,9 @@ class StreamFinishReasonPatchTest(unittest.TestCase):
         for tag in ("v0.15.0", "v0.16.1", "v0.17.1"):
             self.assertFalse(require_finish_reason_patch_decision(tag))
             self.assertEqual(finish_reason_patch_manifest(tag), [])
-        self.assertTrue(require_finish_reason_patch_decision("v0.18.0"))
-        for tag in ("v0.18.1", "v0.19.0", "main"):
+        for tag in ("v0.18.0", "v0.18.1"):
+            self.assertTrue(require_finish_reason_patch_decision(tag))
+        for tag in ("v0.18.2", "v0.19.0", "main"):
             with self.subTest(tag=tag), self.assertRaisesRegex(
                 RuntimeError, "no explicit decision"
             ):
@@ -70,7 +71,7 @@ class StreamFinishReasonPatchTest(unittest.TestCase):
         self.assertIn('"stream_finish_reason.patch"', BRIDGE_BUILD)
 
     def test_build_applies_patch_and_define_only_for_v018(self) -> None:
-        for tag, expected in (("v0.17.1", False), ("v0.18.0", True)):
+        for tag, expected in (("v0.17.1", False), ("v0.18.0", True), ("v0.18.1", True)):
             with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
