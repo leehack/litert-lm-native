@@ -218,6 +218,9 @@ with Bazel, so builds carry a WORKSPACE repair equal to upstream main
 `d99b438f`. They also restore XNNPACK's previous KleidiAI PF32 SME2 kernels;
 the newer ones give run-to-run different CPU results on SME2 CPUs such as
 Apple M4 ([#82](https://github.com/leehack/litert-lm-native/issues/82)).
+They also keep int4 fully connected layers off XNNPACK's new SME2 PQS8/QC4W
+path, which slows Gemma 4 E2B CPU decode about 1.5x on Apple M4
+([#84](https://github.com/leehack/litert-lm-native/issues/84)).
 This qualification baseline
 does not publish a release or move downstream pins. The iOS accelerator path
 patch applies to both the v0.17 and v0.18 LiteRT registry layouts, preserving

@@ -20,6 +20,7 @@ paths; affected GPU devices remain separate release-adoption evidence.
 | ASR `.litertlm` container routing | Backport to audited v0.18.0 source hashes (v0.18.1 preimages are identical) | Stock v0.18.0 `AsrEngine::Create` sends every `.litertlm` path to the LLM runner, so the published Whisper tiny container (one `tf_lite_encoder_decoder` section plus AsrMetadata and an HF tokenizer) fails with `tf_lite_prefill_decode not found` ([#77](https://github.com/leehack/litert-lm-native/issues/77)). Upstream [`bfdec21732`](https://github.com/google-ai-edge/LiteRT-LM/commit/bfdec21732) selects the decoder from AsrMetadata and loads the container's ASR section and tokenizer; it landed on `main` after the v0.18 branch, and v0.18.1 still lacks it. The backport is that commit's `asr_engine` change without the `kUnspecified` enum. Qwen3-ASR and LLM-only containers keep the LLM route. PR qualification runs the pinned container on CPU plus two derived negatives. |
 | v0.18.1 Bazel WORKSPACE build repair | Apply only to audited v0.18.1 WORKSPACE/.bazelrc hashes | v0.18.1 took main's LiteRT `ca21dc99`/TensorFlow `a1179d3c` pin bump without the WORKSPACE plumbing that TensorFlow needs, so Bazel stops in the loading phase: `@rules_cc//cc:extensions.bzl` has no `compatibility_proxy_repo`. `native/bridge/v0181_workspace_build.patch` makes both files byte-identical to upstream main [`d99b438f`](https://github.com/google-ai-edge/LiteRT-LM/commit/d99b438f0a961ac2a449d341c2431e49332c1076), the same change (RevId 996789227) with the same pins: early `bazel_skylib` 1.9.0 and `rules_android` 0.7.2, `bazel_features_deps()`/`compatibility_proxy_repo()` after `tf_workspace3()`, and the MSVC XNNPACK AVX512-BF16 opt-out. It drops only the shadowed first pin assignment; effective pins are unchanged. |
 | XNNPACK PF32 SME2 kernel rollback | Apply only to v0.18.1 (TensorFlow `a1179d3c`, XNNPACK `d89ef666`) | XNNPACK [`70a9c5e8ac`](https://github.com/google/XNNPACK/commit/70a9c5e8ac) moved the PF32 SME2 GEMM, GEMV and LHS packing to new KleidiAI kernels that return different f32 results from run to run with more than one thread on SME2 CPUs ([google/XNNPACK#11789](https://github.com/google/XNNPACK/issues/11789), [#82](https://github.com/leehack/litert-lm-native/issues/82)). v0.18.0 pins an XNNPACK from before it. `native/bridge/xnnpack_pf32_sme2.patch` reverts that commit's SME2 kernel wrappers and RHS-packing selection to the previous KleidiAI kernels, which the pinned KleidiAI still ships. The SME (non-SME2) path, other SME2 kernels and non-SME2 CPUs are unchanged. See the tracking section for determinism and speed. |
+| XNNPACK SME2 PQS8/QC4W GEMM opt-out | Apply only to v0.18.1 (TensorFlow `a1179d3c`, XNNPACK `d89ef666`), after the PF32 rollback | XNNPACK [`76fa737a0`](https://github.com/google/XNNPACK/commit/76fa737a0b70fa506226b23432633e3781c2a470) sends int8-activation, int4-weight fully connected layers on SME2 CPUs to a packed-LHS path whose only kernel is the 32x32 SME2 MOPA one, so single-token decode runs it at M=1 ([google/XNNPACK#11793](https://github.com/google/XNNPACK/issues/11793), [#84](https://github.com/leehack/litert-lm-native/issues/84)). Gemma 4 E2B CPU decode on Apple M4 drops from about 45 to 30 tok/s. `native/bridge/xnnpack_pqs8_qc4w_sme2.patch` leaves the SME2 `pqs8_qc4w` GEMM config empty, so those layers keep the `qs8_qc4w` kernels v0.18.0 used. Non-SME2 CPUs are unchanged. See the tracking section for speed. |
 
 Primary sources:
 
@@ -130,3 +131,36 @@ audio transcript matches v0.18.0-2. Disabling the SME2 PF32 config instead
 doubled image-embedding time. Routing SME2 CPUs to the SME PF32 kernels kept
 speed but made image embeddings nondeterministic. Retire the patch when a
 tagged upstream release pins an XNNPACK with a fix for google/XNNPACK#11789.
+
+## #84 workaround tracking: XNNPACK SME2 PQS8/QC4W GEMM
+
+XNNPACK `76fa737a0` (google/XNNPACK PR #10986), included in the `d89ef666`
+pin, adds a packed-LHS fully connected path for int8 activations with
+per-channel int4 weights on SME2 CPUs. It registers only the 32x32 SME2 MOPA
+kernel; the 1x64 SME2 DOT kernel for one row is built but not registered. Gemma
+4 E2B's int4 layers therefore decode one token at a time through a 32-row
+tile, which stops scaling beyond about four threads on Apple M4, instead of
+v0.18.0's NEON `qs8_qc4w` 1x16c4 kernel.
+
+`native/bridge/xnnpack_pqs8_qc4w_sme2.patch` gates off the SME2 branch of
+`init_pqs8_qc4w_gemm_config`, so `xnn_init_pqs8_qc4w_gemm_config()` returns
+NULL and XNNPACK's subgraph keeps the unpacked `qs8_qc4w` path. It is the second
+patch on the XNNPACK archive declared for #82, applied after
+`xnnpack_pf32_sme2.patch`; its `gemm-config.c` preimage is that patch's
+postimage. The build checks the final postimage of every patched XNNPACK source,
+and the manifest records one `sourcePatches` entry after the PF32 entries.
+
+On an M4 Max at default threads (median of 9 runs over 3 interleaved rounds):
+
+| Gemma 4 E2B CPU, tok/s | v0.18.0-3 | v0.18.1 with the PF32 rollback | Plus this opt-out |
+| --- | ---: | ---: | ---: |
+| Text prefill / decode | 594 / 44.9 | 684 / 29.9 | 582 / 46.8 |
+| Image prompt decode | 45.8 | 30.3 | 46.5 |
+| Audio prompt decode | 46.0 | 30.2 | 46.4 |
+
+Gemma 4 and Qwen3 replies and EmbeddingGemma 2 vectors are byte-identical with
+and without the opt-out and stay deterministic; Metal GPU decode is unchanged.
+The opt-out gives back the path's prefill gain: about 15% at default threads and
+4% at eight threads. Retire the patch when a tagged upstream release pins an
+XNNPACK that registers a single-row kernel or otherwise fixes
+google/XNNPACK#11793, verified on multithreaded SME2 decode.

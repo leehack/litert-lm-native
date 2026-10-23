@@ -93,7 +93,7 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
         for expected in (f'sha256 = "{XNNPACK_SHA256}"',
                          f'strip_prefix = "XNNPACK-{XNNPACK_COMMIT}"',
                          f'"https://github.com/google/XNNPACK/archive/{XNNPACK_COMMIT}.zip"',
-                         'patches = ["@//bridge:xnnpack_pf32_sme2.patch"]'):
+                         '"@//bridge:xnnpack_pf32_sme2.patch",'):
             self.assertIn(expected, ARCHIVE)
         self.assertIn('"xnnpack_pf32_sme2.patch"',
                       (REPO / "native/bridge/BUILD.bazel").read_text(encoding="utf-8"))
@@ -143,16 +143,17 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
             repository = output_base / "external" / "XNNPACK"
             digest = hashlib.sha256(b"patched\n").hexdigest()
             fake = {"a.c": ("0" * 64, digest), "b/c.c": ("0" * 64, digest)}
-            with patch.object(build, "XNNPACK_PF32_SOURCES", fake):
+            fake = {name: postimage for name, (_, postimage) in fake.items()}
+            with patch.object(build, "XNNPACK_POSTIMAGES", fake):
                 with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
-                    build.verify_xnnpack_pf32_postimage(source_root)
+                    build.verify_xnnpack_postimages(source_root)
                 for name in fake:
                     (repository / name).parent.mkdir(parents=True, exist_ok=True)
                     (repository / name).write_bytes(b"patched\r\n")
-                build.verify_xnnpack_pf32_postimage(source_root)
+                build.verify_xnnpack_postimages(source_root)
                 (repository / "b/c.c").write_bytes(b"unpatched\n")
                 with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
-                    build.verify_xnnpack_pf32_postimage(source_root)
+                    build.verify_xnnpack_postimages(source_root)
 
     def test_build_checks_the_postimage_after_bazel_only_for_v0181(self) -> None:
         for tag, checked in (("v0.18.0", False), ("v0.18.1", True)):
@@ -164,7 +165,7 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
                  patch.object(build, "materialize_git_lfs_libraries", return_value=0), \
                  patch.object(build, "bazel_command", return_value=["bazel"]), \
                  patch.object(build, "run", calls.run), \
-                 patch.object(build, "verify_xnnpack_pf32_postimage", calls.verify):
+                 patch.object(build, "verify_xnnpack_postimages", calls.verify):
                 root = Path(temp)
                 with self.assertRaisesRegex(RuntimeError, "Expected build output missing"):
                     build.build_runtime(root, "macos", "arm64", tag, "2")
@@ -173,8 +174,8 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
                 if checked:
                     calls.verify.assert_called_once_with(root)
 
-    def test_manifest_records_each_xnnpack_source_last(self) -> None:
-        records = source_patch_manifest("v0.18.1")
+    def test_manifest_records_each_xnnpack_source_before_the_qc4w_opt_out(self) -> None:
+        records = [r for r in source_patch_manifest("v0.18.1") if r["id"] != "xnnpack-pqs8-qc4w-sme2"]
         self.assertEqual(records[-len(SOURCES):], xnnpack_pf32_patch_manifest("v0.18.1"))
         patch_sha256 = hashlib.sha256((REPO / PATCH_PATH).read_bytes()).hexdigest()
         for record, (source, hashes) in zip(records[-len(SOURCES):], SOURCES.items()):
