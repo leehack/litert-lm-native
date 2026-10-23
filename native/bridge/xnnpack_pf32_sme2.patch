@@ -1,0 +1,14 @@
+--- a/src/configs/gemm-config.c
++++ b/src/configs/gemm-config.c
+@@ -489,7 +489,10 @@
+   assert(hardware_config != NULL);
+   (void) hardware_config;  // May be unused.
+   if (XNN_ENABLE_ARM_SME2 && (hardware_config->arch_flags & xnn_arch_arm_sme2)) {
+-    #if XNN_ENABLE_ARM_SME2
++    // litert-lm-native: leave pf32 unset on SME2 CPUs so f32 GEMMs use the
++    // NEON kernels. The KleidiAI PF32 SME2 GEMM gives run-to-run different
++    // results with more than one thread (google/XNNPACK#11789).
++    #if 0  // XNN_ENABLE_ARM_SME2
+       const size_t mr = xnn_pf32_gemm_minmax_ukernel_32x32__neonsme2_get_mr();
+       const size_t nr = xnn_pf32_gemm_minmax_ukernel_32x32__neonsme2_get_nr();
+       pf32_gemm_config.arch = xnn_arch_arm_sme2;

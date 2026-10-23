@@ -119,8 +119,8 @@ class WorkspaceBuildPatchTest(unittest.TestCase):
 
     def test_manifest_records_both_files_after_the_other_carries(self) -> None:
         records = source_patch_manifest("v0.18.1")
-        self.assertEqual(records[-2:], workspace_build_patch_manifest("v0.18.1"))
-        self.assertEqual([record["source"] for record in records[-2:]], list(SOURCES))
+        self.assertEqual(records[-3:-1], workspace_build_patch_manifest("v0.18.1"))
+        self.assertEqual([record["source"] for record in records[-3:-1]], list(SOURCES))
         self.assertNotIn("workspace-build", {r["id"] for r in source_patch_manifest("v0.18.0")})
 
 

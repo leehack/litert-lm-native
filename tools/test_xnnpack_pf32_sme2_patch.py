@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+import hashlib
+import io
+import re
+import tarfile
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import build_upstream_runtime as build
+from asr_overlap_patch import source_patch_manifest
+from test_workspace_build_patch import FIXTURES, stage_v0181
+from xnnpack_pf32_sme2_patch import (
+    ARCHIVE,
+    PATCH_PATH,
+    SOURCE,
+    SOURCE_SHA256,
+    TENSORFLOW_REF,
+    XNNPACK_COMMIT,
+    XNNPACK_SHA256,
+    declare_patched_xnnpack,
+    require_xnnpack_pf32_patch_decision,
+    xnnpack_pf32_patch_manifest,
+)
+
+REPO = Path(__file__).resolve().parents[1]
+PATCH = (REPO / PATCH_PATH).read_text(encoding="utf-8")
+TF_ARCHIVE = 'http_archive(\n    name = "org_tensorflow",\n'
+
+
+def repaired_v0181_workspace() -> str:
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        stage_v0181(root)
+        build.patch_workspace_build(root, "v0.18.1")
+        return (root / "WORKSPACE").read_text(encoding="utf-8")
+
+
+class XnnpackPf32Sme2PatchTest(unittest.TestCase):
+    def test_decision_applies_only_to_v0181(self) -> None:
+        for tag in ("v0.17.1", "v0.18.0"):
+            self.assertFalse(require_xnnpack_pf32_patch_decision(tag))
+            self.assertEqual(xnnpack_pf32_patch_manifest(tag), [])
+        self.assertTrue(require_xnnpack_pf32_patch_decision("v0.18.1"))
+        for tag in ("v0.18.2", "v0.19.0", "main"):
+            with self.subTest(tag=tag), self.assertRaisesRegex(
+                RuntimeError, "no explicit decision"
+            ):
+                require_xnnpack_pf32_patch_decision(tag)
+
+    def test_patch_only_compiles_out_the_pf32_sme2_branch(self) -> None:
+        self.assertEqual(re.findall(r"^--- a/(\S+)$", PATCH, re.MULTILINE), [SOURCE])
+        self.assertEqual(re.findall(r"^\+\+\+ b/(\S+)$", PATCH, re.MULTILINE), [SOURCE])
+        self.assertNotRegex(PATCH, r"(?m)^(diff --git|index )")
+        self.assertEqual(len(re.findall(r"^@@ ", PATCH, re.MULTILINE)), 1)
+        removed = re.findall(r"^-(?!--)(.*)$", PATCH, re.MULTILINE)
+        added = re.findall(r"^\+(?!\+\+)(.*)$", PATCH, re.MULTILINE)
+        self.assertEqual(removed, ["    #if XNN_ENABLE_ARM_SME2"])
+        self.assertEqual(added[-1], "    #if 0  // XNN_ENABLE_ARM_SME2")
+        self.assertTrue(all(line.lstrip().startswith("//") for line in added[:-1]))
+        context = re.findall(r"^ (.*)$", PATCH, re.MULTILINE)
+        self.assertIn(
+            "  if (XNN_ENABLE_ARM_SME2 && (hardware_config->arch_flags & xnn_arch_arm_sme2)) {",
+            context)
+        self.assertTrue(any("xnn_pf32_gemm_minmax_ukernel_32x32__neonsme2_get_mr" in line
+                            for line in context))
+
+    def test_workspace_declares_the_tensorflow_pinned_xnnpack_before_tensorflow(self) -> None:
+        workspace = repaired_v0181_workspace()
+        patched = declare_patched_xnnpack(workspace)
+        self.assertEqual(declare_patched_xnnpack(patched), patched)
+        self.assertEqual(patched.replace(ARCHIVE, "", 1), workspace)
+        self.assertEqual(patched.count('name = "XNNPACK"'), 1)
+        self.assertLess(patched.index(ARCHIVE), patched.index(TF_ARCHIVE))
+        self.assertLess(patched.index('load("@bazel_tools//tools/build_defs/repo:http.bzl"'),
+                        patched.index(ARCHIVE))
+        self.assertLess(patched.index(ARCHIVE), patched.index("tf_workspace2()"))
+        for expected in (f'sha256 = "{XNNPACK_SHA256}"',
+                         f'strip_prefix = "XNNPACK-{XNNPACK_COMMIT}"',
+                         f'"https://github.com/google/XNNPACK/archive/{XNNPACK_COMMIT}.zip"',
+                         'patches = ["@//bridge:xnnpack_pf32_sme2.patch"]'):
+            self.assertIn(expected, ARCHIVE)
+        self.assertIn('"xnnpack_pf32_sme2.patch"',
+                      (REPO / "native/bridge/BUILD.bazel").read_text(encoding="utf-8"))
+
+    def test_workspace_declaration_fails_closed(self) -> None:
+        workspace = repaired_v0181_workspace()
+        moved = workspace.replace(TENSORFLOW_REF, "0" * 40)
+        existing = workspace.replace(TF_ARCHIVE, 'http_archive(\n    name = "XNNPACK",\n)\n' + TF_ARCHIVE)
+        missing = workspace.replace("# TensorFlow\n", "")
+        for text, message in ((moved, "TensorFlow pin changed"),
+                              (existing, "Unexpected XNNPACK archive"),
+                              (missing, "Expected one TensorFlow archive")):
+            with self.subTest(message=message), self.assertRaisesRegex(RuntimeError, message):
+                declare_patched_xnnpack(text)
+
+    def test_download_declares_xnnpack_only_for_v0181(self) -> None:
+        def fake_download(_url, path, **_kwargs):
+            with tarfile.open(path, "w:gz") as archive:
+                for source, fixture in FIXTURES.items():
+                    data = (REPO / "tools/fixtures" / fixture).read_bytes()
+                    info = tarfile.TarInfo(f"LiteRT-LM-v0.18.1/{source}")
+                    info.size = len(data)
+                    archive.addfile(info, io.BytesIO(data))
+
+        with tempfile.TemporaryDirectory() as temp, \
+             patch.object(build, "download_to_path", side_effect=fake_download):
+            root = build.download_upstream("v0.18.1", "v0.18.1", Path(temp))
+            self.assertIn(ARCHIVE, (root / "WORKSPACE").read_text(encoding="utf-8"))
+        for tag, enabled in (("v0.18.0", False), ("v0.18.1", True)):
+            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
+                source = Path(temp) / "source"
+                source.mkdir()
+                (source / "WORKSPACE").write_text("", encoding="utf-8")
+                with patch.object(build, "download_to_path"), \
+                     patch.object(build.tarfile, "open"), \
+                     patch.object(build, "patch_workspace_build"), \
+                     patch.object(build, "needs_gpu_environment_teardown_patch", return_value=False), \
+                     patch.object(build, "patch_upstream_workspace") as apply:
+                    build.download_upstream(tag, tag, Path(temp))
+                self.assertEqual(apply.call_args.kwargs["patch_xnnpack_pf32_sme2"], enabled)
+
+    def test_postimage_check_reads_the_bazel_external_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            output_base = Path(temp)
+            source_root = output_base / "execroot" / "litert_lm"
+            (source_root / "bazel-out").mkdir(parents=True)
+            source = output_base / "external" / "XNNPACK" / SOURCE
+            with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
+                build.verify_xnnpack_pf32_postimage(source_root)
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"patched\r\n")
+            digest = hashlib.sha256(b"patched\n").hexdigest()
+            with patch.object(build, "XNNPACK_PF32_SOURCE_SHA256", (SOURCE_SHA256[0], digest)):
+                build.verify_xnnpack_pf32_postimage(source_root)
+            with patch.object(build, "XNNPACK_PF32_SOURCE_SHA256", (digest, SOURCE_SHA256[1])), \
+                 self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
+                build.verify_xnnpack_pf32_postimage(source_root)
+
+    def test_build_checks_the_postimage_after_bazel_only_for_v0181(self) -> None:
+        for tag, checked in (("v0.18.0", False), ("v0.18.1", True)):
+            calls = MagicMock()
+            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp, \
+                 patch.object(build, "patch_asr_untimed_overlap"), \
+                 patch.object(build, "patch_asr_litertlm_container"), \
+                 patch.object(build, "patch_stream_finish_reason"), \
+                 patch.object(build, "materialize_git_lfs_libraries", return_value=0), \
+                 patch.object(build, "bazel_command", return_value=["bazel"]), \
+                 patch.object(build, "run", calls.run), \
+                 patch.object(build, "verify_xnnpack_pf32_postimage", calls.verify):
+                root = Path(temp)
+                with self.assertRaisesRegex(RuntimeError, "Expected build output missing"):
+                    build.build_runtime(root, "macos", "arm64", tag, "2")
+                names = [name for name, _, _ in calls.mock_calls]
+                self.assertEqual(names, ["run", "verify"] if checked else ["run"])
+                if checked:
+                    calls.verify.assert_called_once_with(root)
+
+    def test_manifest_records_the_xnnpack_source_last(self) -> None:
+        records = source_patch_manifest("v0.18.1")
+        self.assertEqual(records[-1:], xnnpack_pf32_patch_manifest("v0.18.1"))
+        record = records[-1]
+        self.assertEqual(record["id"], "xnnpack-pf32-sme2")
+        self.assertEqual(record["path"], PATCH_PATH)
+        self.assertEqual(record["sha256"], hashlib.sha256((REPO / PATCH_PATH).read_bytes()).hexdigest())
+        self.assertEqual(record["source"], f"XNNPACK@{XNNPACK_COMMIT}/{SOURCE}")
+        self.assertEqual((record["preimageSha256Lf"], record["postimageSha256Lf"]), SOURCE_SHA256)
+        self.assertNotIn("xnnpack-pf32-sme2", {r["id"] for r in source_patch_manifest("v0.18.0")})
+
+
+if __name__ == "__main__":
+    unittest.main()
