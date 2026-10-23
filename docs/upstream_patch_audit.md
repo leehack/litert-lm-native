@@ -137,7 +137,9 @@ tagged upstream release pins an XNNPACK with a fix for google/XNNPACK#11789.
 XNNPACK `76fa737a0` (google/XNNPACK PR #10986), included in the `d89ef666`
 pin, adds a packed-LHS fully connected path for int8 activations with
 per-channel int4 weights on SME2 CPUs. It registers only the 32x32 SME2 MOPA
-kernel; the 1x64 SME2 DOT kernel for one row is built but not registered. Gemma
+kernel; the 1x64 SME2 DOT kernel for one row exists only as a non-production
+kernel (`NON_PROD_NEONSME2_MICROKERNEL_SRCS`), so production builds do not
+compile it. Gemma
 4 E2B's int4 layers therefore decode one token at a time through a 32-row
 tile, which stops scaling beyond about four threads on Apple M4, instead of
 v0.18.0's NEON `qs8_qc4w` 1x16c4 kernel.
@@ -161,6 +163,7 @@ On an M4 Max at default threads (median of 9 runs over 3 interleaved rounds):
 Gemma 4 and Qwen3 replies and EmbeddingGemma 2 vectors are byte-identical with
 and without the opt-out and stay deterministic; Metal GPU decode is unchanged.
 The opt-out gives back the path's prefill gain: about 15% at default threads and
-4% at eight threads. Retire the patch when a tagged upstream release pins an
+3-4% at eight threads, but about 42-44% at one or two threads (293 to 172 and
+525 to 292 tok/s on M4 Max). SME2 phones running few threads were not measured. Retire the patch when a tagged upstream release pins an
 XNNPACK that registers a single-row kernel or otherwise fixes
 google/XNNPACK#11793, verified on multithreaded SME2 decode.
