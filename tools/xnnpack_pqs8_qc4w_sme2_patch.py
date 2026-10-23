@@ -32,8 +32,9 @@ def require_xnnpack_qc4w_patch_decision(compatibility_tag: str) -> bool:
     raise RuntimeError(
         f"XNNPACK PQS8/QC4W SME2 opt-out has no explicit decision for "
         f"{compatibility_tag}; check the pinned XNNPACK against "
-        "google/XNNPACK#11793 and record the decision in "
-        "tools/xnnpack_pqs8_qc4w_sme2_patch.py and docs/upstream_patch_audit.md")
+        "google/XNNPACK#11793, then record the decision by adding the tag to "
+        "AUDITED_TAGS in tools/xnnpack_pf32_sme2_patch.py (shared with the "
+        "PF32 rollback, so audit both) and in docs/upstream_patch_audit.md")
 
 
 def xnnpack_qc4w_patch_manifest(compatibility_tag: str) -> list[dict]:
