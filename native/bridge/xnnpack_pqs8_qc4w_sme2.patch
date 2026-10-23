@@ -1,0 +1,14 @@
+diff --git a/src/configs/gemm-config.c b/src/configs/gemm-config.c
+--- a/src/configs/gemm-config.c
++++ b/src/configs/gemm-config.c
+@@ -622,7 +622,9 @@
+       xnn_init_hardware_config();
+   assert(hardware_config != NULL);
+   (void)hardware_config;
+-  if (XNN_ENABLE_ARM_SME2 && (hardware_config->arch_flags & xnn_arch_arm_sme2)) {
++  // Disabled by litert-lm-native#84: with only the 32x32 MOPA kernel, M=1
++  // decode runs about 1.5x slower than qs8_qc4w on Apple M4 (XNNPACK#11793).
++  if (0 && XNN_ENABLE_ARM_SME2 && (hardware_config->arch_flags & xnn_arch_arm_sme2)) {
+ #if XNN_ENABLE_ARM_SME2
+     const size_t mr =
+         xnn_pqs8_qc4w_gemm_minmax_fp32_ukernel_32x32c4__neonsme2_get_mr();

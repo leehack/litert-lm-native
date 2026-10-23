@@ -36,12 +36,18 @@ SOURCES = {
 }
 # Declared ahead of tf_workspace2(): XLA's tf_http_archive skips a repository
 # that already exists, so this exact archive is the one every target links.
+# Patches apply in order; the PQS8/QC4W opt-out (#84) edits the PF32 postimage
+# of src/configs/gemm-config.c.
 ARCHIVE = f'''# XNNPACK pinned by TensorFlow {TENSORFLOW_REF[:8]} (XLA third_party/xnnpack),
-# with the PF32 SME2 kernels of {REVERTED_COMMIT[:10]} reverted (litert-lm-native#82).
+# with the PF32 SME2 kernels of {REVERTED_COMMIT[:10]} reverted (litert-lm-native#82)
+# and the SME2 PQS8/QC4W GEMM config disabled (litert-lm-native#84).
 http_archive(
     name = "XNNPACK",
     patch_args = ["-p1"],
-    patches = ["@//bridge:xnnpack_pf32_sme2.patch"],
+    patches = [
+        "@//bridge:xnnpack_pf32_sme2.patch",
+        "@//bridge:xnnpack_pqs8_qc4w_sme2.patch",
+    ],
     sha256 = "{XNNPACK_SHA256}",
     strip_prefix = "XNNPACK-{XNNPACK_COMMIT}",
     urls = [
@@ -74,9 +80,9 @@ def declare_patched_xnnpack(workspace_text: str) -> str:
     refs = re.findall(r'^TENSORFLOW_REF = "([0-9a-f]{40})"$', workspace_text, re.MULTILINE)
     # Starlark uses the last assignment.
     if not refs or refs[-1] != TENSORFLOW_REF:
-        raise RuntimeError("TensorFlow pin changed; requalify the XNNPACK PF32 SME2 rollback")
+        raise RuntimeError("TensorFlow pin changed; requalify the XNNPACK patches")
     if re.search(r'^\s*name = "XNNPACK",$', workspace_text, re.MULTILINE):
-        raise RuntimeError("Unexpected XNNPACK archive in WORKSPACE; requalify the PF32 SME2 rollback")
+        raise RuntimeError("Unexpected XNNPACK archive in WORKSPACE; requalify the XNNPACK patches")
     anchor = '# TensorFlow\nhttp_archive(\n    name = "org_tensorflow",\n'
     if workspace_text.count(anchor) != 1:
         raise RuntimeError("Expected one TensorFlow archive in WORKSPACE")
