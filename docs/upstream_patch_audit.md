@@ -19,7 +19,7 @@ paths; affected GPU devices remain separate release-adoption evidence.
 | Untimed ASR overlap alignment | Apply only to audited v0.18.0 source hash (v0.18.1 preimage is identical) | A declarative patch aligns matching boundary words before the word-count fallback. Timed and single-window outputs are unchanged in differential replay; the revised confidence checks prevent the audited periodic collapse and avoid measured clean-corpus regressions, while garbled inputs retain small regressions and repetition gains are reduced. Applies to untimed presets using `TimestampTextMerger` (Moonshine, Whisper tiny, Qwen3-ASR); `tinygemma-asr` uses the Levenshtein merger and is unaffected. See [qualification and retirement gates](asr_untimed_overlap.md) and the [unposted upstream draft](asr_untimed_overlap_upstream_issue.md). Real-model packaged JFK validation remains required. |
 | ASR `.litertlm` container routing | Backport to audited v0.18.0 source hashes (v0.18.1 preimages are identical) | Stock v0.18.0 `AsrEngine::Create` sends every `.litertlm` path to the LLM runner, so the published Whisper tiny container (one `tf_lite_encoder_decoder` section plus AsrMetadata and an HF tokenizer) fails with `tf_lite_prefill_decode not found` ([#77](https://github.com/leehack/litert-lm-native/issues/77)). Upstream [`bfdec21732`](https://github.com/google-ai-edge/LiteRT-LM/commit/bfdec21732) selects the decoder from AsrMetadata and loads the container's ASR section and tokenizer; it landed on `main` after the v0.18 branch, and v0.18.1 still lacks it. The backport is that commit's `asr_engine` change without the `kUnspecified` enum. Qwen3-ASR and LLM-only containers keep the LLM route. PR qualification runs the pinned container on CPU plus two derived negatives. |
 | v0.18.1 Bazel WORKSPACE build repair | Apply only to audited v0.18.1 WORKSPACE/.bazelrc hashes | v0.18.1 took main's LiteRT `ca21dc99`/TensorFlow `a1179d3c` pin bump without the WORKSPACE plumbing that TensorFlow needs, so Bazel stops in the loading phase: `@rules_cc//cc:extensions.bzl` has no `compatibility_proxy_repo`. `native/bridge/v0181_workspace_build.patch` makes both files byte-identical to upstream main [`d99b438f`](https://github.com/google-ai-edge/LiteRT-LM/commit/d99b438f0a961ac2a449d341c2431e49332c1076), the same change (RevId 996789227) with the same pins: early `bazel_skylib` 1.9.0 and `rules_android` 0.7.2, `bazel_features_deps()`/`compatibility_proxy_repo()` after `tf_workspace3()`, and the MSVC XNNPACK AVX512-BF16 opt-out. It drops only the shadowed first pin assignment; effective pins are unchanged. |
-| XNNPACK PF32 SME2 GEMM opt-out | Apply only to v0.18.1 (TensorFlow `a1179d3c`, XNNPACK `d89ef666`) | XNNPACK [`70a9c5e8ac`](https://github.com/google/XNNPACK/commit/70a9c5e8ac) (KleidiAI PF32 SME2 GEMM) returns different f32 `FULLY_CONNECTED` results from run to run with more than one thread on SME2 CPUs ([google/XNNPACK#11789](https://github.com/google/XNNPACK/issues/11789), [#82](https://github.com/leehack/litert-lm-native/issues/82)). v0.18.0 pins an XNNPACK without it. `native/bridge/xnnpack_pf32_sme2.patch` compiles out only the SME2 branch of `init_pf32_gemm_config`, so SME2 CPUs run f32 GEMMs on NEON; SME2 int8/int4 (`pqs8`, `qp8`) kernels, the SME (non-SME2) branch and non-SME2 CPUs are unchanged. See the tracking section for the measured cost. |
+| XNNPACK PF32 SME2 kernel rollback | Apply only to v0.18.1 (TensorFlow `a1179d3c`, XNNPACK `d89ef666`) | XNNPACK [`70a9c5e8ac`](https://github.com/google/XNNPACK/commit/70a9c5e8ac) moved the PF32 SME2 GEMM, GEMV and LHS packing to new KleidiAI kernels that return different f32 results from run to run with more than one thread on SME2 CPUs ([google/XNNPACK#11789](https://github.com/google/XNNPACK/issues/11789), [#82](https://github.com/leehack/litert-lm-native/issues/82)). v0.18.0 pins an XNNPACK from before it. `native/bridge/xnnpack_pf32_sme2.patch` reverts that commit's SME2 kernel wrappers and RHS-packing selection to the previous KleidiAI kernels, which the pinned KleidiAI still ships. The SME (non-SME2) path, other SME2 kernels and non-SME2 CPUs are unchanged. See the tracking section for determinism and speed. |
 
 Primary sources:
 
@@ -86,40 +86,47 @@ the owner WORKSPACE edits, and any other source fails closed. The manifest
 records one `sourcePatches` entry per file. Retire it when a tagged upstream
 release ships an equivalent WORKSPACE.
 
-## #82 workaround tracking: XNNPACK PF32 SME2 GEMM
+## #82 workaround tracking: XNNPACK PF32 SME2 kernels
 
 v0.18.1 pins TensorFlow `a1179d3c`, whose XLA pins XNNPACK
-`d89ef6669a14db203b3b7935b1b3862cb63fb6df`. That XNNPACK routes f32 GEMMs on
-SME2 CPUs to the KleidiAI PF32 kernels, which give run-to-run different
-results with more than one thread. On an M4 Max, stock v0.18.1 Qwen3-0.6B
-greedy CPU chat differed in 12 of 12 runs and EmbeddingGemma 2 audio
-embeddings differed between calls.
+`d89ef6669a14db203b3b7935b1b3862cb63fb6df`. That XNNPACK includes
+`70a9c5e8ac`, which moved the PF32 SME2 GEMM, GEMV and LHS packing to new
+KleidiAI kernels (`f32p4vsx1`). With more than one thread they give run-to-run
+different f32 results. On an M4 Max, stock v0.18.1 Qwen3-0.6B greedy CPU chat
+differed in 12 of 12 runs and EmbeddingGemma 2 audio embeddings differed
+between calls.
+
+`native/bridge/xnnpack_pf32_sme2.patch` reverts that commit in four files: the
+`1x32` and `32x32` SME2 wrappers and the SME2 x32 LHS packer call the previous
+`f32p2vlx1` KleidiAI kernels again, and the SME2 branch of
+`init_pf32_gemm_config` packs weights with `xnn_pack_kai_f32_weights_and_biases_sme`,
+the previous packer under its new name. The pinned KleidiAI still ships those
+kernels. The commit's other changes (new `_sme2` packer, SME `pack_lh` guards,
+tests, benchmarks) stay; the guards leave SME2 CPUs on the same LHS packing
+routine v0.18.0 used.
 
 `tools/xnnpack_pf32_sme2_patch.py` declares XLA's exact XNNPACK archive (same
 SHA-256, strip prefix and URLs) ahead of `tf_workspace2()`, adding the patch;
 XLA's `tf_http_archive` skips a repository that already exists. The WORKSPACE
 edit fails closed if the effective TensorFlow pin changes or the WORKSPACE
-already declares XNNPACK, and the build fails unless Bazel's
-`external/XNNPACK/src/configs/gemm-config.c` matches the pinned postimage. The
-manifest records one `sourcePatches` entry. The patch applies to every target;
-it changes code only on arm64 builds and behavior only on SME2 CPUs.
+already declares XNNPACK, and the build fails unless all four sources in
+Bazel's `external/XNNPACK` match their pinned postimages. The manifest records
+one `sourcePatches` entry per file. The patch applies to every target; it
+changes code only on arm64 builds and behavior only on SME2 CPUs.
 
-The determinism costs CPU time where models run f32 GEMMs. Median of 9 runs
-on an M4 Max, against the published v0.18.1 runtime:
+On an M4 Max at default threads, the rollback is deterministic (Qwen3 chat,
+EmbeddingGemma 2 text, image and audio, Gemma 4 E2B text, image and audio) and
+runs within 5% of v0.18.0-2 and stock v0.18.1 (median of 9 runs):
 
-| Workload | v0.18.1 | With opt-out |
-| --- | ---: | ---: |
-| Qwen3-0.6B prefill / decode (tok/s) | 801 / 36.7 | 253 / 29.4 |
-| Gemma 4 E2B text prefill / decode (tok/s) | 698 / 30.6 | 700 / 30.5 |
-| Gemma 4 E2B image / audio reply (s) | 5.46 / 1.56 | 6.52 / 1.58 |
-| EmbeddingGemma 2 image embedding (ms) | 317 | 678 |
-| EmbeddingGemma 2 1 s / 11 s audio embedding (ms) | 75 / 452 | 80 / 547 |
+| Workload | v0.18.0-2 | Stock v0.18.1 | Rollback |
+| --- | ---: | ---: | ---: |
+| Qwen3-0.6B prefill / decode (tok/s) | 709 / 32.2 | 696 / 31.7 | 723 / 30.7 |
+| EmbeddingGemma 2 image embedding (ms) | 321 | 328 | 325 |
+| EmbeddingGemma 2 1 s / 11 s audio embedding (ms) | 76 / 457 | 77 / 451 | 76 / 448 |
 
-Gemma 4 E2B text and image replies are byte-identical to v0.18.1. The audio
-reply's transcript has "but what" where v0.18.1 has "ask what"; v0.18.0-2 also
-transcribes "but what".
-
-Routing SME2 CPUs to the SME (non-SME2) PF32 kernels instead kept chat and audio
-deterministic at stock speed, but made EmbeddingGemma image embeddings differ on
-every call, so it is not used. Retire the patch when a tagged upstream release
-pins an XNNPACK with a fix for google/XNNPACK#11789.
+Gemma 4 E2B text and image replies are byte-identical to stock v0.18.1, and its
+audio transcript matches v0.18.0-2. Disabling the SME2 PF32 config instead
+(f32 GEMMs on NEON) was also deterministic but cut Qwen3 prefill about 3x and
+doubled image-embedding time. Routing SME2 CPUs to the SME PF32 kernels kept
+speed but made image embeddings nondeterministic. Retire the patch when a
+tagged upstream release pins an XNNPACK with a fix for google/XNNPACK#11789.

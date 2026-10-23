@@ -45,8 +45,7 @@ from workspace_build_patch import (
     require_workspace_build_patch_decision,
 )
 from xnnpack_pf32_sme2_patch import (
-    SOURCE as XNNPACK_PF32_SOURCE,
-    SOURCE_SHA256 as XNNPACK_PF32_SOURCE_SHA256,
+    SOURCES as XNNPACK_PF32_SOURCES,
     declare_patched_xnnpack,
     require_xnnpack_pf32_patch_decision,
 )
@@ -249,14 +248,14 @@ def patch_workspace_build(source_root: Path, compatibility_tag: str) -> None:
 
 
 def verify_xnnpack_pf32_postimage(source_root: Path) -> None:
-    """Fails unless Bazel compiled the patched XNNPACK gemm-config.c."""
-    output_base = (source_root / "bazel-out").resolve().parents[2]
-    source = output_base / "external" / "XNNPACK" / XNNPACK_PF32_SOURCE
-    if (not source.is_file()
-            or source_sha256(source.read_bytes()) != XNNPACK_PF32_SOURCE_SHA256[1]):
-        raise RuntimeError(
-            "XNNPACK PF32 SME2 opt-out postimage mismatch; requalify")
-    print("Verified XNNPACK PF32 SME2 opt-out postimage", flush=True)
+    """Fails unless Bazel compiled the patched XNNPACK sources."""
+    repository = (source_root / "bazel-out").resolve().parents[2] / "external" / "XNNPACK"
+    for name, (_, postimage) in XNNPACK_PF32_SOURCES.items():
+        source = repository / name
+        if not source.is_file() or source_sha256(source.read_bytes()) != postimage:
+            raise RuntimeError(
+                "XNNPACK PF32 SME2 rollback postimage mismatch; requalify")
+    print("Verified XNNPACK PF32 SME2 rollback postimages", flush=True)
 
 
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:

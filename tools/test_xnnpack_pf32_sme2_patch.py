@@ -15,8 +15,7 @@ from test_workspace_build_patch import FIXTURES, stage_v0181
 from xnnpack_pf32_sme2_patch import (
     ARCHIVE,
     PATCH_PATH,
-    SOURCE,
-    SOURCE_SHA256,
+    SOURCES,
     TENSORFLOW_REF,
     XNNPACK_COMMIT,
     XNNPACK_SHA256,
@@ -50,22 +49,36 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
             ):
                 require_xnnpack_pf32_patch_decision(tag)
 
-    def test_patch_only_compiles_out_the_pf32_sme2_branch(self) -> None:
-        self.assertEqual(re.findall(r"^--- a/(\S+)$", PATCH, re.MULTILINE), [SOURCE])
-        self.assertEqual(re.findall(r"^\+\+\+ b/(\S+)$", PATCH, re.MULTILINE), [SOURCE])
-        self.assertNotRegex(PATCH, r"(?m)^(diff --git|index )")
-        self.assertEqual(len(re.findall(r"^@@ ", PATCH, re.MULTILINE)), 1)
-        removed = re.findall(r"^-(?!--)(.*)$", PATCH, re.MULTILINE)
-        added = re.findall(r"^\+(?!\+\+)(.*)$", PATCH, re.MULTILINE)
-        self.assertEqual(removed, ["    #if XNN_ENABLE_ARM_SME2"])
-        self.assertEqual(added[-1], "    #if 0  // XNN_ENABLE_ARM_SME2")
-        self.assertTrue(all(line.lstrip().startswith("//") for line in added[:-1]))
-        context = re.findall(r"^ (.*)$", PATCH, re.MULTILINE)
-        self.assertIn(
-            "  if (XNN_ENABLE_ARM_SME2 && (hardware_config->arch_flags & xnn_arch_arm_sme2)) {",
-            context)
-        self.assertTrue(any("xnn_pf32_gemm_minmax_ukernel_32x32__neonsme2_get_mr" in line
-                            for line in context))
+    def test_patch_restores_only_the_previous_pf32_sme2_kernels(self) -> None:
+        files = re.findall(r"^diff --git a/(\S+) b/\1$", PATCH, re.MULTILINE)
+        self.assertEqual(files, list(SOURCES))
+        self.assertEqual(re.findall(r"^--- a/(\S+)$", PATCH, re.MULTILINE), files)
+        self.assertEqual(re.findall(r"^\+\+\+ b/(\S+)$", PATCH, re.MULTILINE), files)
+        self.assertNotRegex(PATCH, r"(?m)^index ")
+        sections = dict(zip(files, re.split(r"(?m)^diff --git .*\n", PATCH)[1:]))
+
+        def changed(section: str, sign: str) -> list[str]:
+            return re.findall(rf"^\{sign}(?!\{sign}\{sign} )(.*)$", section, re.MULTILINE)
+
+        config = sections["src/configs/gemm-config.c"]
+        self.assertEqual(len(re.findall(r"^@@ ", config, re.MULTILINE)), 1)
+        self.assertEqual([line.replace("_sme2;", "_sme;") for line in changed(config, "-")],
+                         changed(config, "+"))
+        self.assertIn("xnn_pf32_igemm_minmax_ukernel_32x32__neonsme2", config)
+        kernels = "".join(sections[name] for name in files[1:])
+        added, removed = "\n".join(changed(kernels, "+")), "\n".join(changed(kernels, "-"))
+        for previous in ("kai_run_matmul_clamp_f32_f32_f32p2vlx1b_1x16vl_sme2_mla(",
+                         "kai_run_matmul_clamp_f32_f32p2vlx1_f32p2vlx1biasf32_sme2_mopa(",
+                         "kai_run_lhs_pack_f32p2vlx1_f32_sme(",
+                         "kai_get_lhs_packed_size_lhs_pack_f32p2vlx1_f32_sme(",
+                         "kai_get_lhs_packed_offset_lhs_pack_f32p2vlx1_f32_sme("):
+            self.assertIn(previous, added)
+        for current in ("kai_matmul_clamp_f32_f32_f32p4vsx1bf32_1x32vs_sme2_mla()",
+                        "kai_matmul_clamp_f32_f32p4vsx1_f32p4vsx1bf32_8vsx8vs_sme2_mopa()",
+                        "kai_matmul_pack_lhs_mxk_x32p4vsx1_x32_sme()"):
+            self.assertIn(current, removed)
+            self.assertNotIn(current, added)
+        self.assertNotIn("Copyright", added + removed)
 
     def test_workspace_declares_the_tensorflow_pinned_xnnpack_before_tensorflow(self) -> None:
         workspace = repaired_v0181_workspace()
@@ -122,22 +135,24 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
                     build.download_upstream(tag, tag, Path(temp))
                 self.assertEqual(apply.call_args.kwargs["patch_xnnpack_pf32_sme2"], enabled)
 
-    def test_postimage_check_reads_the_bazel_external_repository(self) -> None:
+    def test_postimage_check_reads_every_source_in_the_bazel_external_repository(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             output_base = Path(temp)
             source_root = output_base / "execroot" / "litert_lm"
             (source_root / "bazel-out").mkdir(parents=True)
-            source = output_base / "external" / "XNNPACK" / SOURCE
-            with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
-                build.verify_xnnpack_pf32_postimage(source_root)
-            source.parent.mkdir(parents=True)
-            source.write_bytes(b"patched\r\n")
+            repository = output_base / "external" / "XNNPACK"
             digest = hashlib.sha256(b"patched\n").hexdigest()
-            with patch.object(build, "XNNPACK_PF32_SOURCE_SHA256", (SOURCE_SHA256[0], digest)):
+            fake = {"a.c": ("0" * 64, digest), "b/c.c": ("0" * 64, digest)}
+            with patch.object(build, "XNNPACK_PF32_SOURCES", fake):
+                with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
+                    build.verify_xnnpack_pf32_postimage(source_root)
+                for name in fake:
+                    (repository / name).parent.mkdir(parents=True, exist_ok=True)
+                    (repository / name).write_bytes(b"patched\r\n")
                 build.verify_xnnpack_pf32_postimage(source_root)
-            with patch.object(build, "XNNPACK_PF32_SOURCE_SHA256", (digest, SOURCE_SHA256[1])), \
-                 self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
-                build.verify_xnnpack_pf32_postimage(source_root)
+                (repository / "b/c.c").write_bytes(b"unpatched\n")
+                with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
+                    build.verify_xnnpack_pf32_postimage(source_root)
 
     def test_build_checks_the_postimage_after_bazel_only_for_v0181(self) -> None:
         for tag, checked in (("v0.18.0", False), ("v0.18.1", True)):
@@ -158,17 +173,17 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
                 if checked:
                     calls.verify.assert_called_once_with(root)
 
-    def test_manifest_records_the_xnnpack_source_last(self) -> None:
+    def test_manifest_records_each_xnnpack_source_last(self) -> None:
         records = source_patch_manifest("v0.18.1")
-        self.assertEqual(records[-1:], xnnpack_pf32_patch_manifest("v0.18.1"))
-        record = records[-1]
-        self.assertEqual(record["id"], "xnnpack-pf32-sme2")
-        self.assertEqual(record["path"], PATCH_PATH)
-        self.assertEqual(record["sha256"], hashlib.sha256((REPO / PATCH_PATH).read_bytes()).hexdigest())
-        self.assertEqual(record["source"], f"XNNPACK@{XNNPACK_COMMIT}/{SOURCE}")
-        self.assertEqual((record["preimageSha256Lf"], record["postimageSha256Lf"]), SOURCE_SHA256)
+        self.assertEqual(records[-len(SOURCES):], xnnpack_pf32_patch_manifest("v0.18.1"))
+        patch_sha256 = hashlib.sha256((REPO / PATCH_PATH).read_bytes()).hexdigest()
+        for record, (source, hashes) in zip(records[-len(SOURCES):], SOURCES.items()):
+            self.assertEqual(record["id"], "xnnpack-pf32-sme2")
+            self.assertEqual(record["path"], PATCH_PATH)
+            self.assertEqual(record["sha256"], patch_sha256)
+            self.assertEqual(record["source"], f"XNNPACK@{XNNPACK_COMMIT}/{source}")
+            self.assertEqual((record["preimageSha256Lf"], record["postimageSha256Lf"]), hashes)
         self.assertNotIn("xnnpack-pf32-sme2", {r["id"] for r in source_patch_manifest("v0.18.0")})
-
 
 if __name__ == "__main__":
     unittest.main()
