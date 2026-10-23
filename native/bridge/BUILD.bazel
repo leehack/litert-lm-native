@@ -6,6 +6,7 @@ exports_files([
     "litert_ios_framework_paths.patch",
     "sentencepiece_bpe_null.patch",
     "stream_finish_reason.patch",
+    "xnnpack_pf32_sme2.patch",
 ])
 
 config_setting(

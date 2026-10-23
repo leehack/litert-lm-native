@@ -215,7 +215,10 @@ permission.
 Pull-request qualification targets upstream `v0.18.1` at
 `bda624851d74be34d4e1f7fac1fc4155939539c7`. Stock v0.18.1 does not build
 with Bazel, so builds carry a WORKSPACE repair equal to upstream main
-`d99b438f`. This qualification baseline
+`d99b438f`. They also restore XNNPACK's previous KleidiAI PF32 SME2 kernels;
+the newer ones give run-to-run different CPU results on SME2 CPUs such as
+Apple M4 ([#82](https://github.com/leehack/litert-lm-native/issues/82)).
+This qualification baseline
 does not publish a release or move downstream pins. The iOS accelerator path
 patch applies to both the v0.17 and v0.18 LiteRT registry layouts, preserving
 the framework path and the newer upstream framework-name fallback. See the
