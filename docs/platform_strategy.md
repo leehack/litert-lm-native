@@ -197,6 +197,24 @@ onward require the pair and the licences; already-published v0.16 bundles
 predate it. Placement is not by itself GPU evidence: qualify real Windows D3D12
 generation without runtime directories on `PATH`.
 
+Windows runtimes also ship the Visual C++ runtime app-locally, so they load on
+hosts without the Visual C++ Redistributable, such as stock Windows Server 2022
+([#87](https://github.com/leehack/litert-lm-native/issues/87)). The
+source-built `LiteRtLm.dll` links the dynamic CRT (`msvcp140.dll`,
+`vcruntime140.dll`, `vcruntime140_1.dll`, `vcruntime140_threads.dll`); the
+upstream prebuilt DLLs link it statically. `tools/windows_runtime.py` copies
+every Visual C++ runtime DLL in the bundle's import closure from the build
+toolset's redistributable folder (`VC\Redist\MSVC\<version>\x64\Microsoft.VC*.CRT`,
+the files the Visual Studio licence lists as Distributable Code), never from
+`System32`, `onecore` or `debug_nonredist`. This matches
+`llamadart-native`'s app-local policy. The Windows build and
+`tools/validate_runtime_dependencies.py` then fail the bundle unless every DLL
+import is bundled (with the imported symbols exported) or provided by Windows,
+the runtime DLLs share one version at least as new as every MSVC linker that
+imports them, and no Windows system or debug runtime file ships. Hosted
+runners have the runtime installed machine-wide, so only a clean host proves
+loading; the static check keeps the closure complete between such runs.
+
 Linux flat runtime bundles normalize the packaged Dawn SONAME and use `$ORIGIN`
 for dependency lookup, after dependency staging and before model smoke hashes.
 Upstream build-tree RUNPATHs and a missing Dawn SONAME must not require callers
