@@ -10,6 +10,7 @@ import build_upstream_runtime as build
 import package_release
 from asr_litertlm_container_patch import SOURCES
 from asr_overlap_patch import POSTIMAGE_SHA256, source_patch_manifest, source_sha256
+from litert_cpu_options_identifier_patch import cpu_options_identifier_patch_manifest
 from stream_finish_reason_patch import BAZEL_DEFINE as FINISH_REASON_DEFINE, finish_reason_patch_manifest
 from workspace_build_patch import workspace_build_patch_manifest
 from xnnpack_pf32_sme2_patch import xnnpack_pf32_patch_manifest
@@ -65,10 +66,11 @@ class V0181QualificationTest(unittest.TestCase):
         self.assertEqual(manifest["upstream"]["sourcePatches"],
                          source_patch_manifest("v0.18.0") + workspace_build_patch_manifest("v0.18.1")
                          + xnnpack_pf32_patch_manifest("v0.18.1")
-                         + xnnpack_qc4w_patch_manifest("v0.18.1"))
+                         + xnnpack_qc4w_patch_manifest("v0.18.1")
+                         + cpu_options_identifier_patch_manifest("v0.18.1"))
         self.assertEqual(finish_reason_patch_manifest("v0.18.1"), finish_reason_patch_manifest("v0.18.0"))
         self.assertTrue({"stream-finish-reason", "asr-untimed-overlap", "workspace-build", "xnnpack-pf32-sme2",
-                         "xnnpack-pqs8-qc4w-sme2"}
+                         "xnnpack-pqs8-qc4w-sme2", "litert-cpu-options-identifier"}
                         <= {entry["id"] for entry in manifest["upstream"]["sourcePatches"]})
         self.assertEqual(prebuilt_overrides("v0.18.1"), ANDROID_DAWN_ROLLBACKS)
         def validate(value):

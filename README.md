@@ -222,6 +222,9 @@ Apple M4 ([#82](https://github.com/leehack/litert-lm-native/issues/82)).
 They also keep int4 fully connected layers off XNNPACK's new SME2 PQS8/QC4W
 path, which slows Gemma 4 E2B CPU decode about 1.5x on Apple M4
 ([#84](https://github.com/leehack/litert-lm-native/issues/84)).
+Linux and Windows builds name CPU options the way the shipped prebuilt LiteRT
+runtime expects; otherwise CPU inference ignores the requested thread count
+([#89](https://github.com/leehack/litert-lm-native/issues/89)).
 This qualification baseline
 does not publish a release or move downstream pins. The iOS accelerator path
 patch applies to both the v0.17 and v0.18 LiteRT registry layouts, preserving

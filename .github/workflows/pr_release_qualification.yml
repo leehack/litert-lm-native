@@ -458,6 +458,18 @@ jobs:
           dart pub get
           dart --packages=.dart_tool/package_config.json ../tools/qwen_runtime_preflight.dart
           dart run tool/litert_lm_engine_smoke.dart "$model" cpu 'What is 2+2? Answer only with the number.' 16 1024
+      - name: Require the CPU backend to honour num_threads
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            linux) library=libLiteRtLm.so ;;
+            windows) library=LiteRtLm.dll ;;
+            macos) library=libLiteRtLm.dylib ;;
+          esac
+          python3 tools/litert_lm_cpu_threads_probe.py \
+            --library "bin/${{ matrix.platform }}/${{ matrix.arch }}/$library" \
+            --model qwen-smoke-assets/Qwen3-0.6B.litertlm \
+            --threads 4
 
   qualification-result:
     if: always()

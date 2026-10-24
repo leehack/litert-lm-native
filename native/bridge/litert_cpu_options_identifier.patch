@@ -1,0 +1,14 @@
+diff --git a/litert/c/options/litert_cpu_options.cc b/litert/c/options/litert_cpu_options.cc
+--- a/litert/c/options/litert_cpu_options.cc
++++ b/litert/c/options/litert_cpu_options.cc
+@@ -117,7 +117,9 @@ LiteRtStatus LrtGetOpaqueCpuOptionsData(const LrtCpuOptions* options,
+   return kLiteRtStatusOk;
+ }
+ 
+-const char* LrtGetCpuOptionsIdentifier() { return "cpu_options"; }
++// Linux and Windows hosts run the upstream prebuilt libLiteRt, built before
++// LiteRT 724a247cc5 renamed this identifier; it reads only "xnnpack".
++const char* LrtGetCpuOptionsIdentifier() { return "xnnpack"; }
+ 
+ LiteRtStatus LrtSetCpuOptionsKernelMode(LrtCpuOptions* options,
+                                         LiteRtCpuKernelMode mode) {

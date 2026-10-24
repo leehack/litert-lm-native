@@ -63,7 +63,8 @@ class XnnpackPqs8Qc4wSme2PatchTest(unittest.TestCase):
         self.assertEqual(build.XNNPACK_POSTIMAGES, expected)
 
     def test_manifest_records_the_opt_out_last(self) -> None:
-        records = source_patch_manifest("v0.18.1")
+        records = [r for r in source_patch_manifest("v0.18.1")
+                   if r["id"] != "litert-cpu-options-identifier"]
         self.assertEqual(records[-1:], xnnpack_qc4w_patch_manifest("v0.18.1"))
         record = records[-1]
         self.assertEqual(record["id"], "xnnpack-pqs8-qc4w-sme2")

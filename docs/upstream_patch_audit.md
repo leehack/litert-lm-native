@@ -21,6 +21,7 @@ paths; affected GPU devices remain separate release-adoption evidence.
 | v0.18.1 Bazel WORKSPACE build repair | Apply only to audited v0.18.1 WORKSPACE/.bazelrc hashes | v0.18.1 took main's LiteRT `ca21dc99`/TensorFlow `a1179d3c` pin bump without the WORKSPACE plumbing that TensorFlow needs, so Bazel stops in the loading phase: `@rules_cc//cc:extensions.bzl` has no `compatibility_proxy_repo`. `native/bridge/v0181_workspace_build.patch` makes both files byte-identical to upstream main [`d99b438f`](https://github.com/google-ai-edge/LiteRT-LM/commit/d99b438f0a961ac2a449d341c2431e49332c1076), the same change (RevId 996789227) with the same pins: early `bazel_skylib` 1.9.0 and `rules_android` 0.7.2, `bazel_features_deps()`/`compatibility_proxy_repo()` after `tf_workspace3()`, and the MSVC XNNPACK AVX512-BF16 opt-out. It drops only the shadowed first pin assignment; effective pins are unchanged. |
 | XNNPACK PF32 SME2 kernel rollback | Apply only to v0.18.1 (TensorFlow `a1179d3c`, XNNPACK `d89ef666`) | XNNPACK [`70a9c5e8ac`](https://github.com/google/XNNPACK/commit/70a9c5e8ac) moved the PF32 SME2 GEMM, GEMV and LHS packing to new KleidiAI kernels that return different f32 results from run to run with more than one thread on SME2 CPUs ([google/XNNPACK#11789](https://github.com/google/XNNPACK/issues/11789), [#82](https://github.com/leehack/litert-lm-native/issues/82)). v0.18.0 pins an XNNPACK from before it. `native/bridge/xnnpack_pf32_sme2.patch` reverts that commit's SME2 kernel wrappers and RHS-packing selection to the previous KleidiAI kernels, which the pinned KleidiAI still ships. The SME (non-SME2) path, other SME2 kernels and non-SME2 CPUs are unchanged. See the tracking section for determinism and speed. |
 | XNNPACK SME2 PQS8/QC4W GEMM opt-out | Apply only to v0.18.1 (TensorFlow `a1179d3c`, XNNPACK `d89ef666`), after the PF32 rollback | XNNPACK [`76fa737a0`](https://github.com/google/XNNPACK/commit/76fa737a0b70fa506226b23432633e3781c2a470) sends int8-activation, int4-weight fully connected layers on SME2 CPUs to a packed-LHS path whose only kernel is the 32x32 SME2 MOPA one, so single-token decode runs it at M=1 ([google/XNNPACK#11793](https://github.com/google/XNNPACK/issues/11793), [#84](https://github.com/leehack/litert-lm-native/issues/84)). Gemma 4 E2B CPU decode on Apple M4 drops from about 45 to 30 tok/s. `native/bridge/xnnpack_pqs8_qc4w_sme2.patch` leaves the SME2 `pqs8_qc4w` GEMM config empty, so those layers keep the `qs8_qc4w` kernels v0.18.0 used. Non-SME2 CPUs are unchanged. See the tracking section for speed. |
+| LiteRT CPU options identifier rollback | Apply only to v0.18.1 (LiteRT `ca21dc99`, audited Linux/Windows prebuilt `libLiteRt`) | LiteRT [`724a247cc5`](https://github.com/google-ai-edge/LiteRT/commit/724a247cc5) renamed the CPU options identifier from `xnnpack` to `cpu_options`. v0.18.1 compiles the host against a LiteRT with the rename but ships the 2026-09-28 prebuilt `libLiteRt` from before it, which Linux and Windows hosts link. Its XNNPACK accelerator finds no `xnnpack` options, so CPU inference ignores the thread count, weight cache and XNNPACK flags ([#89](https://github.com/leehack/litert-lm-native/issues/89)). `native/bridge/litert_cpu_options_identifier.patch` returns `xnnpack` again. Static runtimes (Android, Apple) read the identifier from the same function and are unaffected. See the tracking section. |
 
 Primary sources:
 
@@ -167,3 +168,37 @@ The opt-out gives back the path's prefill gain: about 15% at default threads and
 525 to 292 tok/s on M4 Max). SME2 phones running few threads were not measured. Retire the patch when a tagged upstream release pins an
 XNNPACK that registers a single-row kernel or otherwise fixes
 google/XNNPACK#11793, verified on multithreaded SME2 decode.
+
+## #89 workaround tracking: LiteRT CPU options identifier
+
+Linux and Windows builds use `--define=litert_runtime_link_mode=dynamic`, so
+`libLiteRtLm` creates compiled models through the upstream prebuilt
+`libLiteRt` (`kLiteRtRuntimeBuiltin`). The host serializes CPU options under
+`LrtGetCpuOptionsIdentifier()`, which LiteRT `ca21dc99` returns as
+`cpu_options`; the prebuilt XNNPACK accelerator looks them up as `xnnpack`.
+It finds nothing and creates the delegate with defaults: one thread, no weight
+cache, default flags. v0.18.0 pins LiteRT `26895c9`, which still uses
+`xnnpack`, so only v0.18.1 builds are affected.
+
+`tools/litert_cpu_options_identifier_patch.py` pins the LF pre/postimage of
+`litert/c/options/litert_cpu_options.cc` and the SHA-256 of the three
+v0.18.1 prebuilt runtimes. Linux and Windows builds fail unless they link one
+of those runtimes, and every build checks the postimage in Bazel's
+`external/litert`. The manifest records one `sourcePatches` entry.
+
+PR qualification runs `tools/litert_lm_cpu_threads_probe.py` on Linux x64,
+Windows x64 and macOS arm64: a CPU session created with four threads must own
+at least three more threads than one created with one thread.
+
+Changing only the identifier string in a v0.18.1-3 Linux arm64 library
+restores upstream scaling (Qwen3-0.6B CPU decode, tok/s, 64 tokens, Linux
+arm64 container on M4 Max):
+
+| Threads | v0.18.1-3 | Identifier patched | Upstream `litert-lm-api` 0.18.1 wheel |
+| ---: | ---: | ---: | ---: |
+| 1 | 11.4 | 11.8 | 11.6 |
+| 4 | 11.5 | 25.5 | 25.8 |
+| 8 | 11.5 | 28.7 | 28.3 |
+
+Retire the patch when a tagged upstream release ships Linux and Windows
+prebuilt runtimes built from its pinned LiteRT.

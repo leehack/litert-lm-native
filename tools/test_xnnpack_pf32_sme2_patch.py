@@ -165,7 +165,8 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
                  patch.object(build, "materialize_git_lfs_libraries", return_value=0), \
                  patch.object(build, "bazel_command", return_value=["bazel"]), \
                  patch.object(build, "run", calls.run), \
-                 patch.object(build, "verify_xnnpack_postimages", calls.verify):
+                 patch.object(build, "verify_xnnpack_postimages", calls.verify), \
+                 patch.object(build, "verify_cpu_options_identifier_postimage"):
                 root = Path(temp)
                 with self.assertRaisesRegex(RuntimeError, "Expected build output missing"):
                     build.build_runtime(root, "macos", "arm64", tag, "2")
@@ -175,7 +176,8 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
                     calls.verify.assert_called_once_with(root)
 
     def test_manifest_records_each_xnnpack_source_before_the_qc4w_opt_out(self) -> None:
-        records = [r for r in source_patch_manifest("v0.18.1") if r["id"] != "xnnpack-pqs8-qc4w-sme2"]
+        records = [r for r in source_patch_manifest("v0.18.1")
+                   if r["id"] not in {"xnnpack-pqs8-qc4w-sme2", "litert-cpu-options-identifier"}]
         self.assertEqual(records[-len(SOURCES):], xnnpack_pf32_patch_manifest("v0.18.1"))
         patch_sha256 = hashlib.sha256((REPO / PATCH_PATH).read_bytes()).hexdigest()
         for record, (source, hashes) in zip(records[-len(SOURCES):], SOURCES.items()):
