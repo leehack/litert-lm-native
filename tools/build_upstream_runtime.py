@@ -39,6 +39,7 @@ from stream_finish_reason_patch import (
     require_finish_reason_patch_decision,
 )
 from windows_dxc import stage_windows_dxc
+import windows_runtime
 from workspace_build_patch import (
     PATCH_PATH as WORKSPACE_BUILD_PATCH_PATH,
     SOURCES as WORKSPACE_BUILD_PATCH_SOURCES,
@@ -685,6 +686,15 @@ def stage_windows_runtime_dependencies(source_root: Path, arch: str) -> None:
     stage_windows_dxc(stage_dir)
 
 
+def stage_windows_vc_runtime(platform: str, arch: str) -> None:
+    """Ship the Visual C++ runtime app-locally; stock Windows hosts lack it (#87)."""
+    if platform != "windows":
+        return
+    windows_runtime.stage_vc_runtime(
+        BIN_DIR / platform / arch, arch, windows_runtime.vc_redist_dir()
+    )
+
+
 def stage_macho_runtime_dependencies(
     output: Path,
     source_root: Path,
@@ -856,6 +866,7 @@ def main() -> int:
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)
+        stage_windows_vc_runtime(args.platform, args.arch)
         if args.platform == "ios" and provider_free_ios(args.upstream_tag):
             validate_ios_directory(BIN_DIR / "ios" / args.arch, remove_unused_provider=True)
         normalize_linux_runtime_metadata(args.platform, args.arch)
@@ -888,6 +899,7 @@ def main() -> int:
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)
+        stage_windows_vc_runtime(args.platform, args.arch)
         if args.platform == "ios" and provider_free_ios(args.upstream_tag):
             validate_ios_directory(BIN_DIR / "ios" / args.arch, remove_unused_provider=True)
         normalize_linux_runtime_metadata(args.platform, args.arch)

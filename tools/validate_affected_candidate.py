@@ -10,7 +10,7 @@ from ios_runtime_policy import provider_free_ios, validate_ios_directory, valida
 from package_release import load_smoke_evidence
 from qualification_scope import MATRIX
 from validate_runtime_artifacts import required_runtime_artifacts
-from validate_runtime_dependencies import validate_elf_dependencies, validate_macho_dependencies
+from validate_runtime_dependencies import validate_elf_dependencies, validate_macho_dependencies, validate_pe_dependencies
 
 
 def validate(root, rows, upstream_tag, upstream_commit, native_commit, release_tag):
@@ -40,6 +40,7 @@ def validate(root, rows, upstream_tag, upstream_commit, native_commit, release_t
             validate_ios_archives(root / "dist" / "spm" / release_tag)
         validate_elf_dependencies(isolated)
         validate_macho_dependencies(isolated)
+        validate_pe_dependencies(isolated)
     print(f'Validated affected platforms {sorted(platforms)}; not a full release candidate')
 
 

@@ -129,7 +129,8 @@ python3 tools/validate_artifacts.py
   It builds upstream C runtime libraries with embedded LiteRtLmBridge symbols for
   Android arm64/x64, iOS arm64/arm64-sim, Linux x64/arm64, macOS arm64, and
   Windows x64, copies upstream `prebuilt/` companion libraries for Android,
-  Apple, Linux, and Windows, uses official Apple XCFramework archives when
+  Apple, Linux, and Windows, ships the Visual C++ runtime DLLs the Windows
+  runtime imports app-locally, uses official Apple XCFramework archives when
   upstream publishes them, falls back to the source-built Apple runtimes when
   those archives are missing, packages Apple SPM XCFramework zips from the same
   runtime payloads, includes the official upstream release assets, then

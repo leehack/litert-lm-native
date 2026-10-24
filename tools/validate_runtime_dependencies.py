@@ -27,6 +27,7 @@ from macos_runtime_policy import (
     unsupported_macos_runtime_dirs,
     validate_macos_archives,
 )
+import windows_runtime
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANDROID_MIN_LOAD_ALIGNMENT = 0x4000
@@ -266,11 +267,39 @@ def validate_macho_dependencies(root: Path) -> int:
     return checked
 
 
+def validate_pe_dependencies(root: Path) -> int:
+    """Every Windows bundle must load on a host without the Visual C++ redistributable."""
+    windows_dir = root / "bin" / "windows"
+    if not windows_dir.is_dir():
+        return 0
+    checked = 0
+    errors: list[str] = []
+    for runtime_dir in sorted(path for path in windows_dir.iterdir() if path.is_dir()):
+        prefix = runtime_dir.relative_to(root).as_posix()
+        try:
+            images = windows_runtime.read_bundle(runtime_dir)
+        except windows_runtime.PeError as error:
+            errors.append(f"{prefix}/{error}")
+            continue
+        checked += len(images)
+        errors.extend(
+            f"{prefix}/{error}"
+            for error in windows_runtime.bundle_errors(images, runtime_dir.name)
+        )
+    if errors:
+        fail(
+            "Runtime dependency validation failed:\n"
+            + "\n".join(f"- {e}" for e in errors)
+        )
+    return checked
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Validate that packaged native runtimes include non-system ELF "
-            "dependencies and Android libraries are 16 KB page-size compatible."
+            "Validate that packaged native runtimes include non-system ELF, "
+            "Mach-O and PE dependencies and Android libraries are 16 KB "
+            "page-size compatible."
         )
     )
     parser.add_argument("--root", type=Path, default=REPO_ROOT)
@@ -284,6 +313,7 @@ def main() -> int:
         validate_ios_archives(args.archive_root or root / "dist" / "spm")
     checked_elf = validate_elf_dependencies(root)
     checked_macho = validate_macho_dependencies(root)
+    checked_pe = validate_pe_dependencies(root)
     macos_archive_errors = validate_macos_archives(args.archive_root or root / "dist" / "spm")
     if macos_archive_errors:
         fail(
@@ -292,7 +322,8 @@ def main() -> int:
         )
     print(
         "Validated runtime dependencies for "
-        f"{checked_elf} ELF libraries and {checked_macho} Mach-O libraries"
+        f"{checked_elf} ELF libraries, {checked_macho} Mach-O libraries "
+        f"and {checked_pe} Windows DLLs"
     )
     return 0
 
