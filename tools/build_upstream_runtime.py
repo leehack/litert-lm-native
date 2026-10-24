@@ -17,6 +17,11 @@ from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_direc
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
 from gpu_environment_teardown import find_ndk_llvm_objdump, validate_library
+from litert_cpu_options_identifier_patch import (
+    SOURCES as CPU_OPTIONS_IDENTIFIER_SOURCES,
+    require_cpu_options_identifier_patch_decision,
+    verify_dynamic_runtime,
+)
 from litert_lm_symbols import (
     has_asr_bridge,
     is_at_least,
@@ -265,6 +270,16 @@ def verify_xnnpack_postimages(source_root: Path) -> None:
     print("Verified XNNPACK PF32 rollback and PQS8/QC4W opt-out postimages", flush=True)
 
 
+def verify_cpu_options_identifier_postimage(source_root: Path) -> None:
+    """Fails unless Bazel compiled the patched LiteRT CPU options identifier."""
+    repository = (source_root / "bazel-out").resolve().parents[2] / "external" / "litert"
+    for name, (_, postimage) in CPU_OPTIONS_IDENTIFIER_SOURCES.items():
+        source = repository / name
+        if not source.is_file() or source_sha256(source.read_bytes()) != postimage:
+            raise RuntimeError("LiteRT CPU options identifier postimage mismatch; requalify")
+    print("Verified LiteRT CPU options identifier postimage", flush=True)
+
+
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
     ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
     return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
@@ -307,6 +322,9 @@ def download_upstream(
             compatibility_tag,
         ),
         patch_xnnpack_pf32_sme2=require_xnnpack_pf32_patch_decision(compatibility_tag),
+        patch_cpu_options_identifier=require_cpu_options_identifier_patch_decision(
+            compatibility_tag
+        ),
     )
     return source_root
 
@@ -335,6 +353,7 @@ def patch_upstream_workspace(
     patch_bpe_null_piece: bool = False,
     patch_gpu_environment_teardown: bool = False,
     patch_xnnpack_pf32_sme2: bool = False,
+    patch_cpu_options_identifier: bool = False,
 ) -> None:
     workspace = source_root / "WORKSPACE"
     text = workspace.read_text(encoding="utf-8")
@@ -358,6 +377,8 @@ def patch_upstream_workspace(
         litert_patches.append("litert_ios_framework_paths.patch")
     if patch_gpu_environment_teardown:
         litert_patches.append("litert_gpu_environment_destroy_callback.patch")
+    if patch_cpu_options_identifier:
+        litert_patches.append("litert_cpu_options_identifier.patch")
     litert_archive = 'http_archive(\n    name = "litert",\n'
     litert_archive_with_patch = (
         litert_archive
@@ -492,6 +513,9 @@ def build_runtime(
                 f"{platform}/{arch}",
                 flush=True,
             )
+    patch_cpu_options_identifier = require_cpu_options_identifier_patch_decision(upstream_tag)
+    if patch_cpu_options_identifier:
+        verify_dynamic_runtime(source_root / "prebuilt", platform, arch)
     target = RUNTIME_TARGETS[(platform, arch)]
     configs = [
         f"--config={config}"
@@ -540,6 +564,8 @@ def build_runtime(
     run(command, source_root)
     if require_xnnpack_pf32_patch_decision(upstream_tag):
         verify_xnnpack_postimages(source_root)
+    if patch_cpu_options_identifier:
+        verify_cpu_options_identifier_postimage(source_root)
 
     if "output" in target:
         output = source_root / target["output"]

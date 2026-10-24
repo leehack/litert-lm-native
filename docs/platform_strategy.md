@@ -184,6 +184,12 @@ is not ABI-equivalent evidence: the L4 control still crashed with that core and
 passed after replacing only it with the matching prebuilt. Missing matching
 prebuilts fail the build instead of falling back to an arbitrary Bazel output.
 
+The host still serializes compiled-model options with the LiteRT it was built
+from, so option identifiers must match the prebuilt runtime. v0.18.1 carries
+one such correction for CPU options
+([#89](https://github.com/leehack/litert-lm-native/issues/89),
+[audit](upstream_patch_audit.md#89-workaround-tracking-litert-cpu-options-identifier)).
+
 Windows packaging stages the pinned DirectX Shader Compiler pair
 (`dxil.dll`, `dxcompiler.dll`) beside the runtime DLLs, because Dawn's D3D12
 backend opens both by name through its own module directory and otherwise fails

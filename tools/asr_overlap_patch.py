@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from asr_litertlm_container_patch import container_patch_manifest
+from litert_cpu_options_identifier_patch import cpu_options_identifier_patch_manifest
 from stream_finish_reason_patch import finish_reason_patch_manifest
 from workspace_build_patch import workspace_build_patch_manifest
 from xnnpack_pf32_sme2_patch import xnnpack_pf32_patch_manifest
@@ -54,4 +55,5 @@ def source_patch_manifest(compatibility_tag: str) -> list[dict]:
         *finish_reason_patch_manifest(compatibility_tag),
         *workspace_build_patch_manifest(compatibility_tag),
         *xnnpack_pf32_patch_manifest(compatibility_tag),
-        *xnnpack_qc4w_patch_manifest(compatibility_tag)]
+        *xnnpack_qc4w_patch_manifest(compatibility_tag),
+        *cpu_options_identifier_patch_manifest(compatibility_tag)]
