@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import threading
 import unittest
 from pathlib import Path
@@ -36,6 +37,12 @@ class CpuThreadsProbeTest(unittest.TestCase):
                 self.assertEqual(probe.main(["--library", "lib", "--model", "m", "--threads", "4"]), code)
                 self.assertEqual([call.args[2] for call in measure.call_args_list], [1, 4])
                 self.assertEqual(measure.call_args_list[0].args[0], Path("lib").resolve())
+
+    def test_child_failure_reports_its_output(self) -> None:
+        failed = subprocess.CompletedProcess([], 1, stdout="", stderr="engine create failed")
+        with patch.object(probe.subprocess, "run", return_value=failed), \
+             self.assertRaisesRegex(RuntimeError, "num_threads=4 probe exited with 1:\nengine create failed"):
+            probe.measure_in_child(Path("lib"), Path("m"), 4)
 
     def test_cli_rejects_a_single_thread_target(self) -> None:
         with self.assertRaises(SystemExit):

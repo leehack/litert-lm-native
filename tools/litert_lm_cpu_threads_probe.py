@@ -111,7 +111,9 @@ def session_thread_count(library_path: Path, model: Path, threads: int) -> int:
     """Returns this process's thread count with a live CPU session."""
     library = bind(library_path)
     library.litert_lm_set_min_log_level(LOG_SEVERITY_ERROR)
-    with tempfile.TemporaryDirectory(prefix="litert-lm-threads-") as cache_dir:
+    # Windows keeps the XNNPACK weight cache open until the process exits.
+    with tempfile.TemporaryDirectory(prefix="litert-lm-threads-",
+                                     ignore_cleanup_errors=True) as cache_dir:
         settings = library.litert_lm_engine_settings_create(
             str(model).encode(), b"cpu", None, None)
         if not settings:
@@ -153,7 +155,10 @@ def measure_in_child(library: Path, model: Path, threads: int) -> int:
     result = subprocess.run(
         [sys.executable, str(Path(__file__).resolve()), "--child",
          "--library", str(library), "--model", str(model), "--threads", str(threads)],
-        check=True, capture_output=True, text=True, timeout=CHILD_TIMEOUT_SECONDS)
+        capture_output=True, text=True, timeout=CHILD_TIMEOUT_SECONDS)
+    if result.returncode != 0:
+        raise RuntimeError(f"num_threads={threads} probe exited with {result.returncode}:\n"
+                           f"{result.stdout}{result.stderr}")
     return json.loads(result.stdout.strip().splitlines()[-1])["threadCount"]
 
 
