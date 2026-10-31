@@ -20,6 +20,10 @@ raw `main`; these differ at the tag:
 | Protos | `Asr*` became `Speech2Text*` | Internal to the adapter. |
 | Packaging | No `LiteRtTopK*Sampler` library; `libLiteRtLm` links Dawn | Validators and manifests key this on `has_prebuilt_topk_samplers`. |
 
+`ubuntu-latest` moved to 26.04, so a Linux x64 build there needs glibc 2.43 and
+fails to load on Ubuntu 24.04. Linux x64 now builds on `ubuntu-24.04` and
+`validate_runtime_dependencies.py` rejects anything newer than glibc 2.39.
+
 The ASR cache is disabled (`:nocache`): upstream's default writes beside the
 model and the ABI has no cache directory. Default overlap stays 0.4; upstream's
 is 0.75.

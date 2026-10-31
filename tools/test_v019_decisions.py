@@ -14,6 +14,7 @@ from prebuilt_overrides import prebuilt_overrides
 from stream_finish_reason_patch import require_finish_reason_patch_decision
 from validate_release_manifest import allowed_spm_assets, required_spm_assets
 from validate_runtime_artifacts import required_runtime_artifacts
+from validate_runtime_dependencies import newest_glibc_requirement
 from workspace_build_patch import require_workspace_build_patch_decision
 
 
@@ -70,6 +71,14 @@ class V019DecisionsTest(unittest.TestCase):
             (root / "build_config/BUILD").write_text("")
             with self.assertRaisesRegex(RuntimeError, "disable gate"):
                 verify_upstream_fst_gate(root)
+
+    def test_newest_glibc_requirement_compares_numerically(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library = Path(temp) / "lib.so"
+            library.write_bytes(b"\0GLIBC_2.9\0GLIBC_2.39\0GLIBC_2.2.5\0")
+            self.assertEqual(newest_glibc_requirement(library), (2, 39))
+            library.write_bytes(b"\0")
+            self.assertIsNone(newest_glibc_requirement(library))
 
     def test_android_dawn_rollback_waits_for_device_evidence(self) -> None:
         self.assertEqual(prebuilt_overrides("v0.19.0"), prebuilt_overrides("v0.18.1"))
