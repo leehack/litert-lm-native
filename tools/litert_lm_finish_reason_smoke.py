@@ -198,7 +198,9 @@ def main() -> int:
               "this runtime does not report finish reasons", file=sys.stderr)
         return 1
 
-    with tempfile.TemporaryDirectory(prefix="litert-lm-finish-reason-") as cache:
+    # Windows keeps the XNNPACK weight cache open until the process exits.
+    with tempfile.TemporaryDirectory(prefix="litert-lm-finish-reason-",
+                                     ignore_cleanup_errors=True) as cache:
         settings = api.engine_settings_create(str(args.model.resolve()), args.backend)
         engine = None
         try:
