@@ -119,5 +119,146 @@
     ],
     "states": "[|c i e b l d][|c i e B l D][c i e|B l D b w c v x y][B l D b w c v x y|]",
     "purpose": "U10_earliest_zero_floor"
+  },
+  {
+    "chunks": [
+      "as he this they of child try",
+      "of child try year program I'm sorry",
+      "sorry to of feel work school",
+      "work school day want want",
+      "want want of"
+    ],
+    "states": "[|as he this they of child try][as he this they|of child try year program I'm sorry][of child try year program I'm sorry|sorry to of feel work school][sorry to of feel|work school day want want][work school day|want want of][want want of|]",
+    "purpose": "M4_one_word_v019"
+  },
+  {
+    "chunks": [
+      "home world this no no year of the of the",
+      "ah oh of the of the group woman I think I think",
+      "I think I think I think",
+      "think at the end at",
+      "the end at the end at"
+    ],
+    "states": "[|home world this no no year of the of the][home world this no|no year of the of the group woman I think I think][no year of the of the|group woman I think I think][group woman I|think at the end at][|think at the end at][think at the end at|]",
+    "purpose": "M5_three_words_v019"
+  },
+  {
+    "chunks": [
+      "la la la la hey la la la la",
+      "la la la la hey la la la la",
+      "la la la hey la la la la hey"
+    ],
+    "states": "[|la la la la hey la la la la][la|la la la hey la la la la][|la la la hey la la la la hey][la la la hey la la la la hey|]",
+    "purpose": "P1_unbounded_anchor_v019"
+  },
+  {
+    "chunks": [
+      "la la la la hey la la la la hey la",
+      "um oh la la hey la la la la hey la",
+      "um la hey la la la la hey la la"
+    ],
+    "states": "[|la la la la hey la la la la hey la][la|la la la hey la la la la hey la][la|la la hey la la la la hey la la][la la hey la la la la hey la la|]",
+    "purpose": "P2_ignore_confidence_v019"
+  },
+  {
+    "chunks": [
+      "home world this no no year of the of the",
+      "ah oh of the of the group woman I think I think",
+      "I think I think I think",
+      "think at the end at",
+      "the end at the end at"
+    ],
+    "states": "[|home world this no no year of the of the][home world this no|no year of the of the group woman I think I think][no year of the of the|group woman I think I think][group woman I|think at the end at][|think at the end at][think at the end at|]",
+    "purpose": "U1_no_offset_consistency_v019"
+  },
+  {
+    "chunks": [
+      "question at place",
+      "place point water on at um",
+      "on at place of word",
+      "word in of word and uh",
+      "in of word and need world with of eh",
+      "one eh of on student said tree",
+      "student said we"
+    ],
+    "states": "[|question at place][question at place|place point water on at um][place point water|on at place of word][on|at place of word and uh][at place|of word and need world with of eh][of word and need world with of eh|one eh of on student said tree][one eh of on|student said we][student said we|]",
+    "purpose": "U11_no_search_window_slack_v019"
+  },
+  {
+    "chunks": [
+      "lot it of by work in",
+      "work in by work to problem",
+      "to problem study look a to problem I",
+      "a to problem I went with I went",
+      "I went"
+    ],
+    "states": "[|lot it of by work in][lot|it of by work to problem][|it of by work to problem I][it of by work|to problem I went with I went][to problem I went with|I went][I went|]",
+    "purpose": "U12_no_skip_v019"
+  },
+  {
+    "chunks": [
+      "a when make back and think do on tree",
+      "back and think do on with my way each um",
+      "way each water many but there very oh",
+      "um but there very by name year"
+    ],
+    "states": "[|a when make back and think do on tree][a when make|back and think do on with my way each um][back and think do on with my|way each water many but there very oh][way each water many|but there very by name year][but there very by name year|]",
+    "purpose": "U13_no_trim_v019"
+  },
+  {
+    "chunks": [
+      "state from place from place home from place thing from place is",
+      "tree place thing from place is give point that think look work",
+      "that think look work that think day state that company made",
+      "day state that company made that company"
+    ],
+    "states": "[|state from place from place home from place thing from place is][state from place from place home|from place thing from place is give point that think look work][from place thing from place is give point|that think look work that think day state that company made][that think look work that think|day state that company made that company][day state that company made that company|]",
+    "purpose": "U5_no_half_distinct_v019"
+  },
+  {
+    "chunks": [
+      "program from ask work man school",
+      "man school from ask is area a is area",
+      "is area a is area to number we",
+      "number we to number see",
+      "number see as fact",
+      "fact as fact",
+      "as fact give it at",
+      "it at we case woman",
+      "case woman is we case",
+      "is we case the night",
+      "night the night in need student",
+      "need student from in need from",
+      "need from school"
+    ],
+    "states": "[|program from ask work man school][|program from ask is area a is area][program from ask|is area a is area to number we][is area a|is area to number see][is area to|number see as fact][number|see as fact][see|as fact give it at][as fact give|it at we case woman][it at we|case woman is we case][case woman|is we case the night][is we|case the night in need student][|case the night in need from][case the night in|need from school][need from school|]",
+    "purpose": "U6_no_repeated_bigram_short_v019"
+  },
+  {
+    "chunks": [
+      "state hand no no no tell thing I think",
+      "um thing I think I think I think we will",
+      "I think we will we will month at the end at",
+      "month at the end at the end at the",
+      "at the end school way group word said um",
+      "way group word said part we will we will in",
+      "will we will in"
+    ],
+    "states": "[|state hand no no no tell thing I think][state|hand no no no tell thing I think we will][hand no no no tell thing|I think we will we will month at the end at][I think we|will we will month at the end at the][will we will month|at the end school way group word said um][at the end school|way group word said part we will we will in][way group word said part we|will we will in][will we will in|]",
+    "purpose": "U7_no_repeated_half_v019"
+  },
+  {
+    "chunks": [
+      "I way this I way we um",
+      "I way we give we give it hand feel um",
+      "eh tree it hand feel it hand you study you study um",
+      "you study you study he the and world case",
+      "and world case and world he for word",
+      "world he for word take by for word we",
+      "by for word we use at take from child",
+      "take from child"
+    ],
+    "states": "[|I way this I way we um][|I way we give we give it hand feel um][I way we give|we give it hand feel it hand you study you study um][we give it hand feel it hand|you study you study he the and world case][you study you study he the|and world case and world he for word][and world case and|world he for word take by for word we][world he for word take|by for word we use at take from child][by for word we use at|take from child][take from child|]",
+    "purpose": "U9_no_trim_shared_v019"
   }
 ]

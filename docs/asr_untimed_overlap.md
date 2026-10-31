@@ -24,7 +24,9 @@ at 1:10 rather than zero.
 Native fixtures record v0.19.0 fallback bytes, including its choice to keep the
 longer tail when an ambiguous window ends (`we go now we go now` then
 `we go now and rest` loses `and rest`). That is upstream behaviour, not this
-carry. The sections below record the original v0.18.0 audit.
+carry. All 26 mutants fail or, for three (`M7`, `M9`, `U16`), match the fix byte
+for byte on every corpus; the new fallback hides their guard. The sections below
+record the original v0.18.0 audit.
 
 ## Design and scope
 
