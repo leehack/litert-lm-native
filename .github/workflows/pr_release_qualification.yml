@@ -243,6 +243,13 @@ jobs:
             --expect-engine-error "tf_lite_encoder_decoder not found"
           whisper whisper_tiny_30s_i8_qwen3_metadata.litertlm \
             --expect-engine-error "declares qwen3-asr"
+          whisper whisper_tiny_30s_i8.litertlm --model-name customer-asr \
+            --expect "ask what you can do for your country"
+          cp asr-smoke-assets/whisper_tiny_30s_i8.litertlm asr-smoke-assets/a1b2c3d4.litertlm
+          whisper a1b2c3d4.litertlm --clear-model-name \
+            --expect "ask what you can do for your country"
+          whisper whisper_tiny_30s_i8.litertlm --enum-override backend=99 \
+            --expect-engine-error "Unsupported ASR backend"
 
       - name: Run Windows ASR real-model smoke and finish-reason ABI check
         if: matrix.platform == 'windows' && matrix.arch == 'x64'
@@ -277,8 +284,12 @@ jobs:
           $cases = @(
             @("whisper_tiny_30s_i8.litertlm", "--expect", "ask what you can do for your country"),
             @("whisper_tiny_30s_i8_missing_asr_model.litertlm", "--expect-engine-error", "tf_lite_encoder_decoder not found"),
-            @("whisper_tiny_30s_i8_qwen3_metadata.litertlm", "--expect-engine-error", "declares qwen3-asr")
+            @("whisper_tiny_30s_i8_qwen3_metadata.litertlm", "--expect-engine-error", "declares qwen3-asr"),
+            @("whisper_tiny_30s_i8.litertlm", "--model-name", "customer-asr", "--expect", "ask what you can do for your country"),
+            @("a1b2c3d4.litertlm", "--clear-model-name", "--expect", "ask what you can do for your country"),
+            @("whisper_tiny_30s_i8.litertlm", "--enum-override", "backend=99", "--expect-engine-error", "Unsupported ASR backend")
           )
+          Copy-Item asr-smoke-assets/whisper_tiny_30s_i8.litertlm asr-smoke-assets/a1b2c3d4.litertlm
           foreach ($case in $cases) {
             python tools/litert_lm_asr_smoke.py `
               --library bin/windows/x64/LiteRtLm.dll `
@@ -286,7 +297,7 @@ jobs:
               --model "asr-smoke-assets/$($case[0])" `
               --tokenizer asr-smoke-assets/whisper_tokenizer.json `
               --audio asr-smoke-assets/jfk.wav `
-              $case[1] $case[2]
+              $case[1..($case.Length - 1)]
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 

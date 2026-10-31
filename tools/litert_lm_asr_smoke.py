@@ -246,6 +246,21 @@ def process_available(
             return True
 
 
+ENUM_OVERRIDE_FIELDS = {
+    "backend",
+    "decoder_type",
+    "text_merger_type",
+    "log_mel_norm_type",
+}
+
+
+def enum_override(argument: str) -> tuple[str, int]:
+    field, _, value = argument.partition("=")
+    if field not in ENUM_OVERRIDE_FIELDS:
+        raise argparse.ArgumentTypeError(f"unknown enum field: {field}")
+    return field, int(value)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run the exported LiteRT-LM native ASR bridge on a WAV file."
@@ -261,6 +276,23 @@ def main() -> int:
     parser.add_argument(
         "--expect-engine-error",
         help="Require engine creation to fail with this message substring.",
+    )
+    parser.add_argument(
+        "--model-name",
+        help="Override the preset's model_name.",
+    )
+    parser.add_argument(
+        "--clear-model-name",
+        action="store_true",
+        help="Pass a NULL model_name.",
+    )
+    parser.add_argument(
+        "--enum-override",
+        action="append",
+        default=[],
+        type=enum_override,
+        metavar="FIELD=VALUE",
+        help="Set an integer config enum, to check that it is rejected.",
     )
     parser.add_argument("--evidence-json", type=Path)
     parser.add_argument("--platform")
@@ -304,6 +336,12 @@ def main() -> int:
         raise ValueError(f"Expected 16000 Hz fixture, got {sample_rate} Hz.")
 
     config = configure_preset(library, args.preset, args.model, args.tokenizer)
+    if args.clear_model_name:
+        config.model_name = None
+    elif args.model_name:
+        config.model_name = args.model_name.encode("utf-8")
+    for field, value in args.enum_override:
+        setattr(config, field, value)
     engine = ctypes.c_void_p()
     error = ctypes.c_void_p()
     status = library.litert_lm_asr_engine_create(

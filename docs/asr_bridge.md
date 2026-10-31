@@ -50,8 +50,9 @@ without an ASR section fails at engine creation with `NOT_FOUND`. v0.18.0 and v0
 carry this routing as a backport
 ([#77](https://github.com/leehack/litert-lm-native/issues/77),
 [audit](upstream_patch_audit.md)). From v0.19.0 upstream's registry routes
-containers, and a container whose metadata declares a different family than the
-config's `model_name` fails with `InvalidArgument`
+containers. Metadata that declares a family selects the session whatever the
+file name or a free-form `model_name` says, and a `model_name` naming another
+family fails with `InvalidArgument`
 ([migration](v019_qualification.md)).
 
 ## Flow control
@@ -77,7 +78,9 @@ The bridge has three validation layers:
 
 1. C11 header/ABI initialization coverage.
 2. C++ push-source coverage for overlap, partial flush, bounded backpressure,
-   cancellation, and reset.
+   cancellation, and reset on tags before v0.19.0. The v0.19.0 Omni source has
+   no CI coverage of these; they were checked by hand against a real model
+   ([migration](v019_qualification.md)).
 3. An opt-in exported-dylib smoke:
 
 ```bash
