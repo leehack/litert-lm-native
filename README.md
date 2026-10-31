@@ -213,25 +213,17 @@ inference and ASR real-model smokes on Linux x64, Windows x64, and macOS arm64. 
 runtime/evidence artifacts for review but has no publication input or write
 permission.
 
-Pull-request qualification targets upstream `v0.18.1` at
-`bda624851d74be34d4e1f7fac1fc4155939539c7`. Stock v0.18.1 does not build
-with Bazel, so builds carry a WORKSPACE repair equal to upstream main
-`d99b438f`. They also restore XNNPACK's previous KleidiAI PF32 SME2 kernels;
-the newer ones give run-to-run different CPU results on SME2 CPUs such as
-Apple M4 ([#82](https://github.com/leehack/litert-lm-native/issues/82)).
-They also keep int4 fully connected layers off XNNPACK's new SME2 PQS8/QC4W
-path, which slows Gemma 4 E2B CPU decode about 1.5x on Apple M4
-([#84](https://github.com/leehack/litert-lm-native/issues/84)).
-Linux and Windows builds name CPU options the way the shipped prebuilt LiteRT
-runtime expects; otherwise CPU inference ignores the requested thread count
-([#89](https://github.com/leehack/litert-lm-native/issues/89)).
+Pull-request qualification targets upstream `v0.19.0` at
+`771b06e1a2c7f70a399a718599109facf37e38fd`, whose C API 1.0 breaks every
+pre-1.0 consumer. See the [v0.19 migration and carried-patch
+decisions](docs/v019_qualification.md).
 This qualification baseline
 does not publish a release or move downstream pins. The iOS accelerator path
 patch applies to both the v0.17 and v0.18 LiteRT registry layouts, preserving
 the framework path and the newer upstream framework-name fallback. See the
 [carried-fix audit](docs/upstream_patch_audit.md) for retained fixes and device
-qualification gaps. The owner ASR bridge adapts both older `ProcessNextChunk`
-results and v0.18 OmniSession text/end output to the unchanged C ASR ABI v1.
+qualification gaps. The owner ASR bridge adapts older `ProcessNextChunk` results,
+v0.18 OmniSession output and the v0.19 Omni engine to the unchanged C ASR ABI v1.
 Unsupported audio output fails explicitly; stream completion emits one final
 result before reporting end of stream.
 
@@ -381,7 +373,7 @@ turn may report 0.
 
 A missing symbol or version 0 means the runtime never reports a cause; treat
 it as unknown, never infer truncation from output length. Version 1 requires
-the carried v0.18.0/v0.18.1 patch described in
+the carried v0.18.0, v0.18.1 or v0.19.0 patch described in
 [`docs/upstream_patch_audit.md`](docs/upstream_patch_audit.md); Session-API
 streams always report 0. The patch's
 `litert_lm_native_stream_chunk_get_finish_reason` can appear in the runtime's

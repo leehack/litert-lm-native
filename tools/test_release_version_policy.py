@@ -139,8 +139,7 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
         qwen_job = workflow.split("\n  qwen-inference:\n", 1)[1]
         self.assertIn("fromJSON(needs.scope.outputs.qwen_matrix)", qwen_job)
         self.assertIn("needs: [scope, verify]", qwen_job)
-        self.assertIn("../tools/qwen_runtime_preflight.dart", qwen_job)
-        self.assertLess(qwen_job.index("qwen_runtime_preflight.dart"), qwen_job.index("litert_lm_engine_smoke.dart"))
+        self.assertIn("tools/litert_lm_chat_smoke.py", qwen_job)
         self.assertIn("Verify full-platform candidate", workflow)
         build_job, verify_job = workflow.split("\n  verify:", 1)
         expected_invocation = (

@@ -23,8 +23,8 @@ class PackageReleaseTest(unittest.TestCase):
         with patch.object(package_release, "iter_artifacts", side_effect=AssertionError("release I/O")):
             with self.assertRaisesRegex(RuntimeError, "ASR untimed overlap has no explicit decision"):
                 package_release.build_manifest(
-                    upstream_tag="v0.19.0", upstream_commit=UPSTREAM_COMMIT,
-                    compatibility_tag="v0.19.0", release_tag="v0.19.0-1",
+                    upstream_tag="v0.19.1", upstream_commit=UPSTREAM_COMMIT,
+                    compatibility_tag="v0.19.1", release_tag="v0.19.1-1",
                     native_commit=NATIVE_COMMIT, official_upstream_assets=True)
 
     def test_v018_source_patch_provenance_is_emitted_and_validated(self) -> None:

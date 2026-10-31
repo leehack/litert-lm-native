@@ -47,7 +47,7 @@ class QualificationSchedulingTest(unittest.TestCase):
     def test_asr_job_executes_real_source_and_negative_mutations(self) -> None:
         asr = job('asr-compatibility')
         self.assertIn('ref: ${{ env.QUALIFICATION_UPSTREAM_COMMIT }}', asr)
-        self.assertIn('omni/asr', asr)
+        self.assertIn('omni/speech2text', asr)
         self.assertIn('tools/qualify_asr_untimed_overlap.py', asr)
         self.assertIn('--source-root asr-upstream --work-dir asr-qualification --mutations', asr)
         self.assertNotIn('continue-on-error:', asr)

@@ -1,4 +1,4 @@
-"""Identity of the carried v0.18 stream finish-reason patch (#78)."""
+"""Identity of the carried stream finish-reason patch (#78)."""
 import hashlib
 import re
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 PATCH_PATH = "native/bridge/stream_finish_reason.patch"
 BAZEL_DEFINE = "--define=litert_lm_finish_reason_api=true"
 # v0.18.1 changes dependencies only; all six preimages equal v0.18.0.
-AUDITED_FINISH_REASON_TAGS = frozenset({"v0.18.0", "v0.18.1"})
+AUDITED_FINISH_REASON_TAGS = frozenset({"v0.18.0", "v0.18.1", "v0.19.0"})
 # LF-normalized (preimage, postimage) SHA-256 per patched v0.18.0 source.
 SOURCES = {
     "c/conversation.cc": (
@@ -36,6 +36,44 @@ SOURCES = {
 }
 
 
+# v0.19.0 has no terminal cause either; the same change, re-ported.
+V019_PATCH_PATH = "native/bridge/stream_finish_reason_v019.patch"
+V019_SOURCES = {
+    "c/conversation.cc": (
+        "a7c772314a0a0b6a0efeb9e0835838b6e94d87c54670728ea4c7cd321a3fe4c8",
+        "a01a411bdac628d2e90e6bd5a8597a1bc0ba8c6dd0749cd5acb81c82ad547df5",
+    ),
+    "c/engine_internal.h": (
+        "7955c97b6f1c02a8a7828c370d7ec869dc1f1e23b3fa030b1d075e4a6a495af7",
+        "e3663bc8be651228f40f6e23cd8ad088bb9975bf85dbc216abf55343157c1ff0",
+    ),
+    "runtime/conversation/conversation.cc": (
+        "ccfbb9afc6af5306e6176435d040e5358c17058bf063b2d5025d1ef0fa4ff591",
+        "92e155efa95b5c70bbc78d6f6c099f022056878272166ba41313d7909f924375",
+    ),
+    "runtime/conversation/conversation.h": (
+        "df2af8ccc041b713b8c1a390c2a9cfab3ab1e97bd4697da15bd78d36cea1fbe4",
+        "71aaa7ef8227ea675fa39b6a4ddaaed13563e28bebc0c21c36c6ba7355e7486b",
+    ),
+    "runtime/core/tasks.cc": (
+        "c931b91fa7b81b81c8af01cd2f23562ae43f3cce870b177e174c40a95f45ed4f",
+        "cbc1d7e16d9dd8d5953a6887d17cde808bf32ed20fcff5c4a69df459720b8915",
+    ),
+    "runtime/engine/io_types.h": (
+        "aefcaf9df9388b6dede3ba222a1a8c8508479e7e894f3a73eebd14a578294f83",
+        "c90e7d9a7c307b8f818c351440130e04cb1024d0a77948a5716adac9a053dfdc",
+    ),
+}
+
+
+def patch_path_for(compatibility_tag: str) -> str:
+    return V019_PATCH_PATH if compatibility_tag == "v0.19.0" else PATCH_PATH
+
+
+def sources_for(compatibility_tag: str) -> dict[str, tuple[str, str]]:
+    return V019_SOURCES if compatibility_tag == "v0.19.0" else SOURCES
+
+
 def require_finish_reason_patch_decision(compatibility_tag: str) -> bool:
     """Returns whether the patch applies; newer sources need a decision.
 
@@ -56,15 +94,16 @@ def require_finish_reason_patch_decision(compatibility_tag: str) -> bool:
 def finish_reason_patch_manifest(compatibility_tag: str) -> list[dict]:
     if not require_finish_reason_patch_decision(compatibility_tag):
         return []
+    patch_path = patch_path_for(compatibility_tag)
     patch_sha256 = hashlib.sha256(
-        (Path(__file__).resolve().parents[1] / PATCH_PATH).read_bytes()
+        (Path(__file__).resolve().parents[1] / patch_path).read_bytes()
     ).hexdigest()
     return [{
         "id": "stream-finish-reason",
-        "path": PATCH_PATH,
+        "path": patch_path,
         "sha256": patch_sha256,
         "source": source,
         "preimageSha256Lf": preimage,
         "postimageSha256Lf": postimage,
         "scope": "source-built runtimes only; excludes official upstream prebuilts",
-    } for source, (preimage, postimage) in SOURCES.items()]
+    } for source, (preimage, postimage) in sources_for(compatibility_tag).items()]

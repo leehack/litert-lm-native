@@ -49,7 +49,10 @@ but is not read for containers. A container that declares a speech model
 without an ASR section fails at engine creation with `NOT_FOUND`. v0.18.0 and v0.18.1
 carry this routing as a backport
 ([#77](https://github.com/leehack/litert-lm-native/issues/77),
-[audit](upstream_patch_audit.md)).
+[audit](upstream_patch_audit.md)). From v0.19.0 upstream's registry routes
+containers, and a container whose metadata declares a different family than the
+config's `model_name` fails with `InvalidArgument`
+([migration](v019_qualification.md)).
 
 ## Flow control
 
@@ -97,7 +100,7 @@ PR qualification also runs the pinned Whisper tiny `.litertlm` container
 engine creation (`--expect-engine-error`).
 Large remote models stay out of default CI.
 
-For v0.18.0 untimed-word overlap merging, see the
+For untimed-word overlap merging, see the
 [scoped patch and model-free qualification](asr_untimed_overlap.md).
 The default overlap remains 0.4. Timed words and single-window input retain
 upstream behavior. The patch's JFK replay reproduces the reported boundary

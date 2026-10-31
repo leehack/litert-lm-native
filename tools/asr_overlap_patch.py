@@ -14,6 +14,26 @@ PREIMAGE_SHA256 = "6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc
 AUDITED_OVERLAP_TAGS = frozenset({"v0.18.0", "v0.18.1"})
 POSTIMAGE_SHA256 = "c320a49202fcaed40ef2619e977b3a44303e7aa9aa04012c94a6ca07c016caee"
 PATCH_PATH = "native/bridge/asr_untimed_overlap.patch"
+MERGER_SOURCE = "omni/asr/timestamp_text_merger.cc"
+# v0.19.0 moved and rewrote the merger; its seam-run fallback still mis-seams
+# repeated phrases at the bridge's 0.4 overlap (docs/asr_untimed_overlap.md).
+V019_PREIMAGE_SHA256 = "1ddbc15f935d63ca123011e7e4864b33b78b8cd5ee292b9d3bccf90d2bdb378f"
+V019_POSTIMAGE_SHA256 = "3b135f027b369ceadb734117d416071e4e64837304f49b90e77e8f9d19fec060"
+V019_PATCH_PATH = "native/bridge/asr_untimed_overlap_v019.patch"
+V019_MERGER_SOURCE = "omni/speech2text/timestamp_text_merger.cc"
+V019_OVERLAP_TAGS = frozenset({"v0.19.0"})
+
+
+def merger_source(compatibility_tag: str) -> str:
+    return (V019_MERGER_SOURCE if compatibility_tag in V019_OVERLAP_TAGS
+            else MERGER_SOURCE)
+
+
+def overlap_identity(compatibility_tag: str) -> tuple[str, str, str]:
+    """Returns the patch path, preimage and postimage for an audited tag."""
+    if compatibility_tag in V019_OVERLAP_TAGS:
+        return V019_PATCH_PATH, V019_PREIMAGE_SHA256, V019_POSTIMAGE_SHA256
+    return PATCH_PATH, PREIMAGE_SHA256, POSTIMAGE_SHA256
 
 
 def source_sha256(data: bytes) -> str:
@@ -30,7 +50,7 @@ def require_asr_patch_decision(compatibility_tag: str) -> None:
     version = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", compatibility_tag)
     if version and tuple(map(int, version.groups())) < (0, 18, 0):
         return
-    if compatibility_tag in AUDITED_OVERLAP_TAGS:
+    if compatibility_tag in AUDITED_OVERLAP_TAGS | V019_OVERLAP_TAGS:
         return
     raise RuntimeError(
         f"ASR untimed overlap has no explicit decision for {compatibility_tag}; "
@@ -41,17 +61,18 @@ def require_asr_patch_decision(compatibility_tag: str) -> None:
 
 def source_patch_manifest(compatibility_tag: str) -> list[dict]:
     require_asr_patch_decision(compatibility_tag)
-    if compatibility_tag not in AUDITED_OVERLAP_TAGS:
-        return container_patch_manifest(compatibility_tag)
-    return [{
+    carried = compatibility_tag in AUDITED_OVERLAP_TAGS | V019_OVERLAP_TAGS
+    patch_path, preimage, postimage = overlap_identity(compatibility_tag)
+    overlap = [] if not carried else [{
         "id": "asr-untimed-overlap",
-        "path": PATCH_PATH,
-        "sha256": hashlib.sha256((Path(__file__).resolve().parents[1] / PATCH_PATH).read_bytes()).hexdigest(),
-        "source": "omni/asr/timestamp_text_merger.cc",
-        "preimageSha256Lf": PREIMAGE_SHA256,
-        "postimageSha256Lf": POSTIMAGE_SHA256,
+        "path": patch_path,
+        "sha256": hashlib.sha256((Path(__file__).resolve().parents[1] / patch_path).read_bytes()).hexdigest(),
+        "source": merger_source(compatibility_tag),
+        "preimageSha256Lf": preimage,
+        "postimageSha256Lf": postimage,
         "scope": "source-built runtimes only; excludes official upstream prebuilts",
-    }, *container_patch_manifest(compatibility_tag),
+    }]
+    return [*overlap, *container_patch_manifest(compatibility_tag),
         *finish_reason_patch_manifest(compatibility_tag),
         *workspace_build_patch_manifest(compatibility_tag),
         *xnnpack_pf32_patch_manifest(compatibility_tag),

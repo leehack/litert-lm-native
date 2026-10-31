@@ -18,9 +18,10 @@ import sys
 import tempfile
 from pathlib import Path
 
+from litert_lm_c_api import CApi
+
 CHILD_TIMEOUT_SECONDS = 600
 LOG_SEVERITY_ERROR = 4
-_DLL_DIRECTORY_HANDLES: list[object] = []
 
 
 def process_thread_count() -> int:
@@ -81,54 +82,22 @@ def _windows_thread_count() -> int:
         kernel32.CloseHandle(snapshot)
 
 
-def bind(library_path: Path) -> ctypes.CDLL:
-    if os.name == "nt":
-        _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(str(library_path.parent)))
-    library = ctypes.CDLL(str(library_path))
-    pointer = ctypes.c_void_p
-    signatures = {
-        "litert_lm_set_min_log_level": (None, [ctypes.c_int]),
-        "litert_lm_engine_settings_create": (
-            pointer, [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]),
-        "litert_lm_engine_settings_set_num_threads": (None, [pointer, ctypes.c_int]),
-        "litert_lm_engine_settings_set_cache_dir": (None, [pointer, ctypes.c_char_p]),
-        "litert_lm_engine_settings_delete": (None, [pointer]),
-        "litert_lm_engine_create": (pointer, [pointer]),
-        "litert_lm_engine_delete": (None, [pointer]),
-        "litert_lm_session_config_create": (pointer, []),
-        "litert_lm_session_config_delete": (None, [pointer]),
-        "litert_lm_engine_create_session": (pointer, [pointer, pointer]),
-        "litert_lm_session_delete": (None, [pointer]),
-    }
-    for name, (restype, argtypes) in signatures.items():
-        function = getattr(library, name)
-        function.restype = restype
-        function.argtypes = argtypes
-    return library
-
-
 def session_thread_count(library_path: Path, model: Path, threads: int) -> int:
     """Returns this process's thread count with a live CPU session."""
-    library = bind(library_path)
-    library.litert_lm_set_min_log_level(LOG_SEVERITY_ERROR)
+    api = CApi(library_path)
+    library = api.library
+    api.set_min_log_level(LOG_SEVERITY_ERROR)
     # Windows keeps the XNNPACK weight cache open until the process exits.
     with tempfile.TemporaryDirectory(prefix="litert-lm-threads-",
                                      ignore_cleanup_errors=True) as cache_dir:
-        settings = library.litert_lm_engine_settings_create(
-            str(model).encode(), b"cpu", None, None)
-        if not settings:
-            raise RuntimeError("litert_lm_engine_settings_create failed")
+        settings = api.engine_settings_create(str(model), "cpu")
         engine = session = config = None
         try:
-            library.litert_lm_engine_settings_set_num_threads(settings, threads)
-            library.litert_lm_engine_settings_set_cache_dir(settings, cache_dir.encode())
-            engine = library.litert_lm_engine_create(settings)
-            if not engine:
-                raise RuntimeError("litert_lm_engine_create failed")
-            config = library.litert_lm_session_config_create()
-            session = library.litert_lm_engine_create_session(engine, config)
-            if not session:
-                raise RuntimeError("litert_lm_engine_create_session failed")
+            api.engine_settings_set_num_threads(settings, threads)
+            api.engine_settings_set_cache_dir(settings, cache_dir)
+            engine = api.engine_create(settings)
+            config = api.session_config_create()
+            session = api.engine_create_session(engine, config)
             return process_thread_count()
         finally:
             if session:

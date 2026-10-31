@@ -43,7 +43,7 @@ class FinishReasonSmokeTest(unittest.TestCase):
         self.assertEqual(smoke.expected_abi_version("v0.18.0"), 1)
         self.assertEqual(smoke.expected_abi_version("v0.17.1"), 0)
         with self.assertRaisesRegex(RuntimeError, "no explicit decision"):
-            smoke.expected_abi_version("v0.19.0")
+            smoke.expected_abi_version("v0.19.1")
 
 
 if __name__ == "__main__":

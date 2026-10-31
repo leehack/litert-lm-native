@@ -43,7 +43,7 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
             self.assertFalse(require_xnnpack_pf32_patch_decision(tag))
             self.assertEqual(xnnpack_pf32_patch_manifest(tag), [])
         self.assertTrue(require_xnnpack_pf32_patch_decision("v0.18.1"))
-        for tag in ("v0.18.2", "v0.19.0", "main"):
+        for tag in ("v0.18.2", "v0.19.1", "main"):
             with self.subTest(tag=tag), self.assertRaisesRegex(
                 RuntimeError, "no explicit decision"
             ):
@@ -144,16 +144,16 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
             digest = hashlib.sha256(b"patched\n").hexdigest()
             fake = {"a.c": ("0" * 64, digest), "b/c.c": ("0" * 64, digest)}
             fake = {name: postimage for name, (_, postimage) in fake.items()}
-            with patch.object(build, "XNNPACK_POSTIMAGES", fake):
+            with patch.object(build, "xnnpack_postimages", return_value=fake):
                 with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
-                    build.verify_xnnpack_postimages(source_root)
+                    build.verify_xnnpack_postimages(source_root, "v0.18.1")
                 for name in fake:
                     (repository / name).parent.mkdir(parents=True, exist_ok=True)
                     (repository / name).write_bytes(b"patched\r\n")
-                build.verify_xnnpack_postimages(source_root)
+                build.verify_xnnpack_postimages(source_root, "v0.18.1")
                 (repository / "b/c.c").write_bytes(b"unpatched\n")
                 with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
-                    build.verify_xnnpack_postimages(source_root)
+                    build.verify_xnnpack_postimages(source_root, "v0.18.1")
 
     def test_build_checks_the_postimage_after_bazel_only_for_v0181(self) -> None:
         for tag, checked in (("v0.18.0", False), ("v0.18.1", True)):
@@ -173,7 +173,7 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
                 names = [name for name, _, _ in calls.mock_calls]
                 self.assertEqual(names, ["run", "verify"] if checked else ["run"])
                 if checked:
-                    calls.verify.assert_called_once_with(root)
+                    calls.verify.assert_called_once_with(root, tag)
 
     def test_manifest_records_each_xnnpack_source_before_the_qc4w_opt_out(self) -> None:
         records = [r for r in source_patch_manifest("v0.18.1")

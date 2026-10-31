@@ -4,7 +4,7 @@
       "a b c d e f g h",
       "x y z f g h"
     ],
-    "states": "[|a b c d e f g h][a b c d e f g|h y z f g h][h y z f g h|]",
+    "states": "[|a b c d e f g h][a b|c d e f g h][c d e f g h|]",
     "purpose": "U14_skip3"
   },
   {
@@ -20,7 +20,7 @@
       "a b c d e f g h",
       "F G H i"
     ],
-    "states": "[|a b c d e f g h][a b c d e|f g H i][f g H i|]",
+    "states": "[|a b c d e f g h][a b c d e|f G H i][f G H i|]",
     "purpose": "U17_distinct_floor_4"
   },
   {
@@ -28,7 +28,7 @@
       "r u x s v m j t n o d e f g h a b c",
       "a b c i j k l m n o a b c"
     ],
-    "states": "[|r u x s v m j t n o d e f g h a b c][r u x s v m j t n o d e f g|h a b i j k l m n o a b c][h a b i j k l m n o a b c|]",
+    "states": "[|r u x s v m j t n o d e f g h a b c][r u x s v|m j t n o d e f g h a b c][m j t n o d e f g h a b c|]",
     "purpose": "U18_no_uniqueness_in_curr"
   },
   {
@@ -44,7 +44,7 @@
       "x k j o w a b c d e f g h i j k l m a b c",
       "a b c n o p"
     ],
-    "states": "[|x k j o w a b c d e f g h i j k l m a b c][x k j o w a b c d e f g h i j k l|m a b c n o p][m a b c n o p|]",
+    "states": "[|x k j o w a b c d e f g h i j k l m a b c][x k j o w a b c d e f g h i j k l m|a b c n o p][a b c n o p|]",
     "purpose": "U2_no_uniqueness"
   },
   {
@@ -60,7 +60,7 @@
       "a b c d e f g h",
       "F G H"
     ],
-    "states": "[|a b c d e f g h][a b c d e|f g H][f g H|]",
+    "states": "[|a b c d e f g h][a b c d e|f G H][f G H|]",
     "purpose": "U4_distinct_floor_2"
   },
   {
@@ -68,7 +68,7 @@
       "x s z o v n w a b a b c d e f g h",
       "g h i j k l"
     ],
-    "states": "[|x s z o v n w a b a b c d e f g h][x s z o v n w a b a b c d e|f g h i j k l][f g h i j k l|]",
+    "states": "[|x s z o v n w a b a b c d e f g h][x s z o v n w a b a b c d e f|g h i j k l][g h i j k l|]",
     "purpose": "U6_no_repeated_bigram_short"
   },
   {
@@ -84,7 +84,7 @@
       "a b c d e f g h",
       "e f g g i j k l h m v"
     ],
-    "states": "[|a b c d e f g h][a b c d|e f g i j k l h m v][e f g i j k l h m v|]",
+    "states": "[|a b c d e f g h][a b c d|e f g g i j k l h m v][e f g g i j k l h m v|]",
     "purpose": "U9_no_trim_shared"
   },
   {
@@ -92,7 +92,7 @@
       "w x m q o l k v u j y z n d e f g h a b a b c",
       "a b a b c i j k"
     ],
-    "states": "[|w x m q o l k v u j y z n d e f g h a b a b c][w x m q o l k v u j y z n d e f g|h a b a b c i j k][h a b a b c i j k|]",
+    "states": "[|w x m q o l k v u j y z n d e f g h a b a b c][w x m q o l k v u j y z n d e f g h|a b a b c i j k][a b a b c i j k|]",
     "purpose": "U1_no_offset_consistency (also U13_no_trim)"
   },
   {
@@ -100,7 +100,7 @@
       "k l f b e e l e i h j h f j h h e d d l i tail last end",
       "tail last end t n w"
     ],
-    "states": "[|k l f b e e l e i h j h f j h h e d d l i tail last end][k l f b e e l e i h j h f j h h e d d|l i tail t n w][l i tail t n w|]",
+    "states": "[|k l f b e e l e i h j h f j h h e d d l i tail last end][k l f b e e l e i h j h f j h h e d d l i|tail last end t n w][tail last end t n w|]",
     "purpose": "U5_no_half_distinct"
   },
   {
@@ -108,7 +108,7 @@
       "w0a w0b w0c w0a w0b w0c w1a w1b w1c w1a w1b w1c w2a w2b w2c w2a w2b w2c tail last end",
       "tail last end v o q"
     ],
-    "states": "[|w0a w0b w0c w0a w0b w0c w1a w1b w1c w1a w1b w1c w2a w2b w2c w2a w2b w2c tail last end][w0a w0b w0c w0a w0b w0c w1a w1b w1c w1a w1b w1c w2a w2b w2c w2a w2b|w2c tail last end v o q][w2c tail last end v o q|]",
+    "states": "[|w0a w0b w0c w0a w0b w0c w1a w1b w1c w1a w1b w1c w2a w2b w2c w2a w2b w2c tail last end][w0a w0b w0c w0a w0b w0c w1a w1b w1c w1a w1b w1c w2a w2b w2c w2a w2b w2c|tail last end v o q][tail last end v o q|]",
     "purpose": "U7_no_repeated_half"
   },
   {
@@ -117,7 +117,7 @@
       "C I E B l D",
       "B l D b w c v x y"
     ],
-    "states": "[|c i e b l d][|c i e b l D][c i e|b l D b w c v x y][b l D b w c v x y|]",
+    "states": "[|c i e b l d][|c i e B l D][c i e|B l D b w c v x y][B l D b w c v x y|]",
     "purpose": "U10_earliest_zero_floor"
   }
 ]

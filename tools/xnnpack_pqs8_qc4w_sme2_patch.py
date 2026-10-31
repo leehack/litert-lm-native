@@ -3,7 +3,12 @@ import hashlib
 import re
 from pathlib import Path
 
-from xnnpack_pf32_sme2_patch import AUDITED_TAGS, SOURCES as PF32_SOURCES, XNNPACK_COMMIT
+from xnnpack_pf32_sme2_patch import (
+    AUDITED_TAGS,
+    SOURCES as PF32_SOURCES,
+    V019_SOURCES as PF32_V019_SOURCES,
+    commit_for,
+)
 
 PATCH_PATH = "native/bridge/xnnpack_pqs8_qc4w_sme2.patch"
 # XNNPACK 76fa737a0 routes int8-activation, int4-weight fully connected layers
@@ -20,6 +25,16 @@ SOURCES = {
         "fb5075c9e04c562d5c6ed702f18a68117682dd85c3286c9b2e2495c6b44d3f26",
     ),
 }
+V019_SOURCES = {
+    "src/configs/gemm-config.c": (
+        PF32_V019_SOURCES["src/configs/gemm-config.c"][1],
+        "0f843f1b2ad56193aee22382a56d279c9f904534c4b9e2942e5e77585016662f",
+    ),
+}
+
+
+def sources_for(compatibility_tag: str) -> dict[str, tuple[str, str]]:
+    return V019_SOURCES if compatibility_tag == "v0.19.0" else SOURCES
 
 
 def require_xnnpack_qc4w_patch_decision(compatibility_tag: str) -> bool:
@@ -47,8 +62,8 @@ def xnnpack_qc4w_patch_manifest(compatibility_tag: str) -> list[dict]:
         "id": "xnnpack-pqs8-qc4w-sme2",
         "path": PATCH_PATH,
         "sha256": patch_sha256,
-        "source": f"XNNPACK@{XNNPACK_COMMIT}/{source}",
+        "source": f"XNNPACK@{commit_for(compatibility_tag)}/{source}",
         "preimageSha256Lf": preimage,
         "postimageSha256Lf": postimage,
         "scope": "source-built runtimes only; excludes official upstream prebuilts",
-    } for source, (preimage, postimage) in SOURCES.items()]
+    } for source, (preimage, postimage) in sources_for(compatibility_tag).items()]
