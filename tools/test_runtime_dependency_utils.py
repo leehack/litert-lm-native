@@ -13,6 +13,7 @@ from litert_lm_symbols import (
     APPLE_METAL_SAMPLER_SYMBOLS,
 )
 from validate_runtime_dependencies import (
+    newest_glibc_requirement,
     validate_elf_dependencies,
     validate_macho_dependencies,
 )
@@ -132,6 +133,26 @@ def write_elf_with_exports(path: Path, symbols: list[str]) -> None:
 
 
 class RuntimeDependencyUtilsTest(unittest.TestCase):
+    def test_newest_glibc_requirement_compares_numerically(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            library = Path(temp) / "lib.so"
+            library.write_bytes(b"\0GLIBC_2.9\0GLIBC_2.39\0GLIBC_2.2.5\0")
+            self.assertEqual(newest_glibc_requirement(library), (2, 39))
+            library.write_bytes(b"\0")
+            self.assertIsNone(newest_glibc_requirement(library))
+
+    def test_linux_library_above_glibc_floor_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            library = root / "bin" / "linux" / "x64" / "libLiteRtLm.so"
+            library.parent.mkdir(parents=True)
+            write_elf_with_flags(library, None)
+            library.write_bytes(library.read_bytes() + b"\0GLIBC_2.43\0")
+            with self.assertRaisesRegex(SystemExit, "requires glibc 2.43"):
+                validate_elf_dependencies(root)
+            library.write_bytes(library.read_bytes().replace(b"GLIBC_2.43", b"GLIBC_2.39"))
+            self.assertEqual(validate_elf_dependencies(root), 1)
+
     def test_elf_has_global_flag(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             library = Path(temp) / "libLiteRtLm.so"
