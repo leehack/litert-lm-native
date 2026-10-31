@@ -37,6 +37,10 @@ def verify_upstream_fst_gate(source_root: Path) -> None:
     """Reject a changed source gate rather than trusting an ignored Bazel define."""
     path = source_root / "runtime/conversation/model_data_processor/BUILD"
     text = path.read_text() if path.is_file() else ""
+    build_config = source_root / "build_config/BUILD"
+    if build_config.is_file():
+        _verify_build_config_fst_gate(build_config.read_text(), text)
+        return
     if not re.search(r'"LITERT_LM_FST_CONSTRAINTS_DISABLED"\s*:\s*"1"', text):
         raise RuntimeError("Selected upstream source lacks the documented iOS FST disable gate")
     for target in ("gemma3_data_processor", "function_gemma_data_processor", "gemma4_data_processor"):
@@ -46,6 +50,20 @@ def verify_upstream_fst_gate(source_root: Path) -> None:
                 or not re.search(r'\] \+ select\(\{\s*":litert_lm_fst_constraints_disabled": \[\],\s*"//conditions:default": \[\s*"//runtime/components/constrained_decoding:gemma_model_constraint_provider_lib",\s*\],\s*\}\)', block)
                 or 'gemma_model_constraint_provider_lib' not in block):
             raise RuntimeError(f"Selected upstream source lacks the documented FST dependency gate for {target}")
+
+
+def _verify_build_config_fst_gate(build_config: str, processors: str) -> None:
+    """v0.19 moved the define to build_config; only FunctionGemma links the provider."""
+    if not re.search(r'define_values = \{"LITERT_LM_FST_CONSTRAINTS_DISABLED": "1"\}', build_config):
+        raise RuntimeError("Selected upstream source lacks the documented iOS FST disable gate")
+    if 'actual = "//build_config:disable_fst_constraints"' not in processors:
+        raise RuntimeError("Selected upstream source lacks the documented iOS FST disable gate")
+    gated = re.findall(
+        r'":litert_lm_fst_constraints_disabled": \[[^\]]*\],\s*"//conditions:default": \[\s*'
+        r'"//runtime/components/constrained_decoding:gemma_model_constraint_provider_lib",',
+        processors)
+    if len(gated) != processors.count("gemma_model_constraint_provider_lib") or not gated:
+        raise RuntimeError("Selected upstream source lacks the documented FST dependency gate")
 
 
 def validate_binary(path: Path, supported_platform: str) -> None:

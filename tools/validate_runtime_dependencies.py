@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -31,6 +32,8 @@ import windows_runtime
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANDROID_MIN_LOAD_ALIGNMENT = 0x4000
+# Ubuntu 24.04, the oldest qualified host; a newer build image must not raise it.
+LINUX_MAX_GLIBC = (2, 39)
 
 
 def fail(message: str) -> None:
@@ -54,6 +57,14 @@ def platform_for(path: Path, root: Path) -> str | None:
     return parts[1]
 
 
+def newest_glibc_requirement(library: Path) -> tuple[int, ...] | None:
+    versions = re.findall(rb"GLIBC_(\d+(?:\.\d+)+)", library.read_bytes())
+    return max(
+        (tuple(int(part) for part in version.split(b".")) for version in versions),
+        default=None,
+    )
+
+
 def validate_elf_dependencies(root: Path) -> int:
     checked = 0
     errors: list[str] = []
@@ -62,6 +73,14 @@ def validate_elf_dependencies(root: Path) -> int:
         if platform is None:
             continue
         checked += 1
+        if platform == "linux":
+            newest = newest_glibc_requirement(library)
+            if newest is not None and newest > LINUX_MAX_GLIBC:
+                errors.append(
+                    f"{library.relative_to(root).as_posix()} requires glibc "
+                    f"{'.'.join(map(str, newest))}, newer than the supported "
+                    f"{'.'.join(map(str, LINUX_MAX_GLIBC))}."
+                )
         for needed in elf_needed_libraries(library):
             if is_system_needed(platform, needed):
                 continue

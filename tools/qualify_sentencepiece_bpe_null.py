@@ -31,6 +31,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--sanitize", action="store_true")
+    parser.add_argument("--patch", type=Path, default=ROOT / "native/bridge/sentencepiece_bpe_null.patch",
+                        help="Tokenizer patch under qualification; v0.19 carries its own upstream.")
+    parser.add_argument("--patch-strip", type=int, default=1)
     args = parser.parse_args()
     work = args.work_dir.resolve()
     work.mkdir(parents=True, exist_ok=True)
@@ -61,7 +64,7 @@ def main() -> None:
     baseline = subprocess.run([str(source / "build/src/spm_encode"), f"--model={tokenizer_path}"], input="", text=True, capture_output=True)
     if baseline.returncode == 0 or "piece must not include null character" not in baseline.stderr:
         raise RuntimeError("Unpatched tokenizer did not reproduce the expected failure")
-    run(["patch", "-p1", "-i", str(ROOT / "native/bridge/sentencepiece_bpe_null.patch")])
+    run(["patch", f"-p{args.patch_strip}", "-i", str(args.patch.resolve())])
     (source / "src/qwen_null_test.cc").write_text((ROOT / "tests/sentencepiece_bpe_null_test.cc").read_text())
     with (source / "src/CMakeLists.txt").open("a") as stream:
         stream.write("\nadd_executable(qwen_null_test qwen_null_test.cc)\ntarget_link_libraries(qwen_null_test sentencepiece)\n")

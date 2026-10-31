@@ -115,6 +115,19 @@ def has_asr_bridge(upstream_tag: str) -> bool:
     return is_at_least(upstream_tag, (0, 16, 0))
 
 
+def has_omni_asr_engine(upstream_tag: str) -> bool:
+    return is_at_least(upstream_tag, (0, 19, 0))
+
+
+def uses_c_api_v1(upstream_tag: str) -> bool:
+    return is_at_least(upstream_tag, (0, 19, 0))
+
+
+def has_prebuilt_topk_samplers(upstream_tag: str) -> bool:
+    """v0.19 links TopK samplers from source and ships no prebuilt sampler."""
+    return not is_at_least(upstream_tag, (0, 19, 0))
+
+
 def required_bridge_symbols(upstream_tag: str) -> list[bytes]:
     symbols = list(BRIDGE_SYMBOLS)
     if has_asr_bridge(upstream_tag):
@@ -128,4 +141,6 @@ def required_c_api_symbols(upstream_tag: str) -> list[bytes]:
         symbols.extend(V0_14_C_API_SYMBOLS)
     if uses_stream_chunk_api(upstream_tag):
         symbols.extend(V0_15_C_API_SYMBOLS)
+    if uses_c_api_v1(upstream_tag):
+        symbols.append(b"litert_lm_get_api_version")
     return symbols

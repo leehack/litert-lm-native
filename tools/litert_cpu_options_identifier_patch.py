@@ -5,6 +5,9 @@ from pathlib import Path
 
 PATCH_PATH = "native/bridge/litert_cpu_options_identifier.patch"
 AUDITED_TAGS = frozenset({"v0.18.1"})
+# v0.19.0 ships Linux and Windows prebuilt libLiteRt that read "cpu_options",
+# the same identifier its pinned LiteRT dcb657e8 writes.
+UPSTREAM_FIX_TAGS = frozenset({"v0.19.0"})
 # LiteRT 724a247cc5 renamed the CPU options identifier from "xnnpack" to
 # "cpu_options". v0.18.1 pins LiteRT ca21dc99, which has the rename, but still
 # ships the 2026-09-28 prebuilt libLiteRt from before it. Linux and Windows
@@ -42,6 +45,8 @@ def require_cpu_options_identifier_patch_decision(compatibility_tag: str) -> boo
     """Returns whether the rollback applies; newer sources need a decision."""
     if compatibility_tag in AUDITED_TAGS:
         return True
+    if compatibility_tag in UPSTREAM_FIX_TAGS:
+        return False
     version = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", compatibility_tag)
     if version and tuple(map(int, version.groups())) <= (0, 18, 0):
         return False

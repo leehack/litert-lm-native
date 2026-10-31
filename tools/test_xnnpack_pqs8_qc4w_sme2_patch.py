@@ -31,7 +31,7 @@ class XnnpackPqs8Qc4wSme2PatchTest(unittest.TestCase):
             self.assertFalse(require_xnnpack_qc4w_patch_decision(tag))
             self.assertEqual(xnnpack_qc4w_patch_manifest(tag), [])
         self.assertTrue(require_xnnpack_qc4w_patch_decision("v0.18.1"))
-        for tag in ("v0.18.2", "v0.19.0", "main"):
+        for tag in ("v0.18.2", "v0.19.1", "main"):
             with self.subTest(tag=tag), self.assertRaisesRegex(
                 RuntimeError, "no explicit decision"
             ):
@@ -60,7 +60,7 @@ class XnnpackPqs8Qc4wSme2PatchTest(unittest.TestCase):
     def test_build_verifies_the_final_postimage_of_every_patched_source(self) -> None:
         expected = {name: postimage for name, (_, postimage) in PF32_SOURCES.items()}
         expected[CONFIG] = SOURCES[CONFIG][1]
-        self.assertEqual(build.XNNPACK_POSTIMAGES, expected)
+        self.assertEqual(build.xnnpack_postimages("v0.18.1"), expected)
 
     def test_manifest_records_the_opt_out_last(self) -> None:
         records = [r for r in source_patch_manifest("v0.18.1")

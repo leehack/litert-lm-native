@@ -11,9 +11,9 @@ permissions:
   contents: read
 
 env:
-  QUALIFICATION_RELEASE_TAG: v0.18.1
-  QUALIFICATION_UPSTREAM_TAG: v0.18.1
-  QUALIFICATION_UPSTREAM_COMMIT: bda624851d74be34d4e1f7fac1fc4155939539c7
+  QUALIFICATION_RELEASE_TAG: v0.19.0
+  QUALIFICATION_UPSTREAM_TAG: v0.19.0
+  QUALIFICATION_UPSTREAM_COMMIT: 771b06e1a2c7f70a399a718599109facf37e38fd
 
 jobs:
   preflight:
@@ -51,13 +51,27 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+      - name: Check out upstream's SentencePiece patch
+        uses: actions/checkout@v6
+        with:
+          repository: google-ai-edge/LiteRT-LM
+          ref: ${{ env.QUALIFICATION_UPSTREAM_COMMIT }}
+          path: tokenizer-upstream
+          sparse-checkout: |
+            third_party/sentencepiece
+          lfs: false
+          persist-credentials: false
       - name: Qualify untouched Qwen tokenizer and malformed-model guards
         env:
           CC: clang
           CXX: clang++
           ASAN_OPTIONS: detect_leaks=0
           UBSAN_OPTIONS: halt_on_error=1
-        run: python3 tools/qualify_sentencepiece_bpe_null.py --work-dir tokenizer-qualification --sanitize
+        run: |
+          python3 tools/qualify_sentencepiece_bpe_null.py \
+            --work-dir tokenizer-qualification --sanitize \
+            --patch tokenizer-upstream/third_party/sentencepiece/sentencepiece.patch \
+            --patch-strip 0
 
   asr-compatibility:
     needs: [preflight, scope]
@@ -77,7 +91,7 @@ jobs:
           ref: ${{ env.QUALIFICATION_UPSTREAM_COMMIT }}
           path: asr-upstream
           sparse-checkout: |
-            omni/asr
+            omni/speech2text
             omni/base
           persist-credentials: false
       # The stock Homebrew formula is unversioned; the qualifier guards every
@@ -226,9 +240,22 @@ jobs:
           whisper whisper_tiny_30s_i8.litertlm \
             --expect "ask what you can do for your country"
           whisper whisper_tiny_30s_i8_missing_asr_model.litertlm \
-            --expect-engine-error "tf_lite_audio_encoder not found"
+            --expect-engine-error "tf_lite_encoder_decoder not found"
           whisper whisper_tiny_30s_i8_qwen3_metadata.litertlm \
-            --expect-engine-error "tf_lite_prefill_decode not found"
+            --expect-engine-error "declares qwen3-asr"
+          whisper whisper_tiny_30s_i8.litertlm --model-name customer-asr \
+            --expect "ask what you can do for your country"
+          cp asr-smoke-assets/whisper_tiny_30s_i8.litertlm asr-smoke-assets/a1b2c3d4.litertlm
+          whisper a1b2c3d4.litertlm --clear-model-name \
+            --expect "ask what you can do for your country"
+          whisper whisper_tiny_30s_i8.litertlm --enum-override backend=99 \
+            --expect-engine-error "Unsupported ASR backend"
+          whisper whisper_tiny_30s_i8.litertlm --model-name qwen3_asr \
+            --expect-engine-error "declares whisper"
+          whisper a1b2c3d4_parakeet_tdt.litertlm --clear-model-name \
+            --enum-override decoder_type=0 --expect-engine-created
+          whisper a1b2c3d4_parakeet_ctc.litertlm --clear-model-name \
+            --enum-override decoder_type=1 --expect-engine-created
 
       - name: Run Windows ASR real-model smoke and finish-reason ABI check
         if: matrix.platform == 'windows' && matrix.arch == 'x64'
@@ -262,9 +289,16 @@ jobs:
           $env:PATH = "$pwd\bin\windows\x64;$env:PATH"
           $cases = @(
             @("whisper_tiny_30s_i8.litertlm", "--expect", "ask what you can do for your country"),
-            @("whisper_tiny_30s_i8_missing_asr_model.litertlm", "--expect-engine-error", "tf_lite_audio_encoder not found"),
-            @("whisper_tiny_30s_i8_qwen3_metadata.litertlm", "--expect-engine-error", "tf_lite_prefill_decode not found")
+            @("whisper_tiny_30s_i8_missing_asr_model.litertlm", "--expect-engine-error", "tf_lite_encoder_decoder not found"),
+            @("whisper_tiny_30s_i8_qwen3_metadata.litertlm", "--expect-engine-error", "declares qwen3-asr"),
+            @("whisper_tiny_30s_i8.litertlm", "--model-name", "customer-asr", "--expect", "ask what you can do for your country"),
+            @("a1b2c3d4.litertlm", "--clear-model-name", "--expect", "ask what you can do for your country"),
+            @("whisper_tiny_30s_i8.litertlm", "--enum-override", "backend=99", "--expect-engine-error", "Unsupported ASR backend"),
+            @("whisper_tiny_30s_i8.litertlm", "--model-name", "qwen3_asr", "--expect-engine-error", "declares whisper"),
+            @("a1b2c3d4_parakeet_tdt.litertlm", "--clear-model-name", "--enum-override", "decoder_type=0", "--expect-engine-created"),
+            @("a1b2c3d4_parakeet_ctc.litertlm", "--clear-model-name", "--enum-override", "decoder_type=1", "--expect-engine-created")
           )
+          Copy-Item asr-smoke-assets/whisper_tiny_30s_i8.litertlm asr-smoke-assets/a1b2c3d4.litertlm
           foreach ($case in $cases) {
             python tools/litert_lm_asr_smoke.py `
               --library bin/windows/x64/LiteRtLm.dll `
@@ -272,7 +306,7 @@ jobs:
               --model "asr-smoke-assets/$($case[0])" `
               --tokenizer asr-smoke-assets/whisper_tokenizer.json `
               --audio asr-smoke-assets/jfk.wav `
-              $case[1] $case[2]
+              $case[1..($case.Length - 1)]
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
@@ -427,19 +461,6 @@ jobs:
         with:
           name: packaged-qwen-candidates
           path: bin
-      - name: Check out pinned Dart consumer for real Qwen inference
-        uses: actions/checkout@v6
-        with:
-          repository: leehack/llamadart
-          ref: 6491e6d5c8ad80be09483861f1b99f84e76e4f11
-          path: consumer-smoke
-          persist-credentials: false
-      - name: Set up consumer SDK
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 3.47.1
-          channel: stable
-          cache: true
       - name: Fetch checksum-pinned Qwen model
         shell: bash
         run: |
@@ -447,17 +468,15 @@ jobs:
           python3 -c 'import sys; sys.path.insert(0, "tools"); from pathlib import Path; from qualify_sentencepiece_bpe_null import verified_download, MODEL_URL, MODEL_SHA; verified_download(MODEL_URL, Path("qwen-smoke-assets/Qwen3-0.6B.litertlm"), MODEL_SHA)'
       - name: Run real Qwen CPU inference against candidate runtime
         shell: bash
-        env:
-          LLAMADART_LITERT_LM_LIB_DIR: ${{ github.workspace }}/bin/${{ matrix.platform }}/${{ matrix.arch }}
         run: |
-          export LD_LIBRARY_PATH="$LLAMADART_LITERT_LM_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          export DYLD_LIBRARY_PATH="$LLAMADART_LITERT_LM_LIB_DIR${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
-          export PATH="$LLAMADART_LITERT_LM_LIB_DIR:$PATH"
-          model="$GITHUB_WORKSPACE/qwen-smoke-assets/Qwen3-0.6B.litertlm"
-          cd consumer-smoke
-          dart pub get
-          dart --packages=.dart_tool/package_config.json ../tools/qwen_runtime_preflight.dart
-          dart run tool/litert_lm_engine_smoke.dart "$model" cpu 'What is 2+2? Answer only with the number.' 16 1024
+          case "${{ matrix.platform }}" in
+            linux) library=libLiteRtLm.so ;;
+            windows) library=LiteRtLm.dll ;;
+            macos) library=libLiteRtLm.dylib ;;
+          esac
+          python3 tools/litert_lm_chat_smoke.py \
+            --library "bin/${{ matrix.platform }}/${{ matrix.arch }}/$library" \
+            --model qwen-smoke-assets/Qwen3-0.6B.litertlm
       - name: Require the CPU backend to honour num_threads
         shell: bash
         run: |

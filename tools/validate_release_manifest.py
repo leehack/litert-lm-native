@@ -9,7 +9,12 @@ from pathlib import Path
 import re
 
 from fetch_litert_lm_asr_smoke_assets import ASSETS
-from litert_lm_symbols import has_asr_bridge, is_at_least, uses_stream_chunk_api
+from litert_lm_symbols import (
+    has_asr_bridge,
+    has_prebuilt_topk_samplers,
+    is_at_least,
+    uses_stream_chunk_api,
+)
 from prebuilt_overrides import prebuilt_override_manifest
 from release_version_policy import PolicyError, parse_upstream, validate_pair
 from validate_runtime_artifacts import required_runtime_artifacts
@@ -39,6 +44,9 @@ REQUIRED_SPM_XCFRAMEWORKS = [
 
 V0_16_IOS_GPU_SPM_XCFRAMEWORKS = [
     "litert-lm-native-apple-LiteRtMetalAccelerator-xcframework-{tag}.zip",
+]
+
+PREBUILT_SAMPLER_SPM_XCFRAMEWORKS = [
     "litert-lm-native-apple-LiteRtTopKMetalSampler-xcframework-{tag}.zip",
 ]
 
@@ -47,7 +55,6 @@ V0_16_IOS_GPU_SPM_XCFRAMEWORKS = [
 V0_16_ALLOWED_SPM_COMPANION_XCFRAMEWORKS = [
     "litert-lm-native-apple-GemmaModelConstraintProvider-xcframework-{tag}.zip",
     "litert-lm-native-apple-LiteRt-xcframework-{tag}.zip",
-    "litert-lm-native-apple-LiteRtTopKWebGpuSampler-xcframework-{tag}.zip",
     "litert-lm-native-apple-LiteRtWebGpuAccelerator-xcframework-{tag}.zip",
     "litert-lm-native-apple-WebgpuDawn-xcframework-{tag}.zip",
 ]
@@ -615,6 +622,8 @@ def required_spm_assets(compatibility_tag: str) -> list[str]:
     assets = list(REQUIRED_SPM_XCFRAMEWORKS)
     if is_at_least(compatibility_tag, (0, 16, 0)):
         assets.extend(V0_16_IOS_GPU_SPM_XCFRAMEWORKS)
+        if has_prebuilt_topk_samplers(compatibility_tag):
+            assets.extend(PREBUILT_SAMPLER_SPM_XCFRAMEWORKS)
     return assets
 
 
@@ -622,6 +631,10 @@ def allowed_spm_assets(compatibility_tag: str) -> list[str]:
     assets = required_spm_assets(compatibility_tag)
     if is_at_least(compatibility_tag, (0, 16, 0)):
         assets.extend(V0_16_ALLOWED_SPM_COMPANION_XCFRAMEWORKS)
+        if has_prebuilt_topk_samplers(compatibility_tag):
+            assets.append(
+                "litert-lm-native-apple-LiteRtTopKWebGpuSampler-xcframework-{tag}.zip"
+            )
     return assets
 
 

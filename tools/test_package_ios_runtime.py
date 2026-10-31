@@ -17,7 +17,7 @@ class PackageIosRuntimeTest(unittest.TestCase):
             target_dir.mkdir(parents=True)
             litertlm = target_dir / "libLiteRtLm.dylib"
             litertlm.write_bytes(b"runtime")
-            for library_name in package_ios_runtime.IOS_DLOPEN_DEPENDENCIES:
+            for library_name in package_ios_runtime.ios_dlopen_dependencies("v0.18.1"):
                 (target_dir / library_name).write_bytes(b"gpu")
 
             with patch.object(package_ios_runtime, "macho_needed_libraries", return_value=[]), \
@@ -27,10 +27,10 @@ class PackageIosRuntimeTest(unittest.TestCase):
                     package_ios_runtime.stage_source_built_dependency_frameworks(
                         {"sdk": "iphoneos"},
                         target_dir,
-                        litertlm,
+                        litertlm, "v0.18.1"
                     )
 
-            for library_name in package_ios_runtime.IOS_DLOPEN_DEPENDENCIES:
+            for library_name in package_ios_runtime.ios_dlopen_dependencies("v0.18.1"):
                 module_name = package_ios_runtime.module_name_for_dylib(
                     Path(library_name)
                 )
@@ -45,7 +45,7 @@ class PackageIosRuntimeTest(unittest.TestCase):
             target_dir.mkdir(parents=True)
             litertlm = target_dir / "libLiteRtLm.dylib"
             litertlm.write_bytes(b"runtime")
-            first, missing = package_ios_runtime.IOS_DLOPEN_DEPENDENCIES
+            first, missing = package_ios_runtime.ios_dlopen_dependencies("v0.18.1")
             (target_dir / first).write_bytes(b"gpu")
 
             with patch.object(
@@ -64,7 +64,7 @@ class PackageIosRuntimeTest(unittest.TestCase):
                         package_ios_runtime.stage_source_built_dependency_frameworks(
                             {"sdk": "iphoneos"},
                             target_dir,
-                            litertlm,
+                            litertlm, "v0.18.1"
                         )
 
     def test_framework_executable_is_owner_writable_and_executable(self) -> None:

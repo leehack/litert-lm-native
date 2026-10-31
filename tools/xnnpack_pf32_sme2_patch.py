@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 PATCH_PATH = "native/bridge/xnnpack_pf32_sme2.patch"
-AUDITED_TAGS = frozenset({"v0.18.1"})
+AUDITED_TAGS = frozenset({"v0.18.1", "v0.19.0"})
 # v0.18.1 pins TensorFlow a1179d3c, whose XLA pins this XNNPACK. It contains
 # 70a9c5e8ac, which moved the PF32 SME2 GEMM/GEMV to KleidiAI kernels that are
 # nondeterministic with more than one thread (google/XNNPACK#11789). The patch
@@ -34,11 +34,27 @@ SOURCES = {
         "5aa0176053653592a86ebc848261029f2494e23f9c9be25cc9923afc901345c0",
     ),
 }
-# Declared ahead of tf_workspace2(): XLA's tf_http_archive skips a repository
-# that already exists, so this exact archive is the one every target links.
-# Patches apply in order; the PQS8/QC4W opt-out (#84) edits the PF32 postimage
-# of src/configs/gemm-config.c.
-ARCHIVE = f'''# XNNPACK pinned by TensorFlow {TENSORFLOW_REF[:8]} (XLA third_party/xnnpack),
+# v0.19.0 pins TensorFlow 4f8e6d47, whose XLA pins this XNNPACK. It still
+# descends from REVERTED_COMMIT and google/XNNPACK#11789 is open.
+V019_TENSORFLOW_REF = "4f8e6d470a7f2864a7b2af990d3ffcfc47f05c99"
+V019_XNNPACK_COMMIT = "28d1fc6d908bc4d80920be989177b7eb1a4aebc8"
+V019_XNNPACK_SHA256 = "b1d4ab092cd92b1241c1d14f440b5ed725530757b540fe4fb88a20b07577e8a8"
+V019_SOURCES = {
+    **SOURCES,
+    "src/configs/gemm-config.c": (
+        "ccbb3bde1758f9b4f69503be619e338013a04c4a818a5703c2a31c8bd04f8fc4",
+        "9a5263a9c4326b09522c094f2877ddff8e43881ed45b2bc10d15a71562fc1d9d",
+    ),
+}
+
+
+def archive(tensorflow_ref: str, commit: str, sha256: str) -> str:
+    # Declared ahead of tf_workspace2(): XLA's tf_http_archive skips a repository
+    # that already exists, so this exact archive is the one every target links.
+    # Patches apply in order; the PQS8/QC4W opt-out (#84) edits the PF32 postimage
+    # of src/configs/gemm-config.c.
+    url = f"https://github.com/google/XNNPACK/archive/{commit}.zip"
+    return f'''# XNNPACK pinned by TensorFlow {tensorflow_ref[:8]} (XLA third_party/xnnpack),
 # with the PF32 SME2 kernels of {REVERTED_COMMIT[:10]} reverted (litert-lm-native#82)
 # and the SME2 PQS8/QC4W GEMM config disabled (litert-lm-native#84).
 http_archive(
@@ -48,15 +64,32 @@ http_archive(
         "@//bridge:xnnpack_pf32_sme2.patch",
         "@//bridge:xnnpack_pqs8_qc4w_sme2.patch",
     ],
-    sha256 = "{XNNPACK_SHA256}",
-    strip_prefix = "XNNPACK-{XNNPACK_COMMIT}",
+    sha256 = "{sha256}",
+    strip_prefix = "XNNPACK-{commit}",
     urls = [
-        "https://storage.googleapis.com/mirror.tensorflow.org/{XNNPACK_URL[8:]}",
-        "{XNNPACK_URL}",
+        "https://storage.googleapis.com/mirror.tensorflow.org/{url[8:]}",
+        "{url}",
     ],
 )
 
 '''
+
+
+ARCHIVE = archive(TENSORFLOW_REF, XNNPACK_COMMIT, XNNPACK_SHA256)
+ARCHIVES = {
+    TENSORFLOW_REF: ARCHIVE,
+    V019_TENSORFLOW_REF: archive(
+        V019_TENSORFLOW_REF, V019_XNNPACK_COMMIT, V019_XNNPACK_SHA256
+    ),
+}
+
+
+def sources_for(compatibility_tag: str) -> dict[str, tuple[str, str]]:
+    return V019_SOURCES if compatibility_tag == "v0.19.0" else SOURCES
+
+
+def commit_for(compatibility_tag: str) -> str:
+    return V019_XNNPACK_COMMIT if compatibility_tag == "v0.19.0" else XNNPACK_COMMIT
 
 
 def require_xnnpack_pf32_patch_decision(compatibility_tag: str) -> bool:
@@ -75,18 +108,19 @@ def require_xnnpack_pf32_patch_decision(compatibility_tag: str) -> bool:
 
 def declare_patched_xnnpack(workspace_text: str) -> str:
     """Inserts the patched XNNPACK archive before the TensorFlow archive."""
-    if ARCHIVE in workspace_text:
-        return workspace_text
     refs = re.findall(r'^TENSORFLOW_REF = "([0-9a-f]{40})"$', workspace_text, re.MULTILINE)
     # Starlark uses the last assignment.
-    if not refs or refs[-1] != TENSORFLOW_REF:
+    if not refs or refs[-1] not in ARCHIVES:
         raise RuntimeError("TensorFlow pin changed; requalify the XNNPACK patches")
+    pinned_archive = ARCHIVES[refs[-1]]
+    if pinned_archive in workspace_text:
+        return workspace_text
     if re.search(r'^\s*name = "XNNPACK",$', workspace_text, re.MULTILINE):
         raise RuntimeError("Unexpected XNNPACK archive in WORKSPACE; requalify the XNNPACK patches")
     anchor = '# TensorFlow\nhttp_archive(\n    name = "org_tensorflow",\n'
     if workspace_text.count(anchor) != 1:
         raise RuntimeError("Expected one TensorFlow archive in WORKSPACE")
-    return workspace_text.replace(anchor, ARCHIVE + anchor, 1)
+    return workspace_text.replace(anchor, pinned_archive + anchor, 1)
 
 
 def xnnpack_pf32_patch_manifest(compatibility_tag: str) -> list[dict]:
@@ -99,8 +133,8 @@ def xnnpack_pf32_patch_manifest(compatibility_tag: str) -> list[dict]:
         "id": "xnnpack-pf32-sme2",
         "path": PATCH_PATH,
         "sha256": patch_sha256,
-        "source": f"XNNPACK@{XNNPACK_COMMIT}/{source}",
+        "source": f"XNNPACK@{commit_for(compatibility_tag)}/{source}",
         "preimageSha256Lf": preimage,
         "postimageSha256Lf": postimage,
         "scope": "source-built runtimes only; excludes official upstream prebuilts",
-    } for source, (preimage, postimage) in SOURCES.items()]
+    } for source, (preimage, postimage) in sources_for(compatibility_tag).items()]

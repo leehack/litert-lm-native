@@ -1,0 +1,108 @@
+--- a/omni/speech2text/timestamp_text_merger.cc
++++ b/omni/speech2text/timestamp_text_merger.cc
+@@ -772,6 +772,105 @@ void TimestampTextMerger::MergeByWordCount(
+     }
+     confirmed_prefix_size_ = 0;
+   }
++  // Untimed decoders can garble a cut word at either window edge. Align an
++  // exact canonical suffix/prefix (at least two words), allowing one trailing
++  // word from the old window and two leading words from the new one to differ.
++  // Prefer the longest evidence; ties keep the least trimmed/skipped candidate.
++  // Keep the old spelling of the overlap and the new continuation, without
++  // DedupWords: repeated words after the anchor are legitimate new content.
++  // No reliable anchor: retain the existing fallback. Timed words never enter.
++  if (prev_timestamps_.empty() && curr_timestamps.empty()) {
++    auto prev = CanonicalizeWords(prev_words_);
++    auto curr = CanonicalizeWords(curr_words);
++    const int min_anchor_words = 2;
++    int best_length = min_anchor_words - 1;
++    int best_start = -1, best_skip = 0, best_end = 0;
++    std::optional<int> alignment;
++    bool ambiguous = false;
++    for (int trim = 0; trim <= 1; ++trim) {
++      int end = static_cast<int>(prev.size()) - trim;
++      for (int skip = 0; skip <= 2; ++skip) {
++        for (int start = 0; start < end; ++start) {
++          int length = end - start;
++          if (length < min_anchor_words ||
++              skip + length > static_cast<int>(curr.size()))
++            continue;
++          if (!prev[start].empty() &&
++              std::equal(prev.begin() + start, prev.begin() + end,
++                         curr.begin() + skip)) {
++            if (alignment.has_value() && *alignment != start - skip) ambiguous = true;
++            alignment = start - skip;
++            if (length <= best_length) continue;
++            best_length = length;
++            best_start = start;
++            best_skip = skip;
++            best_end = end;
++          }
++        }
++      }
++    }
++    // A repeated anchor cannot locate the acoustic overlap. In particular,
++    // periodic speech must use the upstream word-count progression.
++    if (best_start >= 0) {
++      for (const auto* words : {&prev, &curr}) {
++        int matches = 0;
++        for (int i = 0; i + best_length <= static_cast<int>(words->size()); ++i) {
++          if (std::equal(prev.begin() + best_start,
++                         prev.begin() + best_end, words->begin() + i)) ++matches;
++        }
++        if (matches != 1) ambiguous = true;
++      }
++    }
++    // Short tolerant matches are particularly easy to confuse with a refrain.
++    if ((best_skip || best_end != static_cast<int>(prev.size())) &&
++        best_length < 3) ambiguous = true;
++    // Low lexical diversity cannot distinguish an acoustic overlap from a
++    // chant. These conservative confidence cutoffs deliberately trade recall
++    // for the upstream fallback; they are not a proof of text-only alignment.
++    for (const auto* words : {&prev, &curr}) {
++      int distinct = 0;
++      for (int i = 0; i < static_cast<int>(words->size()); ++i) {
++        if (std::find(words->begin(), words->begin() + i, (*words)[i]) ==
++            words->begin() + i) ++distinct;
++      }
++      if (distinct < 6 || distinct * 2 <= static_cast<int>(words->size()))
++        ambiguous = true;
++      int repeated = 0;
++      for (int i = 0; i + 1 < static_cast<int>(words->size()); ++i) {
++        int matches = 0;
++        for (int j = 0; j + 1 < static_cast<int>(words->size()); ++j) {
++          if ((*words)[i] == (*words)[j] &&
++              (*words)[i + 1] == (*words)[j + 1]) ++matches;
++        }
++        if (matches > 1) ++repeated;
++      }
++      if (repeated > 0 && best_length < 3) ambiguous = true;
++      if (repeated * 2 >= static_cast<int>(words->size())) ambiguous = true;
++    }
++    if (best_start >= 0) {
++      for (int i = 0; i < best_skip; ++i) {
++        if (std::find(prev.begin(), prev.end(), curr[i]) != prev.end())
++          ambiguous = true;
++      }
++      for (int i = best_end; i < static_cast<int>(prev.size()); ++i) {
++        if (std::find(curr.begin(), curr.end(), prev[i]) != curr.end())
++          ambiguous = true;
++      }
++    }
++    int earliest = std::max(1, static_cast<int>(
++        prev.size() * (1 - overlap_ratio_)) - search_window_);
++    if (best_start >= earliest && !ambiguous) {
++      std::vector<std::string> merged(prev_words_.begin() + best_start,
++                                      prev_words_.begin() + best_end);
++      merged.insert(merged.end(), curr_words.begin() + best_skip + best_length,
++                    curr_words.end());
++      last_confirmed_words_.assign(prev_words_.begin(),
++                                   prev_words_.begin() + best_start);
++      prev_words_ = std::move(merged);
++      return;
++    }
++  }
++
+   const bool curr_has_usable_ts =
+       HasUsableTimestamps(curr_words, curr_timestamps);
+   if (!prev_words_.empty() && !curr_words.empty()) {

@@ -42,8 +42,8 @@ AUDIT_MUTATIONS = {
         '',
     ),
     'U10_earliest_zero_floor': (
-        'std::max(1, static_cast<int>(',
-        'std::max(0, static_cast<int>(',
+        'int earliest = std::max(1, static_cast<int>(',
+        'int earliest = std::max(0, static_cast<int>(',
     ),
     'U11_no_search_window_slack': (
         'prev.size() * (1 - overlap_ratio_)) - search_window_);',

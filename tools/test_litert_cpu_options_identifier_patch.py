@@ -33,7 +33,7 @@ class CpuOptionsIdentifierPatchTest(unittest.TestCase):
             self.assertFalse(require_cpu_options_identifier_patch_decision(tag))
             self.assertEqual(cpu_options_identifier_patch_manifest(tag), [])
         self.assertTrue(require_cpu_options_identifier_patch_decision("v0.18.1"))
-        for tag in ("v0.18.2", "v0.19.0", "main"):
+        for tag in ("v0.18.2", "v0.19.1", "main"):
             with self.subTest(tag=tag), self.assertRaisesRegex(
                 RuntimeError, "no explicit decision"
             ):
