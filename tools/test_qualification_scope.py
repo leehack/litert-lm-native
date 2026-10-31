@@ -1,9 +1,12 @@
 import copy
 import itertools
+import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -25,6 +28,27 @@ class ScopeTest(unittest.TestCase):
                 self.assertEqual(scope['full'],'true')
                 self.assertEqual(scope['matrix']['include'],MATRIX)
                 self.assertEqual(len(scope['qwen_matrix']['include']),3)
+
+    def test_linux_x64_qualification_uses_the_release_glibc_baseline(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/native_release.yml').read_text()
+        matrix_job = workflow.split('  runtime-matrix:\n', 1)[1].split('\n  build-upstream-runtime:', 1)[0]
+        script = textwrap.dedent(matrix_job.split('        run: |\n', 1)[1])
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / 'output'
+            subprocess.run(
+                [sys.executable, '-c', script], check=True,
+                env={**os.environ, 'GITHUB_OUTPUT': str(output),
+                     'WINDOWS_BAZEL_JOBS': '3', 'TARGET_PLATFORM': 'linux', 'TARGET_ARCH': 'x64'},
+            )
+            release_rows = json.loads(output.read_text().split('=', 1)[1])['include']
+        self.assertEqual(len(release_rows), 1)
+        self.assertEqual(release_rows[0]['os'], 'ubuntu-24.04')
+        scope = select(['tools/validate_runtime_dependencies.py'])
+        for matrix in ('matrix', 'qwen_matrix'):
+            with self.subTest(matrix=matrix):
+                rows = [row for row in scope[matrix]['include']
+                        if (row['platform'], row['arch']) == ('linux', 'x64')]
+                self.assertEqual(rows, release_rows)
 
     def test_known_tests_docs_only_and_platform_unions(self):
         scope=select(['tools/test_build_upstream_runtime.py','docs/guide.md'])
