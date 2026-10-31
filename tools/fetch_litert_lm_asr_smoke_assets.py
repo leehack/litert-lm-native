@@ -95,6 +95,24 @@ DERIVED_ASSETS = (
         replacement=bytes.fromhex("0a022200"),
         sha256="9b1f38b80cbf4e81f0f6198fcb38df66bb4d64ed7eeaeef8b82e028b32c1e7c4",
     ),
+    # Declares Parakeet over an encoder-decoder section, which selects TDT.
+    DerivedAsset(
+        filename="a1b2c3d4_parakeet_tdt.litertlm",
+        source="whisper_tiny_30s_i8.litertlm",
+        offset=16384,
+        original=bytes.fromhex("0a020a00"),
+        replacement=bytes.fromhex("0a021200"),
+        sha256="375d833ef72808a28b6a6bf97ba73f49736e377183170bb845b2596ae696b082",
+    ),
+    # Renames that section to the audio encoder, which selects CTC.
+    DerivedAsset(
+        filename="a1b2c3d4_parakeet_ctc.litertlm",
+        source="a1b2c3d4_parakeet_tdt.litertlm",
+        offset=144,
+        original=b"\x17\0\0\0tf_lite_encoder_decoder",
+        replacement=b"\x15\0\0\0tf_lite_audio_encoder\0\0",
+        sha256="18390a7cab945aabd6daa39d6560eda0f1f804dc536c771e55f4c2010677cf9c",
+    ),
 )
 
 

@@ -40,19 +40,22 @@ It deliberately does not claim:
 The downstream client owns input conversion to the configured sample rate and
 model/tokenizer download integrity. ABI version 1 accepts mono PCM only.
 
-`model_path` may name a `.tflite` model or a `.litertlm` container. A container
-whose AsrMetadata declares Whisper, Moonshine or Parakeet loads its ASR TFLite
-section and its embedded tokenizer, and the container's model type overrides
-`decoder_type`. Containers that declare Qwen3-ASR, or carry only LLM metadata,
-use the LLM route. `tokenizer_path` stays required by ABI version 1 validation
-but is not read for containers. A container that declares a speech model
-without an ASR section fails at engine creation with `NOT_FOUND`. v0.18.0 and v0.18.1
-carry this routing as a backport
+`model_path` may name a `.tflite` model or a `.litertlm` container.
+`tokenizer_path` stays required by ABI version 1 validation but is not read for
+containers. A container's model type overrides `decoder_type`, and a Parakeet
+container's sections select TDT or CTC. A container that declares a speech model
+without an ASR section fails at engine creation with `NOT_FOUND`.
+
+v0.18.0 and v0.18.1 carry this routing as a backport
 ([#77](https://github.com/leehack/litert-lm-native/issues/77),
-[audit](upstream_patch_audit.md)). From v0.19.0 upstream's registry routes
-containers. Metadata that declares a family selects the session whatever the
-file name or a free-form `model_name` says, and a `model_name` naming another
-family fails with `InvalidArgument`
+[audit](upstream_patch_audit.md)), and containers with only LLM metadata use a
+generic LLM route.
+
+From v0.19.0 upstream's registry routes containers and has no generic LLM route.
+Speech metadata or Qwen3 LLM metadata selects the session whatever the file name
+or a free-form `model_name` says. A `model_name` naming another family fails with
+`InvalidArgument`. Any other container needs a registered `model_name` or file
+name, or fails with `NOT_FOUND`
 ([migration](v019_qualification.md)).
 
 ## Flow control

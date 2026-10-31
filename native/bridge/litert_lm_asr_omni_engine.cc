@@ -12,6 +12,7 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_replace.h"
 #include "absl/strings/string_view.h"
 #include "litert/cc/litert_common.h"
 #include "litert/cc/litert_compiled_model.h"
@@ -33,6 +34,8 @@
 #include "omni/speech2text/stateless_decoder.h"
 #include "omni/speech2text/tdt_decoder.h"
 #include "runtime/components/model_resources_litert_lm.h"
+#include "runtime/proto/llm_metadata.pb.h"
+#include "runtime/proto/llm_model_type.pb.h"
 #include "runtime/proto/speech2text_metadata.pb.h"
 #include "runtime/proto/speech2text_model_type.pb.h"
 #include "runtime/proto/speech2text_session_config.pb.h"
@@ -130,55 +133,62 @@ Metadata ToMetadata(const LitertLmAsrConfig &config) {
 constexpr absl::string_view kContainerFamilies[] = {"whisper", "parakeet",
                                                     "moonshine", "qwen3-asr"};
 
-absl::StatusOr<absl::string_view>
-DeclaredContainerFamily(const std::string &model_path) {
+struct ContainerRoute {
+  absl::string_view family;
+  absl::string_view registry_name;
+};
+
+// ABI version 1 chose the session from the container: its speech metadata, the
+// sections of a Parakeet model, or the LLM metadata of a Qwen3-ASR model, which
+// published containers do not declare as speech models.
+absl::StatusOr<ContainerRoute> RouteContainer(const std::string &model_path) {
   ABSL_ASSIGN_OR_RETURN(auto file, ::litert::lm::ScopedFile::Open(model_path));
   ABSL_ASSIGN_OR_RETURN(auto loader,
                         ::litert::lm::LitertLmLoader::Create(std::move(file)));
   ABSL_ASSIGN_OR_RETURN(auto resources, ::litert::lm::ModelResourcesLitertLm::Create(
                                             std::move(loader)));
   auto metadata = resources->GetSpeech2TextMetadata();
-  if (!metadata.ok() || *metadata == nullptr ||
-      !(*metadata)->has_asr_model_type()) {
-    return absl::string_view();
+  if (metadata.ok() && *metadata != nullptr &&
+      (*metadata)->has_asr_model_type()) {
+    const auto &type = (*metadata)->asr_model_type();
+    if (type.has_whisper()) {
+      return ContainerRoute{"whisper", "whisper"};
+    }
+    if (type.has_moonshine()) {
+      return ContainerRoute{"moonshine", "moonshine"};
+    }
+    if (type.has_qwen3_asr()) {
+      return ContainerRoute{"qwen3-asr", "qwen3-asr"};
+    }
+    if (type.has_parakeet()) {
+      const bool is_ctc =
+          !resources->GetTFLiteModelBuffer(Metadata::TF_LITE_ENCODER_DECODER)
+               .ok() &&
+          resources->GetTFLiteModelBuffer(Metadata::TF_LITE_AUDIO_ENCODER).ok();
+      return ContainerRoute{"parakeet", is_ctc ? "parakeet-ctc" : "parakeet-tdt"};
+    }
   }
-  const auto &type = (*metadata)->asr_model_type();
-  if (type.has_whisper()) {
-    return absl::string_view("whisper");
+  auto llm_metadata = resources->GetLlmMetadata();
+  if (llm_metadata.ok() && *llm_metadata != nullptr &&
+      (*llm_metadata)->llm_model_type().has_qwen3()) {
+    return ContainerRoute{"qwen3-asr", "qwen3-asr"};
   }
-  if (type.has_parakeet()) {
-    return absl::string_view("parakeet");
-  }
-  if (type.has_moonshine()) {
-    return absl::string_view("moonshine");
-  }
-  if (type.has_qwen3_asr()) {
-    return absl::string_view("qwen3-asr");
-  }
-  return absl::string_view();
-}
-
-absl::string_view RegistryNameForFamily(absl::string_view family,
-                                        LitertLmAsrDecoderType decoder_type) {
-  if (family == "parakeet") {
-    return decoder_type == LITERT_LM_ASR_DECODER_CTC ? "parakeet-ctc"
-                                                     : "parakeet-tdt";
-  }
-  return family;
+  return ContainerRoute{};
 }
 
 // ABI version 1 callers may pass any label or none and any file name, while
-// upstream's registry routes by exact name. Container metadata decides when it
-// declares a family, and a name selecting another family is rejected instead
-// of decoding the container with the wrong session.
+// upstream's registry routes by exact name. A container whose family is known
+// decides, and a name selecting another family is rejected instead of decoding
+// the container with the wrong session.
 absl::StatusOr<std::string>
 ResolveContainerModelName(const LitertLmAsrConfig &config) {
-  const std::string requested = absl::AsciiStrToLower(
-      config.model_name == nullptr ? "" : config.model_name);
-  ABSL_ASSIGN_OR_RETURN(const absl::string_view declared,
-                        DeclaredContainerFamily(config.model_path));
+  const std::string requested = absl::StrReplaceAll(
+      absl::AsciiStrToLower(config.model_name == nullptr ? "" : config.model_name),
+      {{"_", "-"}});
+  ABSL_ASSIGN_OR_RETURN(const ContainerRoute route,
+                        RouteContainer(config.model_path));
   const auto &registry = ::litert::omni::OmniRegistry::Get();
-  if (declared.empty()) {
+  if (route.family.empty()) {
     if (!requested.empty()) {
       return requested;
     }
@@ -186,23 +196,25 @@ ResolveContainerModelName(const LitertLmAsrConfig &config) {
   }
   if (requested.empty()) {
     auto from_path = registry.FindModelNameForPath(config.model_path);
-    if (from_path.ok() && absl::StrContains(*from_path, declared)) {
+    if (from_path.ok() && absl::StrContains(*from_path, route.registry_name)) {
       return from_path;
     }
-  } else {
-    for (const absl::string_view family : kContainerFamilies) {
-      if (family != declared && absl::StrContains(requested, family)) {
-        return absl::InvalidArgumentError(
-            absl::StrCat("ASR container metadata declares ", declared,
-                         " but the config selects ", requested, "."));
-      }
-    }
-    if (absl::StrContains(requested, declared) &&
-        registry.GetRegisteredModel(requested).ok()) {
-      return requested;
+    return std::string(route.registry_name);
+  }
+  const std::string squashed = absl::StrReplaceAll(requested, {{"-", ""}});
+  for (const absl::string_view family : kContainerFamilies) {
+    if (family != route.family &&
+        absl::StrContains(squashed, absl::StrReplaceAll(family, {{"-", ""}}))) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("ASR container metadata declares ", route.family,
+                       " but the config selects ", requested, "."));
     }
   }
-  return std::string(RegistryNameForFamily(declared, config.decoder_type));
+  if (absl::StrContains(requested, route.registry_name) &&
+      registry.GetRegisteredModel(requested).ok()) {
+    return requested;
+  }
+  return std::string(route.registry_name);
 }
 
 absl::Status ValidateEnums(const LitertLmAsrConfig &config) {

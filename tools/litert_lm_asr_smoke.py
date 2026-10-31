@@ -278,6 +278,11 @@ def main() -> int:
         help="Require engine creation to fail with this message substring.",
     )
     parser.add_argument(
+        "--expect-engine-created",
+        action="store_true",
+        help="Stop after engine creation, for routing fixtures that cannot decode.",
+    )
+    parser.add_argument(
         "--model-name",
         help="Override the preset's model_name.",
     )
@@ -361,6 +366,10 @@ def main() -> int:
             {"status": status, "message": message}, sort_keys=True))
         return 0
     check_status(library, status, error, "engine_create")
+    if args.expect_engine_created:
+        library.litert_lm_asr_engine_delete(engine)
+        print("RESULT litert_lm_asr_engine_created")
+        return 0
 
     session = ctypes.c_void_p()
     events: list[dict[str, object]] = []

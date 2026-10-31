@@ -88,9 +88,10 @@ class FetchLiteRtLmAsrSmokeAssetsTest(unittest.TestCase):
                              [asset.source])
 
     def test_derived_variants_patch_pinned_container(self) -> None:
-        pinned = {asset.filename for asset in assets.ASSETS}
+        available = {asset.filename for asset in assets.ASSETS}
         for derived in assets.DERIVED_ASSETS:
-            self.assertIn(derived.source, pinned)
+            self.assertIn(derived.source, available)
+            available.add(derived.filename)
             self.assertEqual(len(derived.original), len(derived.replacement))
             self.assertNotEqual(derived.original, derived.replacement)
 
