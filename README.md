@@ -214,7 +214,7 @@ runtime/evidence artifacts for review but has no publication input or write
 permission.
 
 Pull-request qualification targets upstream `v0.19.0` at
-`771b06e1a2c7f70a399a718599109facf37e38fd`, whose C API 1.0 breaks every
+`83ce6067f2e2a3fb697556928f93936693ded971`, whose C API 1.0 breaks every
 pre-1.0 consumer. See the [v0.19 migration and carried-patch
 decisions](docs/v019_qualification.md).
 
