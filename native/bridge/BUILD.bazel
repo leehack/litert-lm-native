@@ -1,5 +1,35 @@
 package(default_visibility = ["//visibility:public"])
 
+cc_library(
+    name = "android_gpu_safety",
+    srcs = ["android_gpu_safety.cc"],
+    hdrs = ["android_gpu_safety.h"],
+    deps = select({
+        "@platforms//os:android": ["@boringssl//:crypto"],
+        "//conditions:default": [],
+    }),
+    linkopts = select({
+        "@platforms//os:android": ["-ldl"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "litert_lm_android_gpu_preflight",
+    srcs = ["litert_lm_android_gpu_preflight.cc"],
+    hdrs = ["litert_lm_android_gpu_preflight.h"],
+    deps = [
+        ":android_gpu_safety",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:status_macros",
+        "@com_google_absl//absl/strings:string_view",
+        "//runtime/engine:engine_settings",
+        "//runtime/executor:executor_settings_base",
+        "//runtime/util:memory_mapped_file",
+        "//runtime/util:scoped_file",
+    ],
+)
+
 exports_files([
     "asr_untimed_overlap.patch",
     "asr_untimed_overlap_v019.patch",

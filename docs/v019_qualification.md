@@ -38,6 +38,40 @@ delivery, cancellation, reset of pending PCM and queued outputs, and reuse.
 This gate covers the input source; real-model session cancellation, reset and
 backpressure still require their own qualification.
 
+## Conservative Android Qwen3 GPU restriction
+
+The source-built v0.19 C API adds a pre-factory safety check for the exact
+614,236,160-byte Qwen3-0.6B bundle with SHA-256
+`555579ff2f4fd13379abe69c1c3ab5200f7338bc92471557f1d6614a6e5ab0b4`.
+Its known 155,582,464-byte shared constant exceeded the historical Adreno 750
+storage binding limit of 134,217,728 bytes. The independent compiler crash
+remains a separate concern. See upstream #3866/#3867 and owner #51.
+
+Only Android requests for the main LiteRT GPU executor enter this guard. File
+assets are hashed through a retained descriptor and that same descriptor is
+passed to the factory through a local settings copy; renaming/replacing a path
+cannot substitute a different file after inspection. Existing mapped assets are
+read through their retained mapping. Model contents must remain immutable while
+in use. DataStream assets, unavailable reads and changing file metadata refuse
+before GPU initialization; current C constructors expose path/FD assets only.
+
+For the exact fixture, a Vulkan-instance-only probe reads vendor/device/driver
+and maxStorageBufferRange without creating a GPU device or compute pipeline.
+The historical tuple vendor `0x5143`, device `0x43051401`, driver `2150604839`
+is refused. Missing, incomplete or multiple-adapter facts also refuse this
+fixture with an explicit safety-unknown diagnostic. Other identified fixtures,
+CPU requests and non-Android platforms are outside this deny policy. Passing
+it does not establish GPU support. No adapter is claimed to be the accelerator's
+selected adapter, and the C API cannot guarantee an OpenCL route; the exact
+restriction may therefore conservatively refuse OpenCL too.
+
+Failure uses the existing FAILED_PRECONDITION status/last-error path with a null
+engine output and CPU remedy. The source patch is hash-audited in owner
+sourcePatches. It does not publish a new artifact, change core pins, qualify a
+v0.19 device, fix opaque delegate error propagation or close #51. Full candidate
+builds, independent review, same-device guard/CPU/reload controls and #1677's
+typed-error/automatic-fallback integration remain release gates.
+
 ## Carried patches
 
 | Patch | Decision | Evidence |
