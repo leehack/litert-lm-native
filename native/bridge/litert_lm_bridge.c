@@ -59,12 +59,22 @@ typedef void (*stream_proxy_dart_callback_t)(
 #if defined(LITERT_LM_STREAM_CHUNK_API)
 typedef struct LiteRtLmStreamChunk LiteRtLmStreamChunk;
 
+#if defined(LITERT_LM_C_API_V1)
+// C API 1.0 returns a status code and writes results through out parameters.
+extern int litert_lm_stream_chunk_get_text(
+    const LiteRtLmStreamChunk *chunk, const char **out_text);
+extern int litert_lm_stream_chunk_is_final(
+    const LiteRtLmStreamChunk *chunk, bool *out_is_final);
+extern int litert_lm_stream_chunk_get_error(
+    const LiteRtLmStreamChunk *chunk, const char **out_error);
+#else
 extern const char *litert_lm_stream_chunk_get_text(
     const LiteRtLmStreamChunk *chunk);
 extern bool litert_lm_stream_chunk_is_final(
     const LiteRtLmStreamChunk *chunk);
 extern const char *litert_lm_stream_chunk_get_error(
     const LiteRtLmStreamChunk *chunk);
+#endif
 #if defined(LITERT_LM_FINISH_REASON_API)
 // Defined in the runtime by stream_finish_reason.patch.
 extern int litert_lm_native_stream_chunk_get_finish_reason(
@@ -112,9 +122,16 @@ static void stream_proxy_forward(
   const char *error_message = NULL;
   bool is_final = false;
   if (stream_chunk != NULL) {
+#if defined(LITERT_LM_C_API_V1)
+    // A non-NULL chunk cannot fail; each output keeps its default if it does.
+    (void)litert_lm_stream_chunk_get_text(stream_chunk, &chunk);
+    (void)litert_lm_stream_chunk_get_error(stream_chunk, &error_message);
+    (void)litert_lm_stream_chunk_is_final(stream_chunk, &is_final);
+#else
     chunk = litert_lm_stream_chunk_get_text(stream_chunk);
     error_message = litert_lm_stream_chunk_get_error(stream_chunk);
     is_final = litert_lm_stream_chunk_is_final(stream_chunk);
+#endif
   }
 #if defined(LITERT_LM_FINISH_REASON_API)
   // Stored before the final callback so a consumer reading it after that

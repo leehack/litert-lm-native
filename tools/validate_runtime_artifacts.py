@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from litert_lm_symbols import is_at_least
+from litert_lm_symbols import has_prebuilt_topk_samplers, is_at_least
 from windows_dxc import dxc_license_paths, dxc_runtime_paths, requires_dxc
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -25,8 +25,11 @@ REQUIRED_RUNTIME_ARTIFACTS = [
 
 V0_16_IOS_GPU_ARTIFACTS = [
     Path("bin/ios/arm64/LiteRtMetalAccelerator.framework/LiteRtMetalAccelerator"),
-    Path("bin/ios/arm64/LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler"),
     Path("bin/ios/arm64-sim/LiteRtMetalAccelerator.framework/LiteRtMetalAccelerator"),
+]
+
+PREBUILT_SAMPLER_IOS_ARTIFACTS = [
+    Path("bin/ios/arm64/LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler"),
     Path("bin/ios/arm64-sim/LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler"),
 ]
 
@@ -42,6 +45,8 @@ def required_runtime_artifacts(
     required = list(REQUIRED_RUNTIME_ARTIFACTS)
     if is_at_least(upstream_tag, (0, 16, 0)):
         required.extend(V0_16_IOS_GPU_ARTIFACTS)
+        if has_prebuilt_topk_samplers(upstream_tag):
+            required.extend(PREBUILT_SAMPLER_IOS_ARTIFACTS)
     if requires_dxc(upstream_tag):
         required.extend(dxc_runtime_paths())
     if include_official_assets:

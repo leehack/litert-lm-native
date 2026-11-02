@@ -1,5 +1,33 @@
 # Untimed ASR overlap qualification (#673)
 
+## v0.19.0 port
+
+v0.19.0 moved the merger to `omni/speech2text` and replaced the word-count
+fallback with a seam-run alignment, so this carry was rechecked instead of
+retired. At the bridge's 0.4 overlap the new fallback still loses words where a
+phrase recurs: `can do for you` then `can do for your country` seams at the second
+occurrence. `native/bridge/asr_untimed_overlap_v019.patch` keeps the same
+confidence rules and runs them first in `MergeByWordCount`.
+
+Real models, macOS arm64 CPU, JFK at overlap 0.4:
+
+| Model | Without port | With port |
+| --- | --- | --- |
+| Moonshine `.tflite` | "And so my fellow Americans ask not what your country can do for your country." | "And so my fellow Americans ask not. what your country can do for you. ask what you can do for your country." |
+| Whisper container | Single window, identical | Single window, identical |
+| Qwen3-ASR container | Not run | "And so, my fellow Americans, ask not. what your country can do for you. Ask what you can do for your country." |
+
+Replay against v0.19.0 upstream at 0.4, 60,800 utterances: 0 exact transcripts
+regressed and 845 became exact. 13 of 2,313 edit-distance changes are worse, all
+in the repeated-phrase corpora, so the clean-boundary gate now bounds that ratio
+at 1:10 rather than zero.
+Native fixtures record v0.19.0 fallback bytes, including its choice to keep the
+longer tail when an ambiguous window ends (`we go now we go now` then
+`we go now and rest` loses `and rest`). That is upstream behaviour, not this
+carry. All 26 mutants fail or, for three (`M7`, `M9`, `U16`), match the fix byte
+for byte on every corpus; the new fallback hides their guard. The sections below
+record the original v0.18.0 audit.
+
 ## Design and scope
 
 Carry `native/bridge/asr_untimed_overlap.patch` on the exact audited v0.18.0

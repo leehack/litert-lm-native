@@ -2,11 +2,13 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "asr_untimed_overlap.patch",
+    "asr_untimed_overlap_v019.patch",
     "litert_cpu_options_identifier.patch",
     "litert_gpu_environment_destroy_callback.patch",
     "litert_ios_framework_paths.patch",
     "sentencepiece_bpe_null.patch",
     "stream_finish_reason.patch",
+    "stream_finish_reason_v019.patch",
     "xnnpack_pf32_sme2.patch",
     "xnnpack_pqs8_qc4w_sme2.patch",
 ])
@@ -25,6 +27,21 @@ config_setting(
 config_setting(
     name = "asr_api",
     define_values = {"litert_lm_asr_api": "true"},
+)
+
+# v0.19 removed AsrEngine; ASR sessions come from the Omni session factories.
+config_setting(
+    name = "asr_omni_engine",
+    define_values = {
+        "litert_lm_asr_api": "true",
+        "litert_lm_asr_omni_engine": "true",
+    },
+)
+
+# C API 1.0 (v0.19) returns status codes and writes results to out parameters.
+config_setting(
+    name = "c_api_v1",
+    define_values = {"litert_lm_c_api_v1": "true"},
 )
 
 # v0.17 moved the capabilities C implementation into //c:engine.
@@ -48,6 +65,9 @@ cc_library(
     }) + select({
         ":finish_reason_api": ["LITERT_LM_FINISH_REASON_API=1"],
         "//conditions:default": [],
+    }) + select({
+        ":c_api_v1": ["LITERT_LM_C_API_V1=1"],
+        "//conditions:default": [],
     }),
     linkopts = select({
         "@platforms//os:android": ["-ldl"],
@@ -59,11 +79,20 @@ cc_library(
 cc_library(
     name = "litert_lm_asr_audio_source",
     srcs = select({
+        ":asr_omni_engine": ["litert_lm_asr_omni_input_source.cc"],
         ":asr_api": ["litert_lm_asr_audio_source.cc"],
         "//conditions:default": [],
     }),
-    hdrs = ["litert_lm_asr_audio_source.h"],
+    hdrs = [
+        "litert_lm_asr_audio_source.h",
+        "litert_lm_asr_omni_input_source.h",
+    ],
     deps = select({
+        ":asr_omni_engine": [
+            "@com_google_absl//absl/cleanup",
+            "@com_google_absl//absl/status",
+            "//omni:omni_session",
+        ],
         ":asr_api": [
             "@com_google_absl//absl/cleanup",
             "@com_google_absl//absl/status",
@@ -76,12 +105,63 @@ cc_library(
 cc_library(
     name = "litert_lm_asr_bridge",
     srcs = select({
+        ":asr_omni_engine": [
+            "litert_lm_asr_bridge.cc",
+            "litert_lm_asr_omni_engine.cc",
+        ],
         ":asr_api": ["litert_lm_asr_bridge.cc"],
         "//conditions:default": [],
     }),
-    hdrs = ["litert_lm_asr_bridge.h", "litert_lm_asr_session_adapter.h"],
+    hdrs = [
+        "litert_lm_asr_bridge.h",
+        "litert_lm_asr_omni_engine.h",
+        "litert_lm_asr_session_adapter.h",
+    ],
+    defines = select({
+        ":asr_omni_engine": ["LITERT_LM_ASR_OMNI_ENGINE=1"],
+        "//conditions:default": [],
+    }),
     alwayslink = True,
     deps = select({
+        ":asr_omni_engine": [
+            ":litert_lm_asr_audio_source",
+            "@com_google_absl//absl/status",
+            "@com_google_absl//absl/status:status_macros",
+            "@com_google_absl//absl/status:statusor",
+            "@com_google_absl//absl/strings",
+            "@com_google_absl//absl/strings:string_view",
+            "@litert//litert/cc:litert_common",
+            "@litert//litert/cc:litert_compiled_model",
+            "@litert//litert/cc:litert_environment",
+            "@litert//litert/cc:litert_macros",
+            "@litert//litert/cc:litert_options",
+            "@litert//litert/cc/options:litert_cpu_options",
+            "@litert//litert/cc/options:litert_gpu_options",
+            "@litert//litert/cc/options:litert_qualcomm_options",
+            "//omni:multi_staged_session",
+            "//omni:omni_engine_header",
+            "//omni:omni_registry",
+            "//omni:omni_session",
+            "//omni/base:litert_runner",
+            "//omni/base:model_cache",
+            "//omni/base:model_utils",
+            "//omni/speech2text:asr_session",
+            "//omni/speech2text:audio_source",
+            "//omni/speech2text:ctc_decoder",
+            "//omni/speech2text:moonshine",
+            "//omni/speech2text:parakeet_ctc",
+            "//omni/speech2text:parakeet_tdt",
+            "//omni/speech2text:qwen3_asr",
+            "//omni/speech2text:stateless_decoder",
+            "//omni/speech2text:tdt_decoder",
+            "//omni/speech2text:whisper",
+            "//runtime/components:model_resources_litert_lm",
+            "//runtime/proto:speech2text_metadata_cc_proto",
+            "//runtime/proto:speech2text_model_type_cc_proto",
+            "//runtime/proto:speech2text_session_config_cc_proto",
+            "//runtime/util:litert_lm_loader",
+            "//runtime/util:scoped_file",
+        ],
         ":asr_api": [
             ":litert_lm_asr_audio_source",
             "@com_google_absl//absl/status",

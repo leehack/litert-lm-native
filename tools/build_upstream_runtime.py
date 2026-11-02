@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 from asr_litertlm_container_patch import SOURCES as CONTAINER_PATCH_SOURCES, require_container_patch_decision
-from asr_overlap_patch import AUDITED_OVERLAP_TAGS, PREIMAGE_SHA256, POSTIMAGE_SHA256, source_sha256, require_asr_patch_decision
+from asr_overlap_patch import AUDITED_OVERLAP_TAGS, V019_OVERLAP_TAGS, merger_source, overlap_identity, source_sha256, require_asr_patch_decision
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -24,7 +24,9 @@ from litert_cpu_options_identifier_patch import (
 )
 from litert_lm_symbols import (
     has_asr_bridge,
+    has_omni_asr_engine,
     is_at_least,
+    uses_c_api_v1,
     required_bridge_symbols,
     required_c_api_symbols,
     uses_stream_chunk_api,
@@ -40,8 +42,9 @@ from runtime_dependency_utils import (
 )
 from stream_finish_reason_patch import (
     BAZEL_DEFINE as FINISH_REASON_DEFINE,
-    SOURCES as FINISH_REASON_PATCH_SOURCES,
+    patch_path_for as finish_reason_patch_path,
     require_finish_reason_patch_decision,
+    sources_for as finish_reason_patch_sources,
 )
 from windows_dxc import stage_windows_dxc
 import windows_runtime
@@ -51,20 +54,14 @@ from workspace_build_patch import (
     require_workspace_build_patch_decision,
 )
 from xnnpack_pf32_sme2_patch import (
-    SOURCES as XNNPACK_PF32_SOURCES,
     declare_patched_xnnpack,
     require_xnnpack_pf32_patch_decision,
+    sources_for as xnnpack_pf32_sources,
 )
-from xnnpack_pqs8_qc4w_sme2_patch import SOURCES as XNNPACK_QC4W_SOURCES
+from xnnpack_pqs8_qc4w_sme2_patch import sources_for as xnnpack_qc4w_sources
 from upstream_archive import github_source_archive_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-# Final XNNPACK sources after both patches; the QC4W opt-out applies last.
-XNNPACK_POSTIMAGES = {
-    name: postimage
-    for sources in (XNNPACK_PF32_SOURCES, XNNPACK_QC4W_SOURCES)
-    for name, (_, postimage) in sources.items()
-}
 BIN_DIR = REPO_ROOT / "bin"
 BRIDGE_PACKAGE_ROOT = REPO_ROOT / "native"
 UPSTREAM_REPO = "google-ai-edge/LiteRT-LM"
@@ -167,24 +164,25 @@ LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 
 
 def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
-    """Carry #673 only on the audited v0.18 source; require review on drift."""
+    """Carry #673 only on an audited source; require review on drift."""
     require_asr_patch_decision(upstream_tag)
-    if upstream_tag not in AUDITED_OVERLAP_TAGS:
+    if upstream_tag not in AUDITED_OVERLAP_TAGS | V019_OVERLAP_TAGS:
         return
-    source = source_root / "omni/asr/timestamp_text_merger.cc"
+    patch_path, preimage, postimage = overlap_identity(upstream_tag)
+    source = source_root / merger_source(upstream_tag)
     digest = source_sha256(source.read_bytes())
-    if digest == POSTIMAGE_SHA256:
+    if digest == postimage:
         return
-    if digest != PREIMAGE_SHA256:
+    if digest != preimage:
         raise RuntimeError("ASR merger source changed; requalify untimed overlap patch")
-    patch_file = BRIDGE_PACKAGE_ROOT / "bridge/asr_untimed_overlap.patch"
+    patch_file = BRIDGE_PACKAGE_ROOT / "bridge" / Path(patch_path).name
     command = ["git", "apply", "--ignore-space-change", str(patch_file)]
     # Apply from the extracted root, including roots nested in a worktree.
     # The preimage hash and git apply's check precede any source mutation.
     subprocess.run([*command[:2], "--check", *command[2:]], check=True,
                    cwd=source_root)
     subprocess.run(command, check=True, cwd=source_root)
-    if source_sha256(source.read_bytes()) != POSTIMAGE_SHA256:
+    if source_sha256(source.read_bytes()) != postimage:
         raise RuntimeError("ASR merger postimage mismatch; requalify untimed overlap patch")
     print("Applied audited untimed ASR overlap patch", flush=True)
 
@@ -216,24 +214,23 @@ def patch_stream_finish_reason(source_root: Path, upstream_tag: str) -> None:
     """Report why streamed generation ended (#78) on the audited v0.18 source."""
     if not require_finish_reason_patch_decision(upstream_tag):
         return
+    sources = finish_reason_patch_sources(upstream_tag)
     digests = {
         name: source_sha256((source_root / name).read_bytes())
-        for name in FINISH_REASON_PATCH_SOURCES
+        for name in sources
     }
-    if all(digests[name] == post
-           for name, (_, post) in FINISH_REASON_PATCH_SOURCES.items()):
+    if all(digests[name] == post for name, (_, post) in sources.items()):
         return
-    if any(digests[name] != pre
-           for name, (pre, _) in FINISH_REASON_PATCH_SOURCES.items()):
+    if any(digests[name] != pre for name, (pre, _) in sources.items()):
         raise RuntimeError(
             "Decode or conversation source changed; requalify the stream "
             "finish-reason patch")
-    patch_file = BRIDGE_PACKAGE_ROOT / "bridge/stream_finish_reason.patch"
+    patch_file = REPO_ROOT / finish_reason_patch_path(upstream_tag)
     command = ["git", "apply", "--ignore-space-change", str(patch_file)]
     subprocess.run([*command[:2], "--check", *command[2:]], check=True,
                    cwd=source_root)
     subprocess.run(command, check=True, cwd=source_root)
-    for name, (_, post) in FINISH_REASON_PATCH_SOURCES.items():
+    for name, (_, post) in sources.items():
         if source_sha256((source_root / name).read_bytes()) != post:
             raise RuntimeError(
                 "Stream finish-reason patch postimage mismatch; requalify")
@@ -260,10 +257,22 @@ def patch_workspace_build(source_root: Path, compatibility_tag: str) -> None:
     print("Applied audited v0.18.1 WORKSPACE build repair", flush=True)
 
 
-def verify_xnnpack_postimages(source_root: Path) -> None:
+def xnnpack_postimages(compatibility_tag: str) -> dict[str, str]:
+    """Final XNNPACK sources after both patches; the QC4W opt-out applies last."""
+    return {
+        name: postimage
+        for sources in (
+            xnnpack_pf32_sources(compatibility_tag),
+            xnnpack_qc4w_sources(compatibility_tag),
+        )
+        for name, (_, postimage) in sources.items()
+    }
+
+
+def verify_xnnpack_postimages(source_root: Path, compatibility_tag: str) -> None:
     """Fails unless Bazel compiled the patched XNNPACK sources."""
     repository = (source_root / "bazel-out").resolve().parents[2] / "external" / "XNNPACK"
-    for name, postimage in XNNPACK_POSTIMAGES.items():
+    for name, postimage in xnnpack_postimages(compatibility_tag).items():
         source = repository / name
         if not source.is_file() or source_sha256(source.read_bytes()) != postimage:
             raise RuntimeError("XNNPACK patch postimage mismatch; requalify")
@@ -316,7 +325,9 @@ def download_upstream(
     patch_upstream_workspace(
         source_root,
         patch_ios_framework_paths=has_asr_bridge(compatibility_tag),
-        patch_bpe_null_piece=is_at_least(compatibility_tag, (0, 17, 0)),
+        # v0.19.0 carries an equivalent SentencePiece patch of its own.
+        patch_bpe_null_piece=is_at_least(compatibility_tag, (0, 17, 0))
+        and not is_at_least(compatibility_tag, (0, 19, 0)),
         patch_gpu_environment_teardown=needs_gpu_environment_teardown_patch(
             (source_root / "WORKSPACE").read_text(encoding="utf-8"),
             compatibility_tag,
@@ -496,7 +507,9 @@ def build_runtime(
     patch_asr_untimed_overlap(source_root, upstream_tag)
     patch_asr_litertlm_container(source_root, upstream_tag)
     patch_stream_finish_reason(source_root, upstream_tag)
-    if platform == "ios" and has_asr_bridge(upstream_tag):
+    # v0.19.0 removed the prebuilt TopK sampler this path points at.
+    if (platform == "ios" and has_asr_bridge(upstream_tag)
+            and not is_at_least(upstream_tag, (0, 19, 0))):
         patch_upstream_ios_sampler_path(source_root)
     prebuilt_target = PREBUILT_TARGETS.get((platform, arch))
     if prebuilt_target is not None:
@@ -550,6 +563,10 @@ def build_runtime(
         command.append("--define=litert_lm_capabilities_in_c_engine=true")
     if has_asr_bridge(upstream_tag):
         command.append("--define=litert_lm_asr_api=true")
+    if has_omni_asr_engine(upstream_tag):
+        command.append("--define=litert_lm_asr_omni_engine=true")
+    if uses_c_api_v1(upstream_tag):
+        command.append("--define=litert_lm_c_api_v1=true")
     if require_finish_reason_patch_decision(upstream_tag):
         command.append(FINISH_REASON_DEFINE)
     if platform == "macos":
@@ -563,7 +580,7 @@ def build_runtime(
         command.append(f"--jobs={jobs}")
     run(command, source_root)
     if require_xnnpack_pf32_patch_decision(upstream_tag):
-        verify_xnnpack_postimages(source_root)
+        verify_xnnpack_postimages(source_root, upstream_tag)
     if patch_cpu_options_identifier:
         verify_cpu_options_identifier_postimage(source_root)
 

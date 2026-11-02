@@ -12,19 +12,49 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "bridge/litert_lm_asr_audio_source.h"
 #include "bridge/litert_lm_asr_session_adapter.h"
+#if defined(LITERT_LM_ASR_OMNI_ENGINE)
+#include <variant>
+
+#include "bridge/litert_lm_asr_omni_engine.h"
+#include "bridge/litert_lm_asr_omni_input_source.h"
+#include "omni/omni_session.h"
+#else
+#include "bridge/litert_lm_asr_audio_source.h"
 #include "omni/asr/asr_engine.h"
 #include "omni/asr/asr_session.h"
 #include "omni/asr/log_mel_spectrogram_processor.h"
 #include "omni/asr/text_merger.h"
+#endif
+
+#if defined(LITERT_LM_ASR_OMNI_ENGINE)
+namespace litert_lm_native {
+// Upstream's Output variant has more alternatives than the generic adapter.
+inline AsrOutputView<::litert::omni::TextOutput>
+ViewAsrOutput(const ::litert::omni::Output &output) {
+  if (const auto *text = std::get_if<::litert::omni::TextOutput>(&output)) {
+    return {AsrOutputKind::kText, text};
+  }
+  return {std::holds_alternative<::litert::omni::EndOfOutput>(output)
+              ? AsrOutputKind::kEnd
+              : AsrOutputKind::kUnsupported,
+          nullptr};
+}
+} // namespace litert_lm_native
+#endif
 
 namespace {
 
+#if defined(LITERT_LM_ASR_OMNI_ENGINE)
+using UpstreamAsrEngine = ::litert::omni::OmniSessionFactory;
+using UpstreamAsrSession = ::litert::omni::OmniSession;
+using UpstreamMergeResult = ::litert::omni::TextOutput;
+#else
 using UpstreamAsrConfig = ::litert::omni::asr::AsrEngineConfig;
 using UpstreamAsrEngine = ::litert::omni::asr::AsrEngine;
 using UpstreamAsrSession = ::litert::omni::asr::AsrSession;
 using UpstreamMergeResult = ::litert::omni::asr::TextMerger::MergeResult;
+#endif
 
 char *CopyString(const std::string &value) {
   char *copy = static_cast<char *>(std::malloc(value.size() + 1));
@@ -143,6 +173,7 @@ absl::Status ValidateConfig(const LitertLmAsrConfig *config) {
   return absl::OkStatus();
 }
 
+#if !defined(LITERT_LM_ASR_OMNI_ENGINE)
 absl::StatusOr<UpstreamAsrConfig>
 ToUpstreamConfig(const LitertLmAsrConfig &config) {
   UpstreamAsrConfig upstream;
@@ -221,6 +252,7 @@ ToUpstreamConfig(const LitertLmAsrConfig &config) {
   }
   return upstream;
 }
+#endif
 
 absl::Status PopulateResult(const UpstreamMergeResult &source, bool is_final,
                             LitertLmAsrResult *destination) {
@@ -390,12 +422,16 @@ LitertLmAsrStatus litert_lm_asr_engine_create(const LitertLmAsrConfig *config,
     return ReturnStatus(validation, out_error_message);
   }
   try {
+#if defined(LITERT_LM_ASR_OMNI_ENGINE)
+    auto upstream_engine = litert_lm_native::CreateAsrSessionFactory(*config);
+#else
     auto upstream_config = ToUpstreamConfig(*config);
     if (!upstream_config.ok()) {
       return ReturnStatus(upstream_config.status(), out_error_message);
     }
     auto upstream_engine =
         UpstreamAsrEngine::Create(*std::move(upstream_config));
+#endif
     if (!upstream_engine.ok()) {
       return ReturnStatus(upstream_engine.status(), out_error_message);
     }
@@ -434,8 +470,12 @@ LitertLmAsrStatus litert_lm_asr_session_create(LitertLmAsrEngine *engine,
         engine->config.input_milliseconds, engine->config.overlap_ratio,
         engine->config.max_buffered_audio_milliseconds);
     auto *raw_audio_source = audio_source.get();
+#if defined(LITERT_LM_ASR_OMNI_ENGINE)
+    auto upstream_session = engine->engine->Create(std::move(audio_source));
+#else
     auto upstream_session =
         engine->engine->CreateSession(std::move(audio_source));
+#endif
     if (!upstream_session.ok()) {
       return ReturnStatus(upstream_session.status(), out_error_message);
     }

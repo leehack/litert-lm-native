@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ios_framework_metadata import framework_minimum_os, validate_framework_metadata
 from litert_lm_symbols import (
+    has_prebuilt_topk_samplers,
     BRIDGE_SYMBOLS,
     has_asr_bridge,
     required_bridge_symbols,
@@ -38,10 +39,10 @@ IOS_GPU_SYMBOLS = (
     b"LiteRtTopKMetalSampler_Create_Static",
     b"LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static",
 )
-IOS_DLOPEN_DEPENDENCIES = (
-    "libLiteRtMetalAccelerator.dylib",
-    "libLiteRtTopKMetalSampler.dylib",
-)
+def ios_dlopen_dependencies(upstream_tag: str) -> tuple[str, ...]:
+    if has_prebuilt_topk_samplers(upstream_tag):
+        return ("libLiteRtMetalAccelerator.dylib", "libLiteRtTopKMetalSampler.dylib")
+    return ("libLiteRtMetalAccelerator.dylib",)
 EXPECTED_OFFICIAL_ARCHIVE_SHA256 = {
     "v0.14.0": "dddac2f6713ed65eaf01c18e115d9fec22184adf575cc7856a21387e8ba937e1",
 }
@@ -460,7 +461,7 @@ def stage_source_built_slice(spec: dict, clean: bool, upstream_tag: str) -> Path
     litertlm = litertlm_framework_dir / "LiteRtLm"
     copy_framework_executable(source, litertlm)
     run(["install_name_tool", "-id", LITERTLM_INSTALL_NAME, str(litertlm)])
-    stage_source_built_dependency_frameworks(spec, target_dir, litertlm)
+    stage_source_built_dependency_frameworks(spec, target_dir, litertlm, upstream_tag)
     validate_source_built_symbols(litertlm, upstream_tag)
     write_framework_info_plist(
         litertlm_framework_dir,
@@ -497,6 +498,7 @@ def stage_source_built_dependency_frameworks(
     spec: dict,
     target_dir: Path,
     litertlm: Path,
+    upstream_tag: str,
 ) -> None:
     staged_library_names: set[str] = set()
     for install_name in macho_needed_libraries(litertlm):
@@ -525,7 +527,7 @@ def stage_source_built_dependency_frameworks(
             ]
         )
 
-    for library_name in IOS_DLOPEN_DEPENDENCIES:
+    for library_name in ios_dlopen_dependencies(upstream_tag):
         if library_name in staged_library_names:
             continue
         source = target_dir / library_name

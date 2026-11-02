@@ -29,7 +29,7 @@ class StreamFinishReasonPatchTest(unittest.TestCase):
             self.assertEqual(finish_reason_patch_manifest(tag), [])
         for tag in ("v0.18.0", "v0.18.1"):
             self.assertTrue(require_finish_reason_patch_decision(tag))
-        for tag in ("v0.18.2", "v0.19.0", "main"):
+        for tag in ("v0.18.2", "v0.19.1", "main"):
             with self.subTest(tag=tag), self.assertRaisesRegex(
                 RuntimeError, "no explicit decision"
             ):
@@ -116,7 +116,7 @@ class StreamFinishReasonPatchTest(unittest.TestCase):
                 for name in sources:
                     (root / name).write_text(f"{git_apply_writes} {name}\n")
 
-        with patch.object(build_upstream_runtime, "FINISH_REASON_PATCH_SOURCES", sources), \
+        with patch.object(build_upstream_runtime, "finish_reason_patch_sources", return_value=sources), \
              patch.object(build_upstream_runtime.subprocess, "run", side_effect=git_apply) as run:
             build_upstream_runtime.patch_stream_finish_reason(root, "v0.18.0")
         return run

@@ -90,6 +90,11 @@ class ExpectEngineErrorTest(unittest.TestCase):
         self.assertEqual(self.run_smoke(library, "tf_lite_audio_encoder not found"), 0)
         self.assertEqual(library.freed_strings, 1)
 
+    def test_enum_override_accepts_only_config_enums(self) -> None:
+        self.assertEqual(smoke.enum_override("backend=99"), ("backend", 99))
+        with self.assertRaises(smoke.argparse.ArgumentTypeError):
+            smoke.enum_override("model_path=99")
+
     def test_fails_when_engine_creation_succeeds(self) -> None:
         library = FakeAsrLibrary(smoke.STATUS_OK, None)
         with self.assertRaisesRegex(RuntimeError, "engine_create succeeded"):

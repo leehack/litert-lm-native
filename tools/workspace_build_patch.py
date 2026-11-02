@@ -10,6 +10,8 @@ PATCH_PATH = "native/bridge/v0181_workspace_build.patch"
 # upstream main d99b438f, the same RevId with the same pins.
 UPSTREAM_EQUIVALENT = "d99b438f0a961ac2a449d341c2431e49332c1076"
 AUDITED_TAGS = frozenset({"v0.18.1"})
+# v0.19.0 descends from UPSTREAM_EQUIVALENT and declares the same plumbing.
+UPSTREAM_FIX_TAGS = frozenset({"v0.19.0"})
 # LF-normalized (preimage, postimage) SHA-256 per patched v0.18.1 file.
 SOURCES = {
     ".bazelrc": (
@@ -27,6 +29,8 @@ def require_workspace_build_patch_decision(compatibility_tag: str) -> bool:
     """Returns whether the repair applies; newer sources need a decision."""
     if compatibility_tag in AUDITED_TAGS:
         return True
+    if compatibility_tag in UPSTREAM_FIX_TAGS:
+        return False
     version = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", compatibility_tag)
     if version and tuple(map(int, version.groups())) <= (0, 18, 0):
         return False

@@ -36,7 +36,7 @@ class WorkspaceBuildPatchTest(unittest.TestCase):
             self.assertFalse(require_workspace_build_patch_decision(tag))
             self.assertEqual(workspace_build_patch_manifest(tag), [])
         self.assertTrue(require_workspace_build_patch_decision("v0.18.1"))
-        for tag in ("v0.18.2", "v0.19.0", "main"):
+        for tag in ("v0.18.2", "v0.19.1", "main"):
             with self.subTest(tag=tag), self.assertRaisesRegex(
                 RuntimeError, "no explicit decision"
             ):

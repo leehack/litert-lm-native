@@ -17,6 +17,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+from litert_lm_c_api import CApi
 from stream_finish_reason_patch import require_finish_reason_patch_decision
 
 FINISH_REASONS = {
@@ -30,8 +31,6 @@ FINISH_REASONS = {
 COUNT_PROMPT = "Count from 1 to 20, separated by commas. Output only the numbers."
 STORY_PROMPT = "Write a very long story about a lighthouse keeper."
 TURN_TIMEOUT_SECONDS = 600
-
-_DLL_DIRECTORY_HANDLES: list[object] = []
 
 DartCallback = ctypes.CFUNCTYPE(
     None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_bool, ctypes.c_void_p
@@ -55,12 +54,9 @@ SCENARIOS = (
 )
 
 
-def bind(library_path: Path) -> ctypes.CDLL:
-    if os.name == "nt":
-        _DLL_DIRECTORY_HANDLES.append(
-            os.add_dll_directory(str(library_path.parent))
-        )
-    library = ctypes.CDLL(str(library_path))
+def bind(library_path: Path) -> CApi:
+    api = CApi(library_path)
+    library = api.library
     signatures = {
         "stream_proxy_finish_reason_abi_version": (ctypes.c_int32, []),
         "stream_proxy_get_finish_reason": (ctypes.c_int32, [ctypes.c_void_p]),
@@ -70,28 +66,6 @@ def bind(library_path: Path) -> ctypes.CDLL:
         ),
         "stream_proxy_delete": (None, [ctypes.c_void_p]),
         "stream_proxy_free_string": (None, [ctypes.c_void_p]),
-        "litert_lm_engine_settings_create": (
-            ctypes.c_void_p,
-            [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p],
-        ),
-        "litert_lm_engine_settings_set_cache_dir": (
-            None, [ctypes.c_void_p, ctypes.c_char_p]
-        ),
-        "litert_lm_engine_settings_delete": (None, [ctypes.c_void_p]),
-        "litert_lm_engine_create": (ctypes.c_void_p, [ctypes.c_void_p]),
-        "litert_lm_engine_delete": (None, [ctypes.c_void_p]),
-        "litert_lm_conversation_config_create": (ctypes.c_void_p, []),
-        "litert_lm_conversation_config_delete": (None, [ctypes.c_void_p]),
-        "litert_lm_conversation_create": (
-            ctypes.c_void_p, [ctypes.c_void_p, ctypes.c_void_p]
-        ),
-        "litert_lm_conversation_delete": (None, [ctypes.c_void_p]),
-        "litert_lm_conversation_cancel_process": (None, [ctypes.c_void_p]),
-        "litert_lm_conversation_optional_args_create": (ctypes.c_void_p, []),
-        "litert_lm_conversation_optional_args_delete": (None, [ctypes.c_void_p]),
-        "litert_lm_conversation_optional_args_set_max_output_tokens": (
-            None, [ctypes.c_void_p, ctypes.c_int]
-        ),
         "litert_lm_conversation_send_message_stream": (
             ctypes.c_int,
             [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p,
@@ -102,7 +76,7 @@ def bind(library_path: Path) -> ctypes.CDLL:
         function = getattr(library, name)
         function.restype = restype
         function.argtypes = argtypes
-    return library
+    return api
 
 
 def message_json(prompt: str) -> bytes:
@@ -113,8 +87,9 @@ def message_json(prompt: str) -> bytes:
 
 
 def run_scenario(
-    library: ctypes.CDLL, engine: int, scenario: Scenario
+    api: CApi, engine: int, scenario: Scenario
 ) -> dict[str, object]:
+    library = api.library
     first_chunk = threading.Event()
     finished = threading.Event()
     chunks: list[str] = []
@@ -139,20 +114,18 @@ def run_scenario(
             finished.set()
 
     callback = DartCallback(on_chunk)
-    config = library.litert_lm_conversation_config_create()
-    conversation = library.litert_lm_conversation_create(engine, config)
-    library.litert_lm_conversation_config_delete(config)
-    if not conversation:
-        raise RuntimeError("litert_lm_conversation_create returned null")
+    config = api.conversation_config_create()
+    try:
+        conversation = api.conversation_create(engine, config)
+    finally:
+        library.litert_lm_conversation_config_delete(config)
     upstream_callback = ctypes.c_void_p()
     proxy = library.stream_proxy_create(callback, None,
                                         ctypes.byref(upstream_callback))
-    optional_args = library.litert_lm_conversation_optional_args_create()
+    optional_args = api.conversation_optional_args_create(scenario.max_output_tokens)
     try:
         if not proxy or not upstream_callback.value:
             raise RuntimeError("stream_proxy_create failed")
-        library.litert_lm_conversation_optional_args_set_max_output_tokens(
-            optional_args, scenario.max_output_tokens)
         status = library.litert_lm_conversation_send_message_stream(
             conversation, message_json(scenario.prompt), None, optional_args,
             upstream_callback, proxy)
@@ -161,7 +134,7 @@ def run_scenario(
         if scenario.cancel_after_first_chunk:
             if not first_chunk.wait(TURN_TIMEOUT_SECONDS):
                 raise RuntimeError(f"{scenario.name}: no chunk to cancel after")
-            library.litert_lm_conversation_cancel_process(conversation)
+            api.conversation_cancel_process(conversation)
         if not finished.wait(TURN_TIMEOUT_SECONDS):
             raise RuntimeError(f"{scenario.name}: no final callback")
         reason = library.stream_proxy_get_finish_reason(proxy)
@@ -208,7 +181,8 @@ def main() -> int:
         parser.error("--model is required unless --abi-only is set")
 
     try:
-        library = bind(args.library.resolve())
+        api = bind(args.library.resolve())
+        library = api.library
     except AttributeError as error:
         print(f"{error}; this runtime does not report finish reasons",
               file=sys.stderr)
@@ -224,17 +198,15 @@ def main() -> int:
               "this runtime does not report finish reasons", file=sys.stderr)
         return 1
 
-    with tempfile.TemporaryDirectory(prefix="litert-lm-finish-reason-") as cache:
-        settings = library.litert_lm_engine_settings_create(
-            str(args.model.resolve()).encode(), args.backend.encode(), None, None)
-        if not settings:
-            raise RuntimeError("litert_lm_engine_settings_create returned null")
-        library.litert_lm_engine_settings_set_cache_dir(settings, cache.encode())
-        engine = library.litert_lm_engine_create(settings)
+    # Windows keeps the XNNPACK weight cache open until the process exits.
+    with tempfile.TemporaryDirectory(prefix="litert-lm-finish-reason-",
+                                     ignore_cleanup_errors=True) as cache:
+        settings = api.engine_settings_create(str(args.model.resolve()), args.backend)
+        engine = None
         try:
-            if not engine:
-                raise RuntimeError("litert_lm_engine_create returned null")
-            results = [run_scenario(library, engine, scenario)
+            api.engine_settings_set_cache_dir(settings, cache)
+            engine = api.engine_create(settings)
+            results = [run_scenario(api, engine, scenario)
                        for scenario in SCENARIOS]
         finally:
             if engine:

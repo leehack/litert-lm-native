@@ -97,6 +97,9 @@ PREBUILT_OVERRIDES: dict[str, tuple[PrebuiltOverride, ...]] = {
     # v0.18.1 updates LiteRT/provider dependencies but not Dawn payloads.
     # No affected Pixel/Mali device requalification permits retirement.
     "v0.18.1": ANDROID_DAWN_ROLLBACKS,
+    # v0.19.0 rebuilds Dawn and the accelerator. Keep the correction, whose
+    # exports cover the candidate's imports, until a Pixel Mali-G715 run retires it.
+    "v0.19.0": ANDROID_DAWN_ROLLBACKS,
 }
 
 
