@@ -91,14 +91,17 @@ jobs:
           ref: ${{ env.QUALIFICATION_UPSTREAM_COMMIT }}
           path: asr-upstream
           sparse-checkout: |
-            omni/speech2text
-            omni/base
+            omni
           persist-credentials: false
       # The stock Homebrew formula is unversioned; the qualifier guards every
       # required .pc name, records versions and compiles the actual stage API.
       # See docs/asr_untimed_overlap.md for the dependency policy.
       - name: Install model-free replay dependencies
-        run: brew install abseil pkg-config
+        run: brew install abseil pkg-config protobuf
+      - name: Qualify v0.19 push-source cancellation, reset and backpressure
+        run: |
+          python3 tools/qualify_asr_omni_input.py \
+            --source-root asr-upstream --work-dir asr-input-qualification
       - name: Qualify real merger behaviour and kill regression mutations
         run: |
           python3 tools/qualify_asr_untimed_overlap.py \

@@ -28,6 +28,16 @@ The ASR cache is disabled (`:nocache`): upstream's default writes beside the
 model and the ABI has no cache directory. Default overlap stays 0.4; upstream's
 is 0.75.
 
+## Push-source regression gate
+
+`tools/qualify_asr_omni_input.py` compiles the production v0.19 PCM source
+against the exact upstream Omni stage headers, using system Abseil and protobuf.
+The model-free qualification lane runs it before runtime builds. It checks bounded
+backpressure, step-sized chunks without duplicate overlap, tail and single EOF
+delivery, cancellation, reset of pending PCM and queued outputs, and reuse.
+This gate covers the input source; real-model session cancellation, reset and
+backpressure still require their own qualification.
+
 ## Carried patches
 
 | Patch | Decision | Evidence |
