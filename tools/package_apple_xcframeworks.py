@@ -174,6 +174,26 @@ def zip_xcframework(xcframework: Path, output_zip: Path) -> None:
             archive.write(path, relative_path)
 
 
+def sign_macos_framework_slices(xcframework: Path) -> None:
+    """Seal final macOS frameworks after install-name and resource changes."""
+    info = plistlib.loads((xcframework / "Info.plist").read_bytes())
+    for library in info["AvailableLibraries"]:
+        if library["SupportedPlatform"] != "macos":
+            continue
+        name = library["LibraryPath"]
+        if not name.endswith(".framework"):
+            continue
+        identifier = library["LibraryIdentifier"]
+        if any(Path(value).name != value or value in (".", "..")
+               for value in (identifier, name)):
+            raise RuntimeError("Invalid macOS framework slice path")
+        framework = xcframework / identifier / name
+        if not framework.is_dir() or not framework.resolve().is_relative_to(xcframework.resolve()):
+            raise RuntimeError("macOS framework slice is missing or escapes the XCFramework")
+        run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(framework)])
+        run(["codesign", "--verify", "--deep", "--strict", str(framework)])
+
+
 def create_xcframework(
     module_name: str,
     args: list[str],
@@ -185,6 +205,7 @@ def create_xcframework(
     if xcframework.exists():
         shutil.rmtree(xcframework)
     run(["xcodebuild", "-create-xcframework", *args, "-output", str(xcframework)])
+    sign_macos_framework_slices(xcframework)
     output_zip = output_dir / f"litert-lm-native-apple-{module_name}-xcframework-{tag}.zip"
     zip_xcframework(xcframework, output_zip)
     print(f"Wrote {output_zip}", flush=True)
