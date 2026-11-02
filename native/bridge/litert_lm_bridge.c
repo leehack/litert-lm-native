@@ -1,8 +1,11 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "litert_lm_bridge.h"
 
 // LiteRtLmBridge hosts downstream FFI bridge helpers. The stream_proxy_* exports
 // preserve the legacy four-field callback ABI used by downstream FFI clients.
@@ -92,6 +95,7 @@ typedef struct stream_proxy_context {
   stream_proxy_dart_callback_t dart_callback;
   void *dart_data;
   int32_t finish_reason;
+  atomic_int allocation_failure;
 } stream_proxy_context_t;
 
 static char *stream_proxy_copy_string(const char *value) {
@@ -148,6 +152,10 @@ static void stream_proxy_forward(
 
   char *chunk_copy = stream_proxy_copy_string(chunk);
   char *error_copy = stream_proxy_copy_string(error_message);
+  if ((chunk != NULL && chunk_copy == NULL) ||
+      (error_message != NULL && error_copy == NULL)) {
+    atomic_store_explicit(&context->allocation_failure, 1, memory_order_release);
+  }
   context->dart_callback(
       context->dart_data,
       chunk_copy,
@@ -168,6 +176,10 @@ static void stream_proxy_forward(
 
   char *chunk_copy = stream_proxy_copy_string(chunk);
   char *error_copy = stream_proxy_copy_string(error_message);
+  if ((chunk != NULL && chunk_copy == NULL) ||
+      (error_message != NULL && error_copy == NULL)) {
+    atomic_store_explicit(&context->allocation_failure, 1, memory_order_release);
+  }
   context->dart_callback(
       context->dart_data,
       chunk_copy,
@@ -202,6 +214,7 @@ LITERT_LM_BRIDGE_EXPORT void *stream_proxy_create(
     return NULL;
   }
 
+  atomic_init(&context->allocation_failure, 0);
   context->dart_callback = dart_callback;
   context->dart_data = dart_data;
   *out_proxy_callback = stream_proxy_forward;
@@ -219,6 +232,19 @@ LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_get_finish_reason(
     return STREAM_PROXY_FINISH_REASON_UNKNOWN;
   }
   return ((const stream_proxy_context_t *)callback_data)->finish_reason;
+}
+
+LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_allocation_failure_abi_version(void) {
+  return 1;
+}
+
+LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_has_allocation_failure(
+    const void *callback_data) {
+  if (callback_data == NULL) {
+    return 1;
+  }
+  const stream_proxy_context_t *context = callback_data;
+  return atomic_load_explicit(&context->allocation_failure, memory_order_acquire);
 }
 
 LITERT_LM_BRIDGE_EXPORT void stream_proxy_delete(void *callback_data) {

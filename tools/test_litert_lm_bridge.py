@@ -46,6 +46,26 @@ class LiteRtLmBridgeTest(unittest.TestCase):
                                 str(source), "-o", str(executable)], check=True)
                 subprocess.run([str(executable)], check=True)
 
+    def test_callback_copy_allocation_failures(self) -> None:
+        compiler = shutil.which("cc") or shutil.which("clang")
+        if compiler is None:
+            self.skipTest("A C compiler is required for bridge validation")
+        modes = ((), ("LITERT_LM_STREAM_CHUNK_API",),
+                 ("LITERT_LM_STREAM_CHUNK_API", "LITERT_LM_FINISH_REASON_API"),
+                 ("LITERT_LM_STREAM_CHUNK_API", "LITERT_LM_FINISH_REASON_API",
+                  "LITERT_LM_C_API_V1"))
+        for defines in modes:
+            with self.subTest(defines=defines), tempfile.TemporaryDirectory() as temp:
+                executable = Path(temp) / "allocation_test"
+                subprocess.run([
+                    compiler, "-std=c11", "-Wall", "-Wextra", "-Werror",
+                    "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
+                    *(f"-D{define}=1" for define in defines),
+                    str(BRIDGE_SOURCE.with_name("litert_lm_bridge_allocation_test.c")),
+                    "-o", str(executable),
+                ], check=True)
+                subprocess.run([str(executable)], check=True)
+
     def test_legacy_callback_adapter(self) -> None:
         self._compile_and_run(stream_chunk_api=False)
 

@@ -46,6 +46,8 @@ BRIDGE_SYMBOLS = [
     b"stream_proxy_free_string",
     b"stream_proxy_finish_reason_abi_version",
     b"stream_proxy_get_finish_reason",
+    b"stream_proxy_allocation_failure_abi_version",
+    b"stream_proxy_has_allocation_failure",
 ]
 
 V0_16_ASR_BRIDGE_SYMBOLS = [
