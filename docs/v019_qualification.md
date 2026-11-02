@@ -1,6 +1,6 @@
 # LiteRT-LM v0.19.0 owner qualification
 
-Upstream tag `v0.19.0` is `771b06e1a2c7f70a399a718599109facf37e38fd` (LiteRT
+Upstream tag `v0.19.0` is `83ce6067f2e2a3fb697556928f93936693ded971` (LiteRT
 `dcb657e8`, TensorFlow `4f8e6d47`, XNNPACK `28d1fc6d`). Issue
 [#75](https://github.com/leehack/litert-lm-native/issues/75) was written against
 raw `main`; these differ at the tag:
@@ -10,6 +10,20 @@ raw `main`; these differ at the tag:
 - Not in the tag: `c57b9ae0` and `769af92e`, so it still ships prebuilt
   `libLiteRt`, accelerators and Dawn; `a48771d2` (Windows FD loading); `b3934770`
   (zero-state, upstream #3945).
+
+## Qualification source refresh
+
+The upstream v0.19.0 tag now resolves to `83ce6067` rather than the original
+`771b06e1`. The intervening commit updates only upstream `Package.swift` binary
+URLs/checksums and README release notes. Runtime sources, C headers, prebuilt
+pins and build declarations are unchanged; owner packaging does not consume
+upstream `Package.swift`.
+
+Earlier owner candidate `94db8c5` artifacts and qualification receipts remain
+bound to `771b06e1`; they must not be relabeled as evidence for this refreshed
+source identity. Rebuild every candidate platform and repeat artifact/model
+qualification under the refreshed owner heads before publication or adoption.
+The exact-tag verification gate remains enabled.
 
 ## Migration
 
