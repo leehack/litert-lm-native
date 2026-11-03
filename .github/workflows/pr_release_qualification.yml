@@ -92,12 +92,21 @@ jobs:
           path: asr-upstream
           sparse-checkout: |
             omni
+            c
           persist-credentials: false
       # The stock Homebrew formula is unversioned; the qualifier guards every
       # required .pc name, records versions and compiles the actual stage API.
       # See docs/asr_untimed_overlap.md for the dependency policy.
       - name: Install model-free replay dependencies
-        run: brew install abseil pkg-config protobuf
+        run: brew install abseil pkg-config protobuf openssl@3
+      - name: Qualify Android GPU preflight policy and C API refusal ordering
+        env:
+          LITERT_GPU_SAFETY_SOURCE: asr-upstream
+        run: |
+          export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          pkg-config --exists openssl
+          command -v clang++
+          python3 -m unittest discover -s tools -p test_android_gpu_safety.py
       - name: Qualify v0.19 push-source cancellation, reset and backpressure
         run: |
           python3 tools/qualify_asr_omni_input.py \

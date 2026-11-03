@@ -217,6 +217,12 @@ Pull-request qualification targets upstream `v0.19.0` at
 `83ce6067f2e2a3fb697556928f93936693ded971`, whose C API 1.0 breaks every
 pre-1.0 consumer. See the [v0.19 migration and carried-patch
 decisions](docs/v019_qualification.md).
+
+The v0.19 source candidate conservatively refuses the exact Qwen3-0.6B fixture
+on the documented Adreno 750 driver tuple, and when this fixture's GPU safety
+facts are unavailable or ambiguous. It returns an actionable CPU remedy before
+engine creation. This source guard still needs current-candidate device
+qualification; it does not repair the opaque GPU delegate or close owner #51.
 This qualification baseline
 does not publish a release or move downstream pins. The iOS accelerator path
 patch applies to both the v0.17 and v0.18 LiteRT registry layouts, preserving

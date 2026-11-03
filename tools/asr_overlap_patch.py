@@ -3,6 +3,7 @@ import hashlib
 import re
 from pathlib import Path
 
+from android_gpu_safety_patch import manifest as android_gpu_safety_manifest
 from asr_litertlm_container_patch import container_patch_manifest
 from litert_cpu_options_identifier_patch import cpu_options_identifier_patch_manifest
 from stream_finish_reason_patch import finish_reason_patch_manifest
@@ -74,6 +75,7 @@ def source_patch_manifest(compatibility_tag: str) -> list[dict]:
     }]
     return [*overlap, *container_patch_manifest(compatibility_tag),
         *finish_reason_patch_manifest(compatibility_tag),
+        *android_gpu_safety_manifest(compatibility_tag),
         *workspace_build_patch_manifest(compatibility_tag),
         *xnnpack_pf32_patch_manifest(compatibility_tag),
         *xnnpack_qc4w_patch_manifest(compatibility_tag),
