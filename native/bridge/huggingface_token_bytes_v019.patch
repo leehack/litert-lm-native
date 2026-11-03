@@ -1,0 +1,146 @@
+--- a/support/tokenizer/tokenizer.h
++++ b/support/tokenizer/tokenizer.h
+@@ -80,6 +80,17 @@
+   // Returns the list of tokens in the tokenizer.
+   virtual std::vector<std::string> GetTokens() const = 0;
+ 
++  // Returns llguidance vocabulary entries in token-ID order. Byte-level
++  // tokenizers override this with lossless bytes, including NUL and partial
++  // UTF-8. Legacy providers retain their existing raw-token mapping.
++  virtual absl::StatusOr<std::vector<std::string>> GetTokenBytes() const {
++    return GetTokens();
++  }
++
++  // Identifies tokenizer-declared control tokens by ID, independently of their
++  // spelling. Constraint-provider configuration can declare more special tokens.
++  virtual bool IsSpecialToken(int) const { return false; }
++
+   // Returns the size of the vocabulary.
+   virtual int GetVocabSize() const = 0;
+ 
+--- a/support/tokenizer/huggingface_tokenizer.h
++++ b/support/tokenizer/huggingface_tokenizer.h
+@@ -25,6 +25,7 @@
+ #include "absl/strings/string_view.h"  // from @com_google_absl
+ #include "absl/types/span.h"  // from @com_google_absl
+ #include "support/tokenizer/tokenizer.h"
++#include "bridge/huggingface_token_bytes.h"
+ 
+ namespace litert::support {
+ 
+@@ -62,15 +63,23 @@
+ 
+   std::vector<std::string> GetTokens() const override;
+ 
++  absl::StatusOr<std::vector<std::string>> GetTokenBytes() const override;
++
++  bool IsSpecialToken(int token_id) const override {
++    return token_bytes_.IsSpecialToken(token_id);
++  }
++
+   int GetVocabSize() const override;
+ 
+  private:
+   // Constructor.
+-  explicit HuggingFaceTokenizer(TokenizerHandle absl_nonnull handle)
+-      : handle_(handle) {};
++  explicit HuggingFaceTokenizer(TokenizerHandle absl_nonnull handle,
++                                const std::string& json)
++      : handle_(handle), token_bytes_(json) {};
+ 
+   // HuggingFace processor.
+   TokenizerHandle absl_nonnull handle_;
++  HuggingFaceTokenBytes token_bytes_;
+ };
+ 
+ }  // namespace litert::support
+--- a/support/tokenizer/huggingface_tokenizer.cc
++++ b/support/tokenizer/huggingface_tokenizer.cc
+@@ -51,7 +51,7 @@
+   if (!handle) {
+     return absl::InvalidArgumentError("Failed to create tokenizer from JSON.");
+   }
+-  return absl::WrapUnique(new HuggingFaceTokenizer(handle));
++  return absl::WrapUnique(new HuggingFaceTokenizer(handle, json));
+ }
+ 
+ // Encodes the given text into a TensorBuffer of token ids.
+@@ -107,6 +107,19 @@
+   return tokens;
+ }
+ 
++absl::StatusOr<std::vector<std::string>> HuggingFaceTokenizer::GetTokenBytes() const {
++  if (!token_bytes_.supported()) {
++    return absl::UnimplementedError(
++        "HuggingFace constrained decoding requires a ByteLevel decoder; "
++        "this tokenizer decoder has no lossless token-byte adapter.");
++  }
++  auto tokens = GetTokens();
++  for (size_t id = 0; id < tokens.size(); ++id) {
++    tokens[id] = token_bytes_.TokenBytes(tokens[id], id);
++  }
++  return tokens;
++}
++
+ int HuggingFaceTokenizer::GetVocabSize() const {
+   size_t size = 0;
+   tokenizers_get_vocab_size(handle_, &size);
+--- a/support/tokenizer/BUILD
++++ b/support/tokenizer/BUILD
+@@ -97,6 +97,7 @@
+     hdrs = ["huggingface_tokenizer.h"],
+     linkstatic = 1,
+     deps = [
++        "//bridge:huggingface_token_bytes",
+         ":tokenizer",
+         "@com_google_absl//absl/base:core_headers",
+         "@com_google_absl//absl/base:nullability",
+@@ -114,6 +115,7 @@
+     defines = ["ENABLE_HUGGINGFACE_TOKENIZER"],
+     linkstatic = 1,
+     deps = [
++        "//bridge:huggingface_token_bytes",
+         ":tokenizer",
+         "@com_google_absl//absl/base:nullability",
+         "@com_google_absl//absl/debugging:leak_check",  # See b/402708346
+--- a/runtime/components/constrained_decoding/llg_constraint_provider.cc
++++ b/runtime/components/constrained_decoding/llg_constraint_provider.cc
+@@ -67,7 +67,13 @@
+     return absl::InvalidArgumentError("LlGuidanceConfig::eos_id must be set.");
+   }
+ 
+-  std::vector<std::string> tokens = tokenizer.GetTokens();
++  const auto raw_tokens = tokenizer.GetTokens();
++  auto token_bytes_or = tokenizer.GetTokenBytes();
++  if (!token_bytes_or.ok()) return token_bytes_or.status();
++  const auto& tokens = *token_bytes_or;
++  if (tokens.size() != raw_tokens.size()) {
++    return absl::InvalidArgumentError("Token bytes must preserve vocabulary IDs.");
++  }
+ 
+   absl::flat_hash_set<absl::string_view> special_tokens_set(
+       llg_config.special_tokens.begin(), llg_config.special_tokens.end());
+@@ -77,15 +83,19 @@
+   size_t total_size = 0;
+ 
+   token_lens.reserve(tokens.size());
+-  for (const auto& token : tokens) {
+-    bool is_special = special_tokens_set.contains(token);
++  for (size_t id = 0; id < tokens.size(); ++id) {
++    bool is_special = tokenizer.IsSpecialToken(id) ||
++                      special_tokens_set.contains(raw_tokens[id]);
++    const auto& token = is_special ? raw_tokens[id] : tokens[id];
+     token_lens.push_back(token.size() + (is_special ? 1 : 0));
+     total_size += token.size() + (is_special ? 1 : 0);
+   }
+ 
+   token_bytes.reserve(total_size);
+-  for (const auto& token : tokens) {
+-    bool is_special = special_tokens_set.contains(token);
++  for (size_t id = 0; id < tokens.size(); ++id) {
++    bool is_special = tokenizer.IsSpecialToken(id) ||
++                      special_tokens_set.contains(raw_tokens[id]);
++    const auto& token = is_special ? raw_tokens[id] : tokens[id];
+     if (is_special) {
+       // Special tokens need to be prefixed with 0xFF.
+       // https://github.com/guidance-ai/llguidance/blob/main/docs/special_tokens.md

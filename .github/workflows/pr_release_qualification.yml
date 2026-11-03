@@ -93,12 +93,14 @@ jobs:
           sparse-checkout: |
             omni
             c
+            support/tokenizer
+            runtime/components/constrained_decoding
           persist-credentials: false
       # The stock Homebrew formula is unversioned; the qualifier guards every
       # required .pc name, records versions and compiles the actual stage API.
       # See docs/asr_untimed_overlap.md for the dependency policy.
       - name: Install model-free replay dependencies
-        run: brew install abseil pkg-config protobuf openssl@3
+        run: brew install abseil pkg-config protobuf openssl@3 nlohmann-json
       - name: Qualify Android GPU preflight policy and C API refusal ordering
         env:
           LITERT_GPU_SAFETY_SOURCE: asr-upstream
@@ -107,6 +109,10 @@ jobs:
           pkg-config --exists openssl
           command -v clang++
           python3 -m unittest discover -s tools -p test_android_gpu_safety.py
+      - name: Qualify HF grammar bytes against exact tokenizer and provider sources
+        run: |
+          python3 tools/qualify_huggingface_token_bytes.py \
+            --source-root asr-upstream --work-dir token-byte-qualification --mutations
       - name: Qualify v0.19 push-source cancellation, reset and backpressure
         run: |
           python3 tools/qualify_asr_omni_input.py \
@@ -119,7 +125,9 @@ jobs:
         if: always()
         with:
           name: asr-model-free-qualification
-          path: asr-qualification/results.json
+          path: |
+            asr-qualification/results.json
+            token-byte-qualification/results.json
           if-no-files-found: warn
 
   build:

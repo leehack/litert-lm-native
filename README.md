@@ -357,6 +357,14 @@ function calling remain enabled. Artifact, model, and minimum-OS qualification
 is still required before claiming iOS 16.4 compatibility or updating consumers.
 See [the precise platform restriction and qualification gates](docs/platform_strategy.md#provider-free-ios-source-build-candidate).
 
+### Hugging Face constrained decoding
+
+Source-built v0.19 runtimes adapt an explicit ByteLevel tokenizer's vocabulary to
+lossless grammar bytes, including tokens that split a UTF-8 character. Other
+Hugging Face decoder configurations return an unsupported status when creating
+constraints. This is separate from the original Qwen model tokenizer repair;
+see [the carried fix and qualification limits](docs/upstream_patch_audit.md#100-workaround-tracking-hugging-face-grammar-token-bytes).
+
 ### Bridge callback-copy failures
 
 Probe `stream_proxy_allocation_failure_abi_version()` and require version 1
