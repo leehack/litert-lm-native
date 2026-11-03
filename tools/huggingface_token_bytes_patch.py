@@ -26,7 +26,11 @@ SOURCES = {
     ),
     "runtime/components/constrained_decoding/llg_constraint_provider.cc": (
         "91e0174e024b8787cdf83b21ca7eaae0718ba140e12f6e7a82bbd6193078e5ce",
-        "b15f008044affb9d1b9cd04b21c01a9adf7c13d9353b167983aab5602e24e20f",
+        "ce7aef5712d1d3c6eaa632a964f034776aa81216cbdbd8278dec3793bb484159",
+    ),
+    "runtime/components/constrained_decoding/BUILD": (
+        "9ee6588548f9ec54ed1418ff20945e289b60308606bee27e7ad432944b969c04",
+        "b16dc8bc86997a7a276c70afc75ad6be1ba70938f31ef4db53bfcc6a9025dd7d",
     ),
 }
 

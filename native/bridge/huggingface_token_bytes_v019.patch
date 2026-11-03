@@ -105,7 +105,78 @@
          "@com_google_absl//absl/debugging:leak_check",  # See b/402708346
 --- a/runtime/components/constrained_decoding/llg_constraint_provider.cc
 +++ b/runtime/components/constrained_decoding/llg_constraint_provider.cc
-@@ -67,7 +67,13 @@
+@@ -35,9 +35,56 @@
+ #include "runtime/components/constrained_decoding/llg_constraint.h"
+ #include "runtime/components/constrained_decoding/llg_constraint_config.h"
+ #include "llguidance.h"
++#include "nlohmann/json.hpp"  // from @nlohmann_json
+ 
+ namespace litert::lm {
+ namespace {
++
++bool JsonNestingWithinPreprocessingLimit(absl::string_view text) {
++  constexpr size_t kMaxDepth = 128;
++  size_t depth = 0;
++  bool in_string = false;
++  bool escaped = false;
++  for (const char ch : text) {
++    if (in_string) {
++      if (escaped) escaped = false;
++      else if (ch == '\\') escaped = true;
++      else if (ch == '"') in_string = false;
++    } else if (ch == '"') {
++      in_string = true;
++    } else if (ch == '{' || ch == '[') {
++      if (++depth > kMaxDepth) return false;
++    } else if (ch == '}' || ch == ']') {
++      if (depth == 0) return false;
++      --depth;
++    }
++  }
++  return true;
++}
++
++std::string WithDefaultJsonWhitespace(absl::string_view text) {
++  // Deep DOM insertion/serialization/destruction can exhaust the C++ stack.
++  // Let llguidance validate overdeep input unchanged before building a DOM.
++  if (!JsonNestingWithinPreprocessingLimit(text)) return std::string(text);
++  auto schema = nlohmann::ordered_json::parse(text.begin(), text.end(), nullptr,
++                                             false);
++  if (schema.is_boolean()) {
++    schema = nlohmann::ordered_json{{"allOf", {schema}}};
++  }
++  if (!schema.is_object()) return std::string(text);
++  if (!schema.contains("x-guidance")) {
++    schema["x-guidance"] = nlohmann::ordered_json::object();
++  }
++  auto& options = schema["x-guidance"];
++  if (!options.is_object() || options.contains("whitespace_pattern") ||
++      options.contains("whitespace_flexible")) {
++    return std::string(text);
++  }
++  // An unlimited skip lets greedy decoding spend the entire output budget on
++  // insignificant whitespace. The once-per-gap bound preserves JSON values.
++  options["whitespace_pattern"] = R"([\x20\x0A\x0D\x09]{1,8})";
++  return schema.dump();
++}
+ 
+ ::LlgConstraint* CreateLlgConstraint(LlgConstraintInit* llg_constraint_init,
+                                      absl::string_view constraint_string,
+@@ -46,9 +93,10 @@
+     case LlgConstraintType::kRegex:
+       return llg_new_constraint_regex(llg_constraint_init,
+                                       constraint_string.data());
+-    case LlgConstraintType::kJsonSchema:
+-      return llg_new_constraint_json(llg_constraint_init,
+-                                     constraint_string.data());
++    case LlgConstraintType::kJsonSchema: {
++      const std::string schema = WithDefaultJsonWhitespace(constraint_string);
++      return llg_new_constraint_json(llg_constraint_init, schema.c_str());
++    }
+     case LlgConstraintType::kLark:
+       return llg_new_constraint_lark(llg_constraint_init,
+                                      constraint_string.data());
+@@ -67,7 +115,13 @@
      return absl::InvalidArgumentError("LlGuidanceConfig::eos_id must be set.");
    }
  
@@ -120,7 +191,7 @@
  
    absl::flat_hash_set<absl::string_view> special_tokens_set(
        llg_config.special_tokens.begin(), llg_config.special_tokens.end());
-@@ -77,15 +83,19 @@
+@@ -77,15 +131,19 @@
    size_t total_size = 0;
  
    token_lens.reserve(tokens.size());
@@ -144,7 +215,7 @@
      if (is_special) {
        // Special tokens need to be prefixed with 0xFF.
        // https://github.com/guidance-ai/llguidance/blob/main/docs/special_tokens.md
-@@ -130,7 +140,9 @@
+@@ -119,7 +177,9 @@
        .tok_eos = *llg_config.eos_id,
        .token_lens = token_lens.data(),
        .token_bytes = token_bytes.data(),
@@ -155,3 +226,13 @@
        .tokenize_fn = tokenize_fn,
        .tokenize_user_data = &tokenizer,
    };
+--- a/runtime/components/constrained_decoding/BUILD
++++ b/runtime/components/constrained_decoding/BUILD
+@@ -336,6 +336,7 @@
+         "//conditions:default": [],
+     }),
+     deps = [
++        "@nlohmann_json//:json",
+         ":constraint",
+         ":constraint_provider",
+         ":constraint_provider_config",

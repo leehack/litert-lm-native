@@ -248,13 +248,14 @@ also reject a mutation restoring false.
 Primary contract: [llguidance 1.9.1 tokenizer initialization](https://docs.rs/crate/llguidance/1.9.1/source/llguidance.h)
 and [tokenizers-cpp v0.1.1 text encoding](https://github.com/mlc-ai/tokenizers-cpp/blob/v0.1.1/rust/src/lib.rs).
 
-The build fails closed on changes to any of the five audited source preimages;
+The build fails closed on changes to any of the six audited source preimages;
 release `sourcePatches` records their patch and pre/postimage hashes. Newer tags
 require an explicit carry or retirement decision. The model-free CI gate compiles
 both actual patched HF and provider sources with raw-vocabulary/tokenizer-init
 seams, checks byte lengths and special markers, and kills raw-vocabulary,
 partial-UTF-8 replacement, special-spelling and text-callback contract regression
-mutations. It does not emulate grammar execution or establish model-backed release qualification.
+mutations. The default source controls do not execute the grammar or establish
+model-backed release qualification.
 
 Local full-vocabulary verification accepts a tokenizer extracted read-only from
 the supported 613,722,264-byte Qwen3 artifact (`c5f39b41…`). Its tokenizer SHA-256
@@ -269,5 +270,75 @@ python3 tools/qualify_huggingface_token_bytes.py \
 ```
 
 Retire this carry only after a tagged upstream byte-equivalent correction with
-the UTF-8 callback contract passes these controls and the unchanged supported-model schema qualifier, including
-literal Unicode keys/values, succeeds against the packaged runtime.
+the UTF-8 callback contract and bounded-default formatting policy pass these
+controls, and the unchanged supported-model schema qualifier, including literal
+Unicode keys/values, succeeds against the packaged runtime.
+
+### Default JSON formatting progress
+
+The PR103 Mac diagnostic primary (`1a29401a…`) fixed the native abort but the
+unchanged schema qualifier still failed: after the required `"empty":` key,
+498 whitespace bytes occupied the remaining response. The original failure,
+fixed 128-token budget, schema, adversarial BANANA prompt and typed oracle are
+retained. This is a separate formatting-progress failure, not another UTF-8
+callback defect.
+
+The pinned llguidance 1.9.1 compiler defaults to the unlimited JSON skip regex
+`[\x20\x0A\x0D\x09]+`. Model-free replay through that exact packaged grammar
+and extracted supported-model tokenizer admits the observed byte path; `null`
+and its prefix tokens remain legal throughout, while incorrect types and early
+EOS are forbidden. Appending `null}` completes. Greedy longest-token and canonical
+HF re-tokenizations both pass; actual generation token IDs and logits were not
+captured, so these are byte-path controls, not a reconstruction of those values.
+
+The provider now applies the documented once-per-gap pattern
+`[\x20\x0A\x0D\x09]{1,8}` as its JSON-schema default. Ordered parsing preserves
+property order. Explicit caller `whitespace_pattern` or `whitespace_flexible`
+options, including unlimited formatting, retain their original input bytes.
+Other `x-guidance` options retain their values. Boolean schemas retain their
+meaning through an `allOf` wrapper; malformed schemas still reach llguidance's
+existing validation. Regex and Lark constraints do not change. This deliberately
+restricts insignificant JSON formatting and does not relax or rewrite schema
+values, literal string whitespace, types or Unicode.
+
+Compiled actual-provider controls preserve these contracts and kill mutations
+restoring unlimited whitespace, overwriting caller options, sorting properties
+and stripping literal spaces. The opt-in `grammar_runtime_test.cc` links actual
+patched HF/provider sources to packaged llguidance and tokenizers, replacing only
+the unused C++ constraint wrapper to access its C handle. It verifies eight
+successive spaces are legal, the ninth is forbidden while `null` remains legal,
+the retained loop is blocked, explicit unlimited formatting is respected, and a
+Unicode string containing 20 literal spaces is unchanged. No weights are loaded.
+This does not prove inference will complete, nor guarantee completion for every
+schema within a caller's token budget.
+
+Before constructing a DOM, the provider scans container nesting with bounded
+state and no recursion, respecting quoted strings and escapes. Inputs deeper
+than 128 containers pass unchanged to llguidance's existing validation; this is
+a preprocessing bound, not a new public schema restriction. Independent review
+found the original preprocessing could SIGSEGV on 200,000 nested `not` objects
+(1,600,002 bytes), while the parent provider returned its existing INTERNAL
+recursion-limit error. The depth guard preserves that controlled error before
+any deep DOM insertion, serialization or destruction. Native subprocess controls
+cover nesting at the boundary and 200,000 `not`/100,000 `allOf` wrappers; source
+controls also preserve long quoted delimiters and escaped quotes, and remove the
+guard as a genuine regression mutation. These tests load no model weights.
+
+
+To repeat those optional host-linkable packaged grammar controls, add these
+arguments to the full-vocabulary command above (all four are required):
+
+```bash
+  --runtime-library /path/to/libLiteRtLm.dylib \
+  --llguidance-include /path/to/exact/llguidance-1.9.1 \
+  --schema-json /path/to/unchanged-schema.json \
+  --observed-output /path/to/retained-response.bin
+```
+
+The result records each input's SHA-256. The input is the extracted tokenizer,
+not model weights. Primary contract: [pinned llguidance JSON whitespace handling](https://github.com/guidance-ai/llguidance/blob/f0971424ec072d3e4d4196bcc7f31a2f60527df9/docs/json_schema.md#whitespace-handling).
+Existing [owner #100](https://github.com/leehack/litert-lm-native/issues/100)
+tracks the remaining packaged qualifier. Retire the formatting part only after
+a tagged upstream equivalent preserves explicit overrides, literal strings and
+controlled overdeep-input errors,
+passes the model-free controls, and passes the unchanged packaged-model qualifier.

@@ -109,6 +109,93 @@ int main(int argc, char** argv) {
       Check(captured_llg_tokens[id] == expected,
             "actual provider bytes and special prefix");
     }
+    std::cout << "DEEP_SCHEMA_BEGIN\n" << std::flush;
+    for (const size_t depth : {200000, 128, 129}) {
+      std::string deep;
+      deep.reserve(depth * 8 + 2);
+      for (size_t index = 0; index < depth; ++index) deep += R"({"not":)";
+      deep += "{}";
+      deep.append(depth, '}');
+      auto constraint = (*provider)->CreateConstraint(
+          litert::lm::LlGuidanceConstraintArg{
+              litert::lm::LlgConstraintType::kJsonSchema, deep});
+      Check(constraint.ok() && captured_constraint == deep,
+            "overdeep schema must reach native validation unchanged");
+    }
+    auto create_constraint = [&](const std::string& schema) {
+      auto constraint = (*provider)->CreateConstraint(
+          litert::lm::LlGuidanceConstraintArg{
+              litert::lm::LlgConstraintType::kJsonSchema, schema});
+      Check(constraint.ok() && captured_constraint_kind == "json",
+            "actual provider JSON boundary");
+      return nlohmann::ordered_json::parse(captured_constraint, nullptr, false);
+    };
+    const std::string original_schema =
+        R"({"type":"object","properties":{"z-café":{"type":"string","const":"日本 😊                    end"},"a":{"type":"null","const":null}},"required":["z-café","a"],"additionalProperties":false})";
+    const auto original_json = nlohmann::ordered_json::parse(original_schema);
+    auto bounded_schema = create_constraint(original_schema);
+    Check(bounded_schema["x-guidance"]["whitespace_pattern"] ==
+              R"([\x20\x0A\x0D\x09]{1,8})",
+          "default JSON whitespace must be bounded");
+    Check(bounded_schema["properties"].begin().key() == "z-café",
+          "JSON property order retained");
+    bounded_schema.erase("x-guidance");
+    Check(bounded_schema == original_json,
+          "schema semantics and literal string whitespace retained");
+    for (const auto& options : {
+             R"({"whitespace_flexible":true})",
+             R"({"whitespace_flexible":false})",
+             R"({"whitespace_pattern":"[ ]{1,32}"})",
+             R"({"whitespace_pattern":null})",
+             R"({"whitespace_pattern":"[ ]+","whitespace_flexible":false})"}) {
+      auto input = original_json;
+      input["x-guidance"] = nlohmann::ordered_json::parse(options);
+      const auto output = create_constraint(input.dump());
+      Check(output == input, "explicit caller whitespace option retained");
+      Check(captured_constraint == input.dump(),
+            "explicit caller schema bytes retained");
+    }
+    auto input = original_json;
+    input["x-guidance"] = {{"coerce_one_of", false}, {"lenient", false}};
+    auto output = create_constraint(input.dump());
+    Check(output["x-guidance"]["whitespace_pattern"] ==
+              R"([\x20\x0A\x0D\x09]{1,8})",
+          "other caller options still receive bounded formatting default");
+    output["x-guidance"].erase("whitespace_pattern");
+    Check(output == input, "non-formatting caller options retained");
+    for (const bool value : {true, false}) {
+      const auto output = create_constraint(value ? "true" : "false");
+      Check(output["allOf"] == nlohmann::ordered_json::array({value}),
+            "boolean schema semantics retained");
+      Check(output["x-guidance"]["whitespace_pattern"] ==
+                R"([\x20\x0A\x0D\x09]{1,8})",
+            "boolean schema bounded default");
+    }
+    for (const auto& invalid : {"{", "7", R"({"x-guidance":null})"}) {
+      create_constraint(invalid);
+      Check(captured_constraint == invalid,
+            "malformed or invalid options reach existing llguidance validation");
+    }
+    for (const auto& type : {litert::lm::LlgConstraintType::kRegex,
+                             litert::lm::LlgConstraintType::kLark}) {
+      auto constraint = (*provider)->CreateConstraint(
+          litert::lm::LlGuidanceConstraintArg{type, "[ ]+"});
+      Check(constraint.ok() && captured_constraint == "[ ]+" &&
+                captured_constraint_kind != "json",
+            "non-JSON grammar formatting unchanged");
+    }
+    for (const size_t slashes : {0, 1, 2, 3}) {
+      std::string prefix(slashes, '\\');
+      prefix += '"';
+      const std::string literal = prefix + std::string(2000, '[') + "日本 😊";
+      const auto input = nlohmann::ordered_json{{"type", "string"}, {"const", literal}};
+      auto output = create_constraint(input.dump());
+      Check(output["x-guidance"]["whitespace_pattern"] ==
+                R"([\x20\x0A\x0D\x09]{1,8})",
+            "quoted delimiters and escaped quotes do not count as JSON nesting");
+      output.erase("x-guidance");
+      Check(output == input, "quoted nesting control retains literal bytes");
+    }
     config["decoder"] = {{"type", "WordPiece"}};
     auto unsupported = HuggingFaceTokenizer::CreateFromJson(config.dump());
     Check(unsupported.ok(), "ordinary HF tokenizer still creates");

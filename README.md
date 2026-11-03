@@ -365,6 +365,14 @@ Hugging Face decoder configurations return an unsupported status when creating
 constraints. This is separate from the original Qwen model tokenizer repair;
 see [the carried fix and qualification limits](docs/upstream_patch_audit.md#100-workaround-tracking-hugging-face-grammar-token-bytes).
 
+JSON-schema constraints in newly source-built v0.19 runtimes allow at most eight
+insignificant whitespace characters per JSON gap by default, preventing a model
+from using its entire output budget on formatting. Literal string whitespace and
+Unicode are unchanged. A top-level `x-guidance.whitespace_pattern` or
+`x-guidance.whitespace_flexible` option retains the caller's explicit formatting
+policy, including unlimited whitespace; regex and Lark constraints are unchanged.
+This bounds formatting, not arbitrary schema size or model completion time.
+
 ### Bridge callback-copy failures
 
 Probe `stream_proxy_allocation_failure_abi_version()` and require version 1

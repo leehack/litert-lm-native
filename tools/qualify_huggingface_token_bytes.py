@@ -79,7 +79,15 @@ def mutation_controls(compiler: str, cflags: list[str], work_dir: Path) -> list[
 
 
 def qualify(work_dir: Path, tokenizer_json: Path | None = None,
-            source_root: Path | None = None, mutations: bool = False) -> dict:
+            source_root: Path | None = None, mutations: bool = False, *,
+            runtime_library: Path | None = None,
+            llguidance_include: Path | None = None,
+            schema_json: Path | None = None,
+            observed_output: Path | None = None) -> dict:
+    runtime_inputs = (runtime_library, llguidance_include, schema_json, observed_output)
+    if any(runtime_inputs) and (not all(runtime_inputs) or not source_root or not tokenizer_json):
+        raise ValueError("Packaged grammar controls require source, tokenizer, runtime library, "
+                         "llguidance include directory, schema JSON and retained output")
     work_dir.mkdir(parents=True, exist_ok=True)
     compiler = shutil.which("clang++") or shutil.which("c++")
     if not compiler:
@@ -141,6 +149,7 @@ def qualify(work_dir: Path, tokenizer_json: Path | None = None,
         subprocess.run([str(source_binary.resolve()), *command[1:]],
                        check=True, timeout=30)
         result["patchedHuggingFaceSourceControls"] = "passed"
+        result["jsonWhitespaceSourceControls"] = "passed"
         baseline_binary = work_dir / "raw_provider_cause_control"
         baseline_command = [str(source_root / "runtime/components/constrained_decoding/llg_constraint_provider.cc")
                             if arg == str(patched / "runtime/components/constrained_decoding/llg_constraint_provider.cc")
@@ -154,23 +163,94 @@ def qualify(work_dir: Path, tokenizer_json: Path | None = None,
         result["originalProviderCauseControl"] = "failed-as-expected"
         if mutations:
             provider = patched / "runtime/components/constrained_decoding/llg_constraint_provider.cc"
-            mutant_source = work_dir / "bytes_callback_provider.cc"
             original = provider.read_text()
-            mutant = original.replace(".tokenize_assumes_string = true,",
-                                      ".tokenize_assumes_string = false,")
-            if mutant == original:
-                raise RuntimeError("UTF-8 callback mutation did not change provider")
-            mutant_source.write_text(mutant)
-            mutant_binary = work_dir / "bytes_callback_provider"
-            mutant_command = [str(mutant_source) if arg == str(provider)
-                              else str(mutant_binary) if arg == str(source_binary)
-                              else arg for arg in source_command]
-            subprocess.run(mutant_command, check=True, timeout=120)
-            failure = subprocess.run([str(mutant_binary.resolve()), *command[1:]],
-                                     capture_output=True, text=True, timeout=30)
-            if failure.returncode == 0 or "text-only callback requires" not in failure.stderr:
-                raise RuntimeError("UTF-8 callback contract mutation survived")
-            result["mutationsKilled"].append("text-callback-advertises-arbitrary-bytes")
+            provider_mutations = {
+                "unbounded-schema-preprocessing-depth": (
+                    original.replace("if (!JsonNestingWithinPreprocessingLimit(text)) return std::string(text);",
+                                     "// Regression control: omit preprocessing depth guard."),
+                    "overdeep schema must reach native validation unchanged"),
+                "text-callback-advertises-arbitrary-bytes": (
+                    original.replace(".tokenize_assumes_string = true,",
+                                     ".tokenize_assumes_string = false,"),
+                    "text-only callback requires"),
+                "unbounded-default-json-whitespace": (
+                    original.replace(r"[\x20\x0A\x0D\x09]{1,8}",
+                                     r"[\x20\x0A\x0D\x09]+"),
+                    "default JSON whitespace must be bounded"),
+                "caller-whitespace-options-overwritten": (
+                    original.replace('!options.is_object() || options.contains("whitespace_pattern") ||\n'
+                                     '      options.contains("whitespace_flexible")',
+                                     '!options.is_object()'),
+                    "explicit caller whitespace option retained"),
+                "schema-property-order-sorted": (
+                    original.replace("nlohmann::ordered_json", "nlohmann::json"),
+                    "JSON property order retained"),
+                "literal-string-whitespace-stripped": (
+                    original.replace("return schema.dump();",
+                                     "auto result = schema.dump(); "
+                                     "result.erase(std::remove(result.begin(), result.end(), ' '), "
+                                     "result.end()); return result;"),
+                    "schema semantics and literal string whitespace retained"),
+            }
+            for name, (mutant, expected_error) in provider_mutations.items():
+                if mutant == original:
+                    raise RuntimeError(f"Provider mutation did not change source: {name}")
+                mutant_source = work_dir / f"{name}.cc"
+                mutant_source.write_text(mutant)
+                mutant_binary = work_dir / name
+                mutant_command = [str(mutant_source) if arg == str(provider)
+                                  else str(mutant_binary) if arg == str(source_binary)
+                                  else arg for arg in source_command]
+                subprocess.run(mutant_command, check=True, timeout=120)
+                failure = subprocess.run([str(mutant_binary.resolve()), *command[1:]],
+                                         capture_output=True, text=True, timeout=30)
+                depth_crash = (name == "unbounded-schema-preprocessing-depth" and
+                               failure.returncode < 0 and "DEEP_SCHEMA_BEGIN" in failure.stdout)
+                if failure.returncode == 0 or (expected_error not in failure.stderr and not depth_crash):
+                    raise RuntimeError(f"Provider mutation survived or failed unexpectedly: {name}: "
+                                       f"{failure.stderr}")
+                result["mutationsKilled"].append(name)
+    if runtime_library:
+        runtime_binary = work_dir / "grammar_runtime_test"
+        runtime_command = [str(REPO / "tests/huggingface_token_bytes/grammar_runtime_test.cc")
+                           if arg == str(REPO / "tests/huggingface_token_bytes/tokenizer_source_test.cc")
+                           else str(runtime_binary) if arg == str(source_binary) else arg
+                           for arg in source_command]
+        runtime_command[1:1] = ["-I", str(llguidance_include)]
+        runtime_command += [str(runtime_library.resolve()),
+                            f"-Wl,-rpath,{runtime_library.resolve().parent}"]
+        subprocess.run(runtime_command, check=True, timeout=120)
+        runtime_result = subprocess.run(
+            [str(runtime_binary.resolve()), str(tokenizer_json.resolve()),
+             str(schema_json.resolve()), str(observed_output.resolve())],
+            check=True, capture_output=True, text=True, timeout=30)
+        deep_binary = work_dir / "deep_schema_test"
+        deep_command = [str(REPO / "tests/huggingface_token_bytes/deep_schema_test.cc")
+                        if arg == str(REPO / "tests/huggingface_token_bytes/grammar_runtime_test.cc")
+                        else str(deep_binary) if arg == str(runtime_binary) else arg
+                        for arg in runtime_command]
+        subprocess.run(deep_command, check=True, timeout=120)
+        deep_records = []
+        for depth, kind in ((128, "not"), (129, "not"), (200000, "not"), (100000, "allof")):
+            deep_result = subprocess.run(
+                [str(deep_binary.resolve()), str(tokenizer_json.resolve()), str(depth), kind],
+                capture_output=True, text=True, timeout=20)
+            deep_records.append({"depth": depth, "kind": kind, "exit": deep_result.returncode,
+                                 "stdout": deep_result.stdout, "stderr": deep_result.stderr})
+        (work_dir / "deep-schema-results.json").write_text(json.dumps(deep_records, indent=2) + "\n")
+        if any(record["exit"] != 0 for record in deep_records):
+            raise RuntimeError("Deep schema subprocess regression: inspect deep-schema-results.json")
+        result["deepSchemaNativeSubprocessControls"] = deep_records
+        result["packagedGrammarRuntimeControls"] = {
+            "status": "passed", "modelInference": False,
+            "stdout": runtime_result.stdout, "stderr": runtime_result.stderr,
+            "inputsSha256": {name: hashlib.sha256(path.read_bytes()).hexdigest()
+                             for name, path in {
+                                 "runtimeLibrary": runtime_library,
+                                 "llguidanceHeader": llguidance_include / "llguidance.h",
+                                 "schema": schema_json, "retainedOutput": observed_output,
+                             }.items()},
+        }
     (work_dir / "results.json").write_text(json.dumps(result, indent=2) + "\n")
     return result
 
@@ -181,8 +261,15 @@ def main() -> None:
     parser.add_argument("--tokenizer-json", type=Path)
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--mutations", action="store_true")
+    parser.add_argument("--runtime-library", type=Path)
+    parser.add_argument("--llguidance-include", type=Path)
+    parser.add_argument("--schema-json", type=Path)
+    parser.add_argument("--observed-output", type=Path)
     args = parser.parse_args()
-    print(json.dumps(qualify(args.work_dir, args.tokenizer_json, args.source_root, args.mutations), indent=2))
+    print(json.dumps(qualify(
+        args.work_dir, args.tokenizer_json, args.source_root, args.mutations,
+        runtime_library=args.runtime_library, llguidance_include=args.llguidance_include,
+        schema_json=args.schema_json, observed_output=args.observed_output), indent=2))
 
 
 if __name__ == "__main__":
