@@ -357,6 +357,28 @@ function calling remain enabled. Artifact, model, and minimum-OS qualification
 is still required before claiming iOS 16.4 compatibility or updating consumers.
 See [the precise platform restriction and qualification gates](docs/platform_strategy.md#provider-free-ios-source-build-candidate).
 
+### Bridge callback-copy failures
+
+Probe `stream_proxy_allocation_failure_abi_version()` and require version 1
+before relying on lossless callback transport. A missing symbol or unknown
+version cannot establish that guarantee; callback ABI version 2 alone does not
+provide it. This extension does not enable an otherwise unsupported upstream ABI.
+
+`stream_proxy_has_allocation_failure(callback_data)` returns 1 if copying any
+non-NULL text or error failed, otherwise 0. It allocates nothing and records the
+failure before forwarding the affected callback. NULL source strings are normal
+absence. Successfully copied strings still belong to the consumer and must be
+released with `stream_proxy_free_string`; no borrowed fallback strings are sent.
+
+The status is sticky for the proxy's lifetime, including across a later clean
+final callback. Use one proxy per turn. Read it after the actual final callback
+and after draining queued callbacks, before `stream_proxy_delete`; a non-NULL
+argument must be a live proxy, and deletion must not race reads or callbacks.
+A NULL proxy returns 1 to fail closed. A failure makes the turn unsuccessful
+even when its native finish reason is stop. Callback count, actual final flags,
+and native finish reasons remain unchanged; the bridge never synthesizes an
+early final callback to report copy failure.
+
 ### Bridge finish reasons
 
 When `stream_proxy_finish_reason_abi_version()` returns 1, the final callback

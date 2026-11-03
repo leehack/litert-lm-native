@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -15,6 +16,45 @@ BRIDGE_TEST_SOURCE = (
 
 
 class LiteRtLmBridgeTest(unittest.TestCase):
+    def test_windows_callback_exports_match_header_linkage(self) -> None:
+        compiler = shutil.which("clang")
+        if compiler is None:
+            self.skipTest("Clang is required for Windows COFF validation")
+        modes = ((), ("LITERT_LM_STREAM_CHUNK_API",),
+                 ("LITERT_LM_STREAM_CHUNK_API", "LITERT_LM_FINISH_REASON_API"),
+                 ("LITERT_LM_STREAM_CHUNK_API", "LITERT_LM_FINISH_REASON_API",
+                  "LITERT_LM_C_API_V1"))
+        for defines in modes:
+            with self.subTest(defines=defines), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                # Only OS/CRT declarations are stubbed: compile the complete
+                # production C source and public header for the Windows ABI.
+                (root / "stdlib.h").write_text(
+                    "#include <stddef.h>\nvoid *malloc(size_t);\n"
+                    "void *calloc(size_t, size_t);\nvoid free(void *);\n")
+                (root / "string.h").write_text(
+                    "#include <stddef.h>\nsize_t strlen(const char *);\n"
+                    "void *memcpy(void *, const void *, size_t);\n")
+                (root / "windows.h").write_text("void *LoadLibraryA(const char *);\n")
+                object_file = root / "bridge.obj"
+                subprocess.run([
+                    compiler, "--target=x86_64-pc-windows-msvc", "-ffreestanding",
+                    "-std=c11", "-Wall", "-Wextra", "-Werror", "-I", str(root),
+                    *(f"-D{define}=1" for define in defines),
+                    "-c", str(BRIDGE_SOURCE), "-o", str(object_file),
+                ], check=True)
+                exports = set(re.findall(rb"/EXPORT:([A-Za-z_][A-Za-z_0-9]*)",
+                                         object_file.read_bytes()))
+                self.assertEqual(exports, {name.encode() for name in (
+                    "stream_proxy_callback_abi_version",
+                    "stream_proxy_finish_reason_abi_version",
+                    "stream_proxy_load_global", "stream_proxy_create",
+                    "stream_proxy_get_finish_reason",
+                    "stream_proxy_allocation_failure_abi_version",
+                    "stream_proxy_has_allocation_failure",
+                    "stream_proxy_delete", "stream_proxy_free_string",
+                )})
+
     def test_asr_session_adapter_preserves_both_upstream_apis(self) -> None:
         compiler = shutil.which("c++") or shutil.which("clang++")
         if compiler is None:
@@ -44,6 +84,26 @@ class LiteRtLmBridgeTest(unittest.TestCase):
                 subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror",
                                 f"-DTEST_OMNI_API={int(omni)}", "-I", str(REPO_ROOT / "native"),
                                 str(source), "-o", str(executable)], check=True)
+                subprocess.run([str(executable)], check=True)
+
+    def test_callback_copy_allocation_failures(self) -> None:
+        compiler = shutil.which("cc") or shutil.which("clang")
+        if compiler is None:
+            self.skipTest("A C compiler is required for bridge validation")
+        modes = ((), ("LITERT_LM_STREAM_CHUNK_API",),
+                 ("LITERT_LM_STREAM_CHUNK_API", "LITERT_LM_FINISH_REASON_API"),
+                 ("LITERT_LM_STREAM_CHUNK_API", "LITERT_LM_FINISH_REASON_API",
+                  "LITERT_LM_C_API_V1"))
+        for defines in modes:
+            with self.subTest(defines=defines), tempfile.TemporaryDirectory() as temp:
+                executable = Path(temp) / "allocation_test"
+                subprocess.run([
+                    compiler, "-std=c11", "-Wall", "-Wextra", "-Werror",
+                    "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
+                    *(f"-D{define}=1" for define in defines),
+                    str(BRIDGE_SOURCE.with_name("litert_lm_bridge_allocation_test.c")),
+                    "-o", str(executable),
+                ], check=True)
                 subprocess.run([str(executable)], check=True)
 
     def test_legacy_callback_adapter(self) -> None:

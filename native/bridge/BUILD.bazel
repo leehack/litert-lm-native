@@ -88,6 +88,7 @@ CAPABILITIES_DEPS = select({
 cc_library(
     name = "litert_lm_bridge",
     srcs = ["litert_lm_bridge.c"],
+    hdrs = ["litert_lm_bridge.h"],
     alwayslink = True,
     defines = select({
         ":stream_chunk_api": ["LITERT_LM_STREAM_CHUNK_API=1"],

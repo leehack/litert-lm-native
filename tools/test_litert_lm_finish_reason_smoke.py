@@ -2,11 +2,35 @@ from __future__ import annotations
 
 import json
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import litert_lm_finish_reason_smoke as smoke
 
 
 class FinishReasonSmokeTest(unittest.TestCase):
+    def test_allocation_status_probe_rejects_missing_and_unknown_extensions(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "lacks callback"):
+            smoke.require_allocation_failure_abi(SimpleNamespace())
+        with self.assertRaisesRegex(RuntimeError, "lacks callback"):
+            smoke.require_allocation_failure_abi(SimpleNamespace(
+                stream_proxy_allocation_failure_abi_version=Mock(return_value=1)))
+        for version in (0, 2):
+            library = SimpleNamespace(
+                stream_proxy_allocation_failure_abi_version=Mock(return_value=version),
+                stream_proxy_has_allocation_failure=Mock(return_value=0),
+            )
+            with self.subTest(version=version), self.assertRaisesRegex(
+                    RuntimeError, "unsupported callback"):
+                smoke.require_allocation_failure_abi(library)
+        library = SimpleNamespace(
+            stream_proxy_allocation_failure_abi_version=Mock(return_value=1),
+            stream_proxy_has_allocation_failure=Mock(return_value=0),
+        )
+        smoke.require_allocation_failure_abi(library)
+        library.stream_proxy_has_allocation_failure.assert_not_called()
+
+
     def test_scenarios_cover_budget_natural_end_and_cancellation(self) -> None:
         expected = {scenario.expected for scenario in smoke.SCENARIOS}
         self.assertEqual(expected, {"length", "stop", "cancelled"})

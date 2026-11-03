@@ -54,12 +54,28 @@ SCENARIOS = (
 )
 
 
+def require_allocation_failure_abi(library) -> None:
+    try:
+        version = library.stream_proxy_allocation_failure_abi_version
+        version.restype = ctypes.c_int32
+        version.argtypes = []
+        status = library.stream_proxy_has_allocation_failure
+    except AttributeError as error:
+        raise RuntimeError("runtime lacks callback allocation-failure status") from error
+    if version() != 1:
+        raise RuntimeError("unsupported callback allocation-failure ABI")
+    status.restype = ctypes.c_int32
+    status.argtypes = [ctypes.c_void_p]
+
+
 def bind(library_path: Path) -> CApi:
     api = CApi(library_path)
     library = api.library
+    require_allocation_failure_abi(library)
     signatures = {
         "stream_proxy_finish_reason_abi_version": (ctypes.c_int32, []),
         "stream_proxy_get_finish_reason": (ctypes.c_int32, [ctypes.c_void_p]),
+        "stream_proxy_has_allocation_failure": (ctypes.c_int32, [ctypes.c_void_p]),
         "stream_proxy_create": (
             ctypes.c_void_p,
             [DartCallback, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)],
@@ -137,6 +153,8 @@ def run_scenario(
             api.conversation_cancel_process(conversation)
         if not finished.wait(TURN_TIMEOUT_SECONDS):
             raise RuntimeError(f"{scenario.name}: no final callback")
+        if library.stream_proxy_has_allocation_failure(proxy) != 0:
+            raise RuntimeError(f"{scenario.name}: callback copy allocation failed")
         reason = library.stream_proxy_get_finish_reason(proxy)
     finally:
         library.litert_lm_conversation_optional_args_delete(optional_args)
