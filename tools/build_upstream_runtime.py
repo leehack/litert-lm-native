@@ -18,6 +18,7 @@ from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_direc
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
 from gpu_environment_teardown import find_ndk_llvm_objdump, validate_library
+from huggingface_token_bytes_patch import apply as patch_huggingface_token_bytes
 from litert_cpu_options_identifier_patch import (
     SOURCES as CPU_OPTIONS_IDENTIFIER_SOURCES,
     require_cpu_options_identifier_patch_decision,
@@ -508,6 +509,7 @@ def build_runtime(
     patch_asr_untimed_overlap(source_root, upstream_tag)
     patch_asr_litertlm_container(source_root, upstream_tag)
     patch_stream_finish_reason(source_root, upstream_tag)
+    patch_huggingface_token_bytes(source_root, upstream_tag)
     apply_android_gpu_safety(source_root, upstream_tag)
     # v0.19.0 removed the prebuilt TopK sampler this path points at.
     if (platform == "ios" and has_asr_bridge(upstream_tag)

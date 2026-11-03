@@ -32,6 +32,7 @@ cc_library(
 
 exports_files([
     "asr_untimed_overlap.patch",
+    "huggingface_token_bytes_v019.patch",
     "asr_untimed_overlap_v019.patch",
     "litert_cpu_options_identifier.patch",
     "litert_gpu_environment_destroy_callback.patch",
@@ -273,4 +274,10 @@ cc_binary(
         ":litert_lm_asr_bridge",
         "//c:engine",
     ] + CAPABILITIES_DEPS,
+)
+
+cc_library(
+    name = "huggingface_token_bytes",
+    hdrs = ["huggingface_token_bytes.h"],
+    deps = ["@nlohmann_json//:json"],
 )

@@ -91,6 +91,7 @@ typed-error/automatic-fallback integration remain release gates.
 | Patch | Decision | Evidence |
 | --- | --- | --- |
 | Untimed ASR overlap | Keep, re-ported to `MergeByWordCount` | v0.19's seam fallback drops words on repeated phrases at 0.4: Moonshine JFK gives "…what your country can do for your country." With the port it gives the full sentence. Replay: no exact regressions in 60,800 utterances; see `asr_untimed_overlap.md`. |
+| HF ByteLevel grammar bytes | New carry (#100) | Raw vocabulary strings differ from emitted bytes. Exact HF/provider source controls and all 151,669 supported-Qwen token IDs pass; packaged model/schema qualification remains required. See `upstream_patch_audit.md`. |
 | Stream finish reason | Keep, re-ported | Upstream still folds stop, budget and context into `kDone`. Budget, stop and cancel pass on CPU. |
 | ASR container routing | Retire | `bfdec21732` is in the tag. Whisper container passes. |
 | v0.18.1 WORKSPACE repair | Retire | `d99b438f` is in the tag. Bazel builds unpatched. |

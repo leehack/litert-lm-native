@@ -204,3 +204,47 @@ arm64 container on M4 Max):
 
 Retire the patch when a tagged upstream release ships Linux and Windows
 prebuilt runtimes built from its pinned LiteRT.
+
+## #100 workaround tracking: Hugging Face grammar token bytes
+
+Upstream v0.19.0 `83ce6067` gives llguidance the raw vocabulary returned by
+`HuggingFaceTokenizer::GetTokens()`. A ByteLevel token such as `fÃ©` denotes
+bytes `66 c3 a9` (`fé`), but the provider supplied `66 c3 83 c2 a9`. This
+reproduces the schema failure after `{"ca` with the supported HF Qwen3 bundle.
+It is independent of #48's original SentencePiece model-tokenizer repair:
+ordinary inference on the supported HF bundle already emits correct Unicode.
+
+`huggingface_token_bytes_v019.patch` adds a separate byte API for the provider;
+raw vocabulary lookup and ordinary decoding stay intact. Its owner helper
+inverts only an explicitly configured top-level ByteLevel decoder, before any
+UTF-8 replacement. It preserves every token-ID slot, NUL, whitespace and partial
+UTF-8. Added-token `special` flags are read by ID from the actual JSON inventory;
+the provider prefixes their original spellings with llguidance's `0xff` marker.
+Other added tokens follow ByteLevel's inverse map and whole-token fallback.
+Configured provider special tokens still use their raw names. Other HF decoder
+configurations return `Unimplemented` before creating the llguidance tokenizer;
+SentencePiece's existing path is unchanged and receives no new qualification.
+
+The build fails closed on changes to any of the five audited source preimages;
+release `sourcePatches` records their patch and pre/postimage hashes. Newer tags
+require an explicit carry or retirement decision. The model-free CI gate compiles
+both actual patched HF and provider sources with raw-vocabulary/tokenizer-init
+seams, checks byte lengths and special markers, and kills raw-vocabulary,
+partial-UTF-8 replacement and special-spelling regression mutations. It does not
+emulate grammar execution or establish model-backed release qualification.
+
+Local full-vocabulary verification accepts a tokenizer extracted read-only from
+the supported 613,722,264-byte Qwen3 artifact (`c5f39b41…`). Its tokenizer SHA-256
+is `aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4`:
+151,643 base entries, 26 added entries and 14 special IDs all match the independent
+byte reference. To repeat with exact upstream source and that tokenizer:
+
+```bash
+python3 tools/qualify_huggingface_token_bytes.py \
+  --source-root /path/to/LiteRT-LM --work-dir /tmp/hf-token-byte-check \
+  --tokenizer-json /path/to/tokenizer.json --mutations
+```
+
+Retire this carry only after a tagged upstream byte-equivalent correction passes
+these controls and the unchanged supported-model schema qualifier, including
+literal Unicode keys/values, succeeds against the packaged runtime.
