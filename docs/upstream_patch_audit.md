@@ -223,15 +223,38 @@ the provider prefixes their original spellings with llguidance's `0xff` marker.
 Other added tokens follow ByteLevel's inverse map and whole-token fallback.
 Configured provider special tokens still use their raw names. Other HF decoder
 configurations return `Unimplemented` before creating the llguidance tokenizer;
-SentencePiece's existing path is unchanged and receives no new qualification.
+SentencePiece's vocabulary mapping is unchanged and receives no new qualification.
+
+The provider's `TextToTokenIds` callback accepts UTF-8 text, so it sets
+`tokenize_assumes_string=true`. With the old false value, llguidance can send
+an incomplete code point during forced-token computation to tokenizers-cpp's
+`from_utf8(...).unwrap()`, aborting across its C ABI. llguidance 1.9.1 then
+uses its lossless vocabulary trie for invalid UTF-8 spans and the actual text
+tokenizer for valid spans. It never replaces invalid bytes with U+FFFD.
+
+A model-free check of packaged owner `7ea10d0` (`libLiteRtLm` SHA-256
+`8e028caab2819d6f4627b644ae9b6e79e37e40eab15814aa0092754b1722f782`)
+reproduced SIGABRT on bytes `7b 22 63 61 66 c3` with the false value, at
+`tokenizers_encode`'s UTF-8 unwrap. Changing only the flag to true passed
+byte-exact incomplete UTF-8, isolated continuation, Japanese/emoji, NUL and
+invalid-byte inputs. This isolates the callback contract; it does not qualify
+model inference. Replaying the unchanged consumer schema (SHA-256
+`1b55522bf6c9daa7a745be51da2dffd1609319e983c81b28a65b3ed4d82d405e`)
+through the packaged grammar engine also aborts with false at an emoji
+continuation byte (`8a 22`); true completes the fixed typed response in 20
+mask/commit steps. No model is loaded in either check. The source controls
+also reject a mutation restoring false.
+
+Primary contract: [llguidance 1.9.1 tokenizer initialization](https://docs.rs/crate/llguidance/1.9.1/source/llguidance.h)
+and [tokenizers-cpp v0.1.1 text encoding](https://github.com/mlc-ai/tokenizers-cpp/blob/v0.1.1/rust/src/lib.rs).
 
 The build fails closed on changes to any of the five audited source preimages;
 release `sourcePatches` records their patch and pre/postimage hashes. Newer tags
 require an explicit carry or retirement decision. The model-free CI gate compiles
 both actual patched HF and provider sources with raw-vocabulary/tokenizer-init
 seams, checks byte lengths and special markers, and kills raw-vocabulary,
-partial-UTF-8 replacement and special-spelling regression mutations. It does not
-emulate grammar execution or establish model-backed release qualification.
+partial-UTF-8 replacement, special-spelling and text-callback contract regression
+mutations. It does not emulate grammar execution or establish model-backed release qualification.
 
 Local full-vocabulary verification accepts a tokenizer extracted read-only from
 the supported 613,722,264-byte Qwen3 artifact (`c5f39b41…`). Its tokenizer SHA-256
@@ -245,6 +268,6 @@ python3 tools/qualify_huggingface_token_bytes.py \
   --tokenizer-json /path/to/tokenizer.json --mutations
 ```
 
-Retire this carry only after a tagged upstream byte-equivalent correction passes
-these controls and the unchanged supported-model schema qualifier, including
+Retire this carry only after a tagged upstream byte-equivalent correction with
+the UTF-8 callback contract passes these controls and the unchanged supported-model schema qualifier, including
 literal Unicode keys/values, succeeds against the packaged runtime.

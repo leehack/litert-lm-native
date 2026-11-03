@@ -19,9 +19,11 @@ struct LlgTokenizerInit {
 };
 inline std::vector<std::string> captured_llg_tokens;
 inline size_t llg_tokenizer_calls = 0;
+inline bool captured_tokenize_assumes_string = false;
 inline LlgTokenizer* llg_new_tokenizer(const LlgTokenizerInit* init, char*,
                                        size_t) {
   ++llg_tokenizer_calls;
+  captured_tokenize_assumes_string = init->tokenize_assumes_string;
   captured_llg_tokens.clear();
   const auto* data = init->token_bytes;
   for (uint32_t id = 0; id < init->vocab_size; ++id) {
