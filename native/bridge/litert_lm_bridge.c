@@ -15,10 +15,8 @@
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#define LITERT_LM_BRIDGE_EXPORT __declspec(dllexport)
 #else
 #include <dlfcn.h>
-#define LITERT_LM_BRIDGE_EXPORT __attribute__((visibility("default")))
 #endif
 
 LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_callback_abi_version(void) {
