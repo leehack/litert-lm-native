@@ -34,14 +34,22 @@ inline LlgTokenizer* llg_new_tokenizer(const LlgTokenizerInit* init, char*,
   return new LlgTokenizer;
 }
 inline void llg_free_tokenizer(LlgTokenizer* tokenizer) { delete tokenizer; }
+inline std::string captured_constraint;
+inline std::string captured_constraint_kind;
 inline LlgConstraint* llg_new_constraint_regex(LlgConstraintInit*,
-                                               const char*) {
+                                               const char* text) {
+  captured_constraint = text;
+  captured_constraint_kind = "regex";
   return nullptr;
 }
-inline LlgConstraint* llg_new_constraint_json(LlgConstraintInit*, const char*) {
+inline LlgConstraint* llg_new_constraint_json(LlgConstraintInit*, const char* text) {
+  captured_constraint = text;
+  captured_constraint_kind = "json";
   return nullptr;
 }
-inline LlgConstraint* llg_new_constraint_lark(LlgConstraintInit*, const char*) {
+inline LlgConstraint* llg_new_constraint_lark(LlgConstraintInit*, const char* text) {
+  captured_constraint = text;
+  captured_constraint_kind = "lark";
   return nullptr;
 }
 inline LlgConstraint* llg_new_constraint(LlgConstraintInit*, const char*) {

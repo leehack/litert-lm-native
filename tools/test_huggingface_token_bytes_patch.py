@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import huggingface_token_bytes_patch as carry
 from asr_overlap_patch import source_patch_manifest
-from qualify_huggingface_token_bytes import vocabulary_fixture
+from qualify_huggingface_token_bytes import qualify, vocabulary_fixture
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -34,6 +34,11 @@ class HuggingFaceTokenBytesPatchTest(unittest.TestCase):
             (REPO / carry.PATCH_PATH).read_bytes()).hexdigest() for entry in records))
         self.assertEqual([entry for entry in source_patch_manifest("v0.19.0")
                           if entry["id"] == "huggingface-token-bytes"], records)
+
+    def test_packaged_grammar_controls_reject_incomplete_identity_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(ValueError, "require source, tokenizer"):
+                qualify(Path(temp), runtime_library=Path("unused-library"))
 
     def test_mixed_or_unknown_source_is_refused_before_git_apply(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
