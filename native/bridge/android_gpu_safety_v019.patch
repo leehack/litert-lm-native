@@ -1,0 +1,38 @@
+--- a/c/engine.cc
++++ b/c/engine.cc
+@@ -13,6 +13,7 @@
+ // limitations under the License.
+ 
+ #include "c/engine.h"
++#include "bridge/litert_lm_android_gpu_preflight.h"
+ 
+ #include <cstddef>
+ #include <cstdint>
+@@ -1117,8 +1118,16 @@
+                                       "Invalid engine settings.");
+   }
+ 
++#if defined(__ANDROID__)
++  auto guarded_settings = *settings->settings;
++  const auto safety = litert_lm_native::PrepareAndroidGpuSafety(guarded_settings);
++  if (!safety.ok()) return litert::lm::c::ToCStatus(safety);
++  const auto& selected_settings = guarded_settings;
++#else
++  const auto& selected_settings = *settings->settings;
++#endif
+   absl::StatusOr<std::unique_ptr<Engine>> engine =
+-      EngineFactory::CreateDefault(*settings->settings);
++      EngineFactory::CreateDefault(selected_settings);
+ 
+   if (!engine.ok()) {
+     ABSL_LOG(ERROR) << "Failed to create engine: " << engine.status();
+--- a/c/BUILD
++++ b/c/BUILD
+@@ -43,6 +43,7 @@
+ ])
+ 
+ ENGINE_LITE_COMMON_DEPS = [
++    "//bridge:litert_lm_android_gpu_preflight",
+     ":engine_internal",
+     ":error_reporter_headers",
+     ":error_reporter_internal",

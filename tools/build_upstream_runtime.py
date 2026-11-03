@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from android_gpu_safety_patch import apply as apply_android_gpu_safety
 from asr_litertlm_container_patch import SOURCES as CONTAINER_PATCH_SOURCES, require_container_patch_decision
 from asr_overlap_patch import AUDITED_OVERLAP_TAGS, V019_OVERLAP_TAGS, merger_source, overlap_identity, source_sha256, require_asr_patch_decision
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
@@ -507,6 +508,7 @@ def build_runtime(
     patch_asr_untimed_overlap(source_root, upstream_tag)
     patch_asr_litertlm_container(source_root, upstream_tag)
     patch_stream_finish_reason(source_root, upstream_tag)
+    apply_android_gpu_safety(source_root, upstream_tag)
     # v0.19.0 removed the prebuilt TopK sampler this path points at.
     if (platform == "ios" and has_asr_bridge(upstream_tag)
             and not is_at_least(upstream_tag, (0, 19, 0))):

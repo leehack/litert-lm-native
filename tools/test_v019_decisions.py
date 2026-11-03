@@ -29,7 +29,8 @@ class V019DecisionsTest(unittest.TestCase):
         self.assertEqual(
             {record["id"] for record in records},
             {"asr-untimed-overlap", "stream-finish-reason",
-             "xnnpack-pf32-sme2", "xnnpack-pqs8-qc4w-sme2"},
+             "xnnpack-pf32-sme2", "xnnpack-pqs8-qc4w-sme2",
+             "android-qwen3-gpu-safety"},
         )
         overlap = next(r for r in records if r["id"] == "asr-untimed-overlap")
         self.assertEqual(overlap["source"], V019_MERGER_SOURCE)
