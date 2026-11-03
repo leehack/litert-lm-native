@@ -109,6 +109,19 @@ int main(int argc, char** argv) {
       Check(captured_llg_tokens[id] == expected,
             "actual provider bytes and special prefix");
     }
+    std::cout << "DEEP_SCHEMA_BEGIN\n" << std::flush;
+    for (const size_t depth : {200000, 128, 129}) {
+      std::string deep;
+      deep.reserve(depth * 8 + 2);
+      for (size_t index = 0; index < depth; ++index) deep += R"({"not":)";
+      deep += "{}";
+      deep.append(depth, '}');
+      auto constraint = (*provider)->CreateConstraint(
+          litert::lm::LlGuidanceConstraintArg{
+              litert::lm::LlgConstraintType::kJsonSchema, deep});
+      Check(constraint.ok() && captured_constraint == deep,
+            "overdeep schema must reach native validation unchanged");
+    }
     auto create_constraint = [&](const std::string& schema) {
       auto constraint = (*provider)->CreateConstraint(
           litert::lm::LlGuidanceConstraintArg{
@@ -170,6 +183,18 @@ int main(int argc, char** argv) {
       Check(constraint.ok() && captured_constraint == "[ ]+" &&
                 captured_constraint_kind != "json",
             "non-JSON grammar formatting unchanged");
+    }
+    for (const size_t slashes : {0, 1, 2, 3}) {
+      std::string prefix(slashes, '\\');
+      prefix += '"';
+      const std::string literal = prefix + std::string(2000, '[') + "日本 😊";
+      const auto input = nlohmann::ordered_json{{"type", "string"}, {"const", literal}};
+      auto output = create_constraint(input.dump());
+      Check(output["x-guidance"]["whitespace_pattern"] ==
+                R"([\x20\x0A\x0D\x09]{1,8})",
+            "quoted delimiters and escaped quotes do not count as JSON nesting");
+      output.erase("x-guidance");
+      Check(output == input, "quoted nesting control retains literal bytes");
     }
     config["decoder"] = {{"type", "WordPiece"}};
     auto unsupported = HuggingFaceTokenizer::CreateFromJson(config.dump());

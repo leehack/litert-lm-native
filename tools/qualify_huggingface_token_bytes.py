@@ -165,6 +165,10 @@ def qualify(work_dir: Path, tokenizer_json: Path | None = None,
             provider = patched / "runtime/components/constrained_decoding/llg_constraint_provider.cc"
             original = provider.read_text()
             provider_mutations = {
+                "unbounded-schema-preprocessing-depth": (
+                    original.replace("if (!JsonNestingWithinPreprocessingLimit(text)) return std::string(text);",
+                                     "// Regression control: omit preprocessing depth guard."),
+                    "overdeep schema must reach native validation unchanged"),
                 "text-callback-advertises-arbitrary-bytes": (
                     original.replace(".tokenize_assumes_string = true,",
                                      ".tokenize_assumes_string = false,"),
@@ -200,7 +204,9 @@ def qualify(work_dir: Path, tokenizer_json: Path | None = None,
                 subprocess.run(mutant_command, check=True, timeout=120)
                 failure = subprocess.run([str(mutant_binary.resolve()), *command[1:]],
                                          capture_output=True, text=True, timeout=30)
-                if failure.returncode == 0 or expected_error not in failure.stderr:
+                depth_crash = (name == "unbounded-schema-preprocessing-depth" and
+                               failure.returncode < 0 and "DEEP_SCHEMA_BEGIN" in failure.stdout)
+                if failure.returncode == 0 or (expected_error not in failure.stderr and not depth_crash):
                     raise RuntimeError(f"Provider mutation survived or failed unexpectedly: {name}: "
                                        f"{failure.stderr}")
                 result["mutationsKilled"].append(name)
@@ -218,6 +224,23 @@ def qualify(work_dir: Path, tokenizer_json: Path | None = None,
             [str(runtime_binary.resolve()), str(tokenizer_json.resolve()),
              str(schema_json.resolve()), str(observed_output.resolve())],
             check=True, capture_output=True, text=True, timeout=30)
+        deep_binary = work_dir / "deep_schema_test"
+        deep_command = [str(REPO / "tests/huggingface_token_bytes/deep_schema_test.cc")
+                        if arg == str(REPO / "tests/huggingface_token_bytes/grammar_runtime_test.cc")
+                        else str(deep_binary) if arg == str(runtime_binary) else arg
+                        for arg in runtime_command]
+        subprocess.run(deep_command, check=True, timeout=120)
+        deep_records = []
+        for depth, kind in ((128, "not"), (129, "not"), (200000, "not"), (100000, "allof")):
+            deep_result = subprocess.run(
+                [str(deep_binary.resolve()), str(tokenizer_json.resolve()), str(depth), kind],
+                capture_output=True, text=True, timeout=20)
+            deep_records.append({"depth": depth, "kind": kind, "exit": deep_result.returncode,
+                                 "stdout": deep_result.stdout, "stderr": deep_result.stderr})
+        (work_dir / "deep-schema-results.json").write_text(json.dumps(deep_records, indent=2) + "\n")
+        if any(record["exit"] != 0 for record in deep_records):
+            raise RuntimeError("Deep schema subprocess regression: inspect deep-schema-results.json")
+        result["deepSchemaNativeSubprocessControls"] = deep_records
         result["packagedGrammarRuntimeControls"] = {
             "status": "passed", "modelInference": False,
             "stdout": runtime_result.stdout, "stderr": runtime_result.stderr,

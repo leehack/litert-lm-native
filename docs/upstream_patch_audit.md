@@ -312,6 +312,19 @@ Unicode string containing 20 literal spaces is unchanged. No weights are loaded.
 This does not prove inference will complete, nor guarantee completion for every
 schema within a caller's token budget.
 
+Before constructing a DOM, the provider scans container nesting with bounded
+state and no recursion, respecting quoted strings and escapes. Inputs deeper
+than 128 containers pass unchanged to llguidance's existing validation; this is
+a preprocessing bound, not a new public schema restriction. Independent review
+found the original preprocessing could SIGSEGV on 200,000 nested `not` objects
+(1,600,002 bytes), while the parent provider returned its existing INTERNAL
+recursion-limit error. The depth guard preserves that controlled error before
+any deep DOM insertion, serialization or destruction. Native subprocess controls
+cover nesting at the boundary and 200,000 `not`/100,000 `allOf` wrappers; source
+controls also preserve long quoted delimiters and escaped quotes, and remove the
+guard as a genuine regression mutation. These tests load no model weights.
+
+
 To repeat those optional host-linkable packaged grammar controls, add these
 arguments to the full-vocabulary command above (all four are required):
 
@@ -326,5 +339,6 @@ The result records each input's SHA-256. The input is the extracted tokenizer,
 not model weights. Primary contract: [pinned llguidance JSON whitespace handling](https://github.com/guidance-ai/llguidance/blob/f0971424ec072d3e4d4196bcc7f31a2f60527df9/docs/json_schema.md#whitespace-handling).
 Existing [owner #100](https://github.com/leehack/litert-lm-native/issues/100)
 tracks the remaining packaged qualifier. Retire the formatting part only after
-a tagged upstream equivalent preserves explicit overrides and literal strings,
+a tagged upstream equivalent preserves explicit overrides, literal strings and
+controlled overdeep-input errors,
 passes the model-free controls, and passes the unchanged packaged-model qualifier.

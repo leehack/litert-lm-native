@@ -105,7 +105,7 @@
          "@com_google_absl//absl/debugging:leak_check",  # See b/402708346
 --- a/runtime/components/constrained_decoding/llg_constraint_provider.cc
 +++ b/runtime/components/constrained_decoding/llg_constraint_provider.cc
-@@ -35,9 +35,31 @@
+@@ -35,9 +35,56 @@
  #include "runtime/components/constrained_decoding/llg_constraint.h"
  #include "runtime/components/constrained_decoding/llg_constraint_config.h"
  #include "llguidance.h"
@@ -114,7 +114,32 @@
  namespace litert::lm {
  namespace {
 +
++bool JsonNestingWithinPreprocessingLimit(absl::string_view text) {
++  constexpr size_t kMaxDepth = 128;
++  size_t depth = 0;
++  bool in_string = false;
++  bool escaped = false;
++  for (const char ch : text) {
++    if (in_string) {
++      if (escaped) escaped = false;
++      else if (ch == '\\') escaped = true;
++      else if (ch == '"') in_string = false;
++    } else if (ch == '"') {
++      in_string = true;
++    } else if (ch == '{' || ch == '[') {
++      if (++depth > kMaxDepth) return false;
++    } else if (ch == '}' || ch == ']') {
++      if (depth == 0) return false;
++      --depth;
++    }
++  }
++  return true;
++}
++
 +std::string WithDefaultJsonWhitespace(absl::string_view text) {
++  // Deep DOM insertion/serialization/destruction can exhaust the C++ stack.
++  // Let llguidance validate overdeep input unchanged before building a DOM.
++  if (!JsonNestingWithinPreprocessingLimit(text)) return std::string(text);
 +  auto schema = nlohmann::ordered_json::parse(text.begin(), text.end(), nullptr,
 +                                             false);
 +  if (schema.is_boolean()) {
@@ -137,7 +162,7 @@
  
  ::LlgConstraint* CreateLlgConstraint(LlgConstraintInit* llg_constraint_init,
                                       absl::string_view constraint_string,
-@@ -46,9 +68,10 @@
+@@ -46,9 +93,10 @@
      case LlgConstraintType::kRegex:
        return llg_new_constraint_regex(llg_constraint_init,
                                        constraint_string.data());
@@ -151,7 +176,7 @@
      case LlgConstraintType::kLark:
        return llg_new_constraint_lark(llg_constraint_init,
                                       constraint_string.data());
-@@ -67,7 +90,13 @@
+@@ -67,7 +115,13 @@
      return absl::InvalidArgumentError("LlGuidanceConfig::eos_id must be set.");
    }
  
@@ -166,7 +191,7 @@
  
    absl::flat_hash_set<absl::string_view> special_tokens_set(
        llg_config.special_tokens.begin(), llg_config.special_tokens.end());
-@@ -77,15 +106,19 @@
+@@ -77,15 +131,19 @@
    size_t total_size = 0;
  
    token_lens.reserve(tokens.size());
@@ -190,7 +215,7 @@
      if (is_special) {
        // Special tokens need to be prefixed with 0xFF.
        // https://github.com/guidance-ai/llguidance/blob/main/docs/special_tokens.md
-@@ -119,7 +152,9 @@
+@@ -119,7 +177,9 @@
        .tok_eos = *llg_config.eos_id,
        .token_lens = token_lens.data(),
        .token_bytes = token_bytes.data(),
