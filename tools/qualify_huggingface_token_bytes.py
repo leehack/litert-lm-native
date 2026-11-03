@@ -152,6 +152,25 @@ def qualify(work_dir: Path, tokenizer_json: Path | None = None,
         if baseline.returncode == 0:
             raise RuntimeError("Original raw-vocabulary provider unexpectedly passed byte oracle")
         result["originalProviderCauseControl"] = "failed-as-expected"
+        if mutations:
+            provider = patched / "runtime/components/constrained_decoding/llg_constraint_provider.cc"
+            mutant_source = work_dir / "bytes_callback_provider.cc"
+            original = provider.read_text()
+            mutant = original.replace(".tokenize_assumes_string = true,",
+                                      ".tokenize_assumes_string = false,")
+            if mutant == original:
+                raise RuntimeError("UTF-8 callback mutation did not change provider")
+            mutant_source.write_text(mutant)
+            mutant_binary = work_dir / "bytes_callback_provider"
+            mutant_command = [str(mutant_source) if arg == str(provider)
+                              else str(mutant_binary) if arg == str(source_binary)
+                              else arg for arg in source_command]
+            subprocess.run(mutant_command, check=True, timeout=120)
+            failure = subprocess.run([str(mutant_binary.resolve()), *command[1:]],
+                                     capture_output=True, text=True, timeout=30)
+            if failure.returncode == 0 or "text-only callback requires" not in failure.stderr:
+                raise RuntimeError("UTF-8 callback contract mutation survived")
+            result["mutationsKilled"].append("text-callback-advertises-arbitrary-bytes")
     (work_dir / "results.json").write_text(json.dumps(result, indent=2) + "\n")
     return result
 

@@ -144,3 +144,14 @@
      if (is_special) {
        // Special tokens need to be prefixed with 0xFF.
        // https://github.com/guidance-ai/llguidance/blob/main/docs/special_tokens.md
+@@ -130,7 +140,9 @@
+       .tok_eos = *llg_config.eos_id,
+       .token_lens = token_lens.data(),
+       .token_bytes = token_bytes.data(),
+-      .tokenize_assumes_string = false,
++      // TextToTokenIds accepts UTF-8 text; llguidance must tokenize incomplete
++      // code points through the lossless vocabulary trie instead.
++      .tokenize_assumes_string = true,
+       .tokenize_fn = tokenize_fn,
+       .tokenize_user_data = &tokenizer,
+   };

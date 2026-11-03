@@ -98,6 +98,8 @@ int main(int argc, char** argv) {
     auto provider =
         litert::lm::LlgConstraintProvider::Create(*tokenizer, llg_config);
     Check(provider.ok(), "actual provider creates");
+    Check(captured_tokenize_assumes_string,
+          "text-only callback requires llguidance UTF-8 fallback");
     Check(captured_llg_tokens.size() == bytes->size(),
           "provider preserves IDs");
     for (size_t id = 0; id < bytes->size(); ++id) {
