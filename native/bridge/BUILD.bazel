@@ -75,6 +75,13 @@ config_setting(
     define_values = {"litert_lm_c_api_v1": "true"},
 )
 
+# Restrict the new export policy to the Android C API 1.0 runtime link.
+config_setting(
+    name = "android_c_api_v1",
+    constraint_values = ["@platforms//os:android"],
+    define_values = {"litert_lm_c_api_v1": "true"},
+)
+
 # v0.17 moved the capabilities C implementation into //c:engine.
 config_setting(
     name = "capabilities_in_c_engine",
@@ -249,6 +256,14 @@ cc_test(
 cc_binary(
     name = "libLiteRtLm.so",
     linkshared = True,
+    additional_linker_inputs = select({
+        ":android_c_api_v1": ["android_private_protobuf.lds"],
+        "//conditions:default": [],
+    }),
+    linkopts = select({
+        ":android_c_api_v1": ["-Wl,--version-script=$(location android_private_protobuf.lds)"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":litert_lm_bridge",
         ":litert_lm_asr_bridge",

@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from android_protobuf_policy import validate_android_protobuf_isolation
 from android_gpu_safety_patch import apply as apply_android_gpu_safety
 from asr_litertlm_container_patch import SOURCES as CONTAINER_PATCH_SOURCES, require_container_patch_decision
 from asr_overlap_patch import AUDITED_OVERLAP_TAGS, V019_OVERLAP_TAGS, merger_source, overlap_identity, source_sha256, require_asr_patch_decision
@@ -909,6 +910,7 @@ def main() -> int:
         )
         validate_exported_symbols(output, args.upstream_tag)
         validate_android_global_visibility(output, args.platform)
+        validate_android_protobuf_isolation(output, args.platform, args.upstream_tag)
         validate_android_gpu_environment_teardown(output, args.platform)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
@@ -942,6 +944,7 @@ def main() -> int:
         )
         validate_exported_symbols(output, args.upstream_tag)
         validate_android_global_visibility(output, args.platform)
+        validate_android_protobuf_isolation(output, args.platform, args.upstream_tag)
         validate_android_gpu_environment_teardown(output, args.platform)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)

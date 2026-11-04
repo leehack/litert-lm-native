@@ -1,0 +1,7 @@
+/.github/CODEOWNERS @leehack
+/native/bridge/android_private_protobuf.lds @leehack
+/tools/android_protobuf_policy.py @leehack
+/tools/test_android_protobuf_policy.py @leehack
+/.github/workflows/pr_release_qualification.yml @leehack
+/.github/workflows/native_release.yml @leehack
+/docs/android_protobuf_isolation.md @leehack
