@@ -124,3 +124,40 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y patchelf
       - name: Test Linux-only runtime identity and dlopen
         run: python3 -m unittest discover -s tools -p test_linux_runtime_metadata.py
+
+  final-windows-text:
+    name: Final v0.19.0 Windows Qwen CPU bytes
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/qualify/v019-windows-text'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout trusted runtime qualification tools
+        uses: actions/checkout@v6
+        with:
+          ref: f173fe9b18a30fdc23cc896be27a36bf85657921
+          path: trusted
+          persist-credentials: false
+      - name: Checkout reviewed branch harness
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          path: harness
+          persist-credentials: false
+          sparse-checkout: tools/qualify_final_windows_text.py
+          sparse-checkout-cone-mode: false
+      - name: Qualify immutable final Windows bytes with pinned Qwen
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python harness/tools/qualify_final_windows_text.py
+      - name: Upload bounded qualification proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-windows-text-${{ github.run_id }}-${{ github.run_attempt }}
+          path: windows-text-proof/qualification.json
+          if-no-files-found: error
+          retention-days: 14
