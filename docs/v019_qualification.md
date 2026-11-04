@@ -42,6 +42,14 @@ The ASR cache is disabled (`:nocache`): upstream's default writes beside the
 model and the ABI has no cache directory. Default overlap stays 0.4; upstream's
 is 0.75.
 
+## Android protobuf isolation
+
+The Android C API 1.0 wrapper link localizes bundled protobuf definitions while
+retaining public runtime, bridge and plugin exports and the GLOBAL loader
+contract. This addresses the constructor collision tracked in owner #105;
+rebuilt artifact and affected-device GPU qualification remain required. See
+[the link policy, regression controls and remaining gates](android_protobuf_isolation.md).
+
 ## Push-source regression gate
 
 `tools/qualify_asr_omni_input.py` compiles the production v0.19 PCM source

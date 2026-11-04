@@ -149,9 +149,9 @@ class RuntimeDependencyUtilsTest(unittest.TestCase):
             write_elf_with_flags(library, None)
             library.write_bytes(library.read_bytes() + b"\0GLIBC_2.43\0")
             with self.assertRaisesRegex(SystemExit, "requires glibc 2.43"):
-                validate_elf_dependencies(root)
+                validate_elf_dependencies(root, "v0.18.0")
             library.write_bytes(library.read_bytes().replace(b"GLIBC_2.43", b"GLIBC_2.39"))
-            self.assertEqual(validate_elf_dependencies(root), 1)
+            self.assertEqual(validate_elf_dependencies(root, "v0.18.0"), 1)
 
     def test_elf_has_global_flag(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -208,7 +208,7 @@ class RuntimeDependencyUtilsTest(unittest.TestCase):
                 SystemExit,
                 "LiteRtTopKOpenClSampler_SetInferenceFuncAndInputTensors",
             ):
-                validate_elf_dependencies(root)
+                validate_elf_dependencies(root, "v0.18.0")
 
     def test_android_opencl_sampler_accepts_complete_plugin_api(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -223,7 +223,7 @@ class RuntimeDependencyUtilsTest(unittest.TestCase):
             library.parent.mkdir(parents=True)
             write_elf_with_exports(library, ANDROID_OPENCL_SAMPLER_SYMBOLS)
 
-            self.assertEqual(validate_elf_dependencies(root), 1)
+            self.assertEqual(validate_elf_dependencies(root, "v0.18.0"), 1)
 
     def test_ios_metal_sampler_requires_complete_plugin_api(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

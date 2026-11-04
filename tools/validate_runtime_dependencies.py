@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from android_protobuf_policy import requires_private_protobuf, validate_android_protobuf_isolation
 from ios_runtime_policy import provider_free_ios, validate_ios_directory, validate_ios_archives
 from ios_framework_metadata import validate_framework_metadata
 from runtime_dependency_utils import (
@@ -65,7 +66,8 @@ def newest_glibc_requirement(library: Path) -> tuple[int, ...] | None:
     )
 
 
-def validate_elf_dependencies(root: Path) -> int:
+def validate_elf_dependencies(root: Path, upstream_tag: str) -> int:
+    requires_private_protobuf(upstream_tag)
     checked = 0
     errors: list[str] = []
     for library in iter_elf_libraries(root):
@@ -111,6 +113,11 @@ def validate_elf_dependencies(root: Path) -> int:
                     "ELF DF_1_GLOBAL flag required by dlopened LiteRT GPU "
                     "sampler plugins."
                 )
+            if library.name == "libLiteRtLm.so":
+                try:
+                    validate_android_protobuf_isolation(library, platform, upstream_tag)
+                except RuntimeError as error:
+                    errors.append(str(error))
             if library.name == "libLiteRtTopKOpenClSampler.so":
                 exported = elf_exported_symbols(library)
                 missing = sorted(set(ANDROID_OPENCL_SAMPLER_SYMBOLS) - exported)
@@ -330,7 +337,7 @@ def main() -> int:
     if provider_free_ios(args.upstream_tag):
         validate_ios_directory(root / "bin" / "ios")
         validate_ios_archives(args.archive_root or root / "dist" / "spm")
-    checked_elf = validate_elf_dependencies(root)
+    checked_elf = validate_elf_dependencies(root, args.upstream_tag)
     checked_macho = validate_macho_dependencies(root)
     checked_pe = validate_pe_dependencies(root)
     macos_archive_errors = validate_macos_archives(args.archive_root or root / "dist" / "spm")

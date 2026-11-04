@@ -38,7 +38,7 @@ def validate(root, rows, upstream_tag, upstream_commit, native_commit, release_t
         if "ios" in platforms and provider_free_ios(upstream_tag):
             validate_ios_directory(isolated / "bin" / "ios")
             validate_ios_archives(root / "dist" / "spm" / release_tag)
-        validate_elf_dependencies(isolated)
+        validate_elf_dependencies(isolated, upstream_tag)
         validate_macho_dependencies(isolated)
         validate_pe_dependencies(isolated)
     print(f'Validated affected platforms {sorted(platforms)}; not a full release candidate')

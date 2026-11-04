@@ -1,6 +1,8 @@
 # LiteRT-LM v0.18.0 carried-fix audit
 
 For v0.19.0 decisions, see [v0.19 qualification](v019_qualification.md).
+Android C API 1.0 also has an owner [protobuf link-isolation policy](android_protobuf_isolation.md);
+it does not patch upstream sources or apply to v0.18 runtimes.
 
 Audited LiteRT-LM `b2f686e2ed4718fb84ec398a61dd59ca0f0aff27`, which pins
 LiteRT `26895c9fbcc25c43faa8c1a98cd1fd28951602c3`. Source inspection is

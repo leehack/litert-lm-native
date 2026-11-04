@@ -174,6 +174,13 @@ jobs:
           ndk-version: r28b
           add-to-path: false
 
+      - name: Verify Android protobuf isolation link policy
+        if: matrix.platform == 'android'
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_PROTOBUF_REQUIRE_NDK: '1'
+        run: python3 -m unittest discover -s tools -p test_android_protobuf_policy.py -v
+
       - name: Cache Bazel
         if: matrix.platform != 'windows' && !(matrix.platform == 'linux' && matrix.arch == 'x64') && !(matrix.platform == 'android' && matrix.arch == 'x64')
         continue-on-error: true

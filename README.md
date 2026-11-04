@@ -216,7 +216,9 @@ permission.
 Pull-request qualification targets upstream `v0.19.0` at
 `83ce6067f2e2a3fb697556928f93936693ded971`, whose C API 1.0 breaks every
 pre-1.0 consumer. See the [v0.19 migration and carried-patch
-decisions](docs/v019_qualification.md).
+decisions](docs/v019_qualification.md). Android C API 1.0 source builds keep
+bundled protobuf private to the runtime link; see [isolation and qualification
+gates](docs/android_protobuf_isolation.md).
 
 The v0.19 source candidate conservatively refuses the exact Qwen3-0.6B fixture
 on the documented Adreno 750 driver tuple, and when this fixture's GPU safety

@@ -11,6 +11,7 @@ SHT_DYNSYM = 11
 SHN_UNDEF = 0
 STB_GLOBAL = 1
 STB_WEAK = 2
+STB_GNU_UNIQUE = 10
 DT_NULL = 0
 DT_NEEDED = 1
 DT_STRTAB = 5
@@ -161,7 +162,7 @@ def elf_has_global_flag(path: Path) -> bool:
     return False
 
 
-def elf_exported_symbols(path: Path) -> set[str]:
+def elf_exported_symbols(path: Path, *, include_hidden: bool = False) -> set[str]:
     data = path.read_bytes()
     if len(data) < 64 or not data.startswith(ELF_MAGIC):
         return set()
@@ -212,14 +213,15 @@ def elf_exported_symbols(path: Path) -> set[str]:
             section_offset + section_size,
             entry_size,
         ):
-            name_offset, info, _, section_index, _, _ = struct.unpack_from(
+            name_offset, info, other, section_index, _, _ = struct.unpack_from(
                 endian + "IBBHQQ", data, offset
             )
             binding = info >> 4
             if (
                 name_offset == 0
                 or section_index == SHN_UNDEF
-                or binding not in (STB_GLOBAL, STB_WEAK)
+                or binding not in (STB_GLOBAL, STB_WEAK, STB_GNU_UNIQUE)
+                or (not include_hidden and (other & 3) not in (0, 3))
             ):
                 continue
             start = string_offset + name_offset
