@@ -291,7 +291,7 @@ class ValidateReleaseManifestTest(unittest.TestCase):
         release = fixture_dir / "schema2_contract_release.json"
         self.assertEqual(
             hashlib.sha256(release.read_bytes()).hexdigest(),
-            "a5352536af34e1a4076c05261766ea85e532eb174be3fee6cd35deb3eb94d8e6",
+            "1d4e64af1d76a7cab307e6165b8b32011fdbb70d750ed147d6b6a6633510918e",
         )
         base_argv = [
             "validate_release_manifest.py",

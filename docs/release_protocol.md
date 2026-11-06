@@ -217,6 +217,23 @@ native artifact bound to one platform with digest and provenance, and complete
 release/ABI/capability declarations. The owner-generated canonical fixture is
 checked at `tools/fixtures/schema2_contract_manifest.json`.
 
+New candidates derive `abi.streamProxyCallback` from the same compatibility
+policy that selects the bridge compile mode: ABI 1 before LiteRT-LM 0.15,
+ABI 2 for the 0.15+ opaque stream-chunk adapter. The C getter's selected branch
+must agree with that declaration. This version is separate from the
+finish-reason, allocation-failure, ASR and upstream C API versions.
+
+The published `v0.19.0` manifest incorrectly declared callback ABI 1 while its
+runtime reports 2 ([#107](https://github.com/leehack/litert-lm-native/issues/107)).
+Existing manifests, archives and tags remain immutable. The strict candidate
+validator rejects that wrong declaration for newly prepared schema-2 candidates;
+it is not a historical-artifact repair or a consumer migration. The regenerated
+canonical contract fixture is synthetic, not a rewritten published manifest.
+Before publishing corrected metadata, verify the actual callback getter against
+the manifest across packaged platform runtimes and Apple framework slices, and
+coordinate downstream sync fixtures and runtime probes separately. Python
+metadata and captured build-command tests do not qualify packaged getter values.
+
 Schema-2 releases up to `v0.18.0` carry a ninth `macos/x64` record and runtime
 archive whose library cannot load
 ([#72](https://github.com/leehack/litert-lm-native/issues/72)). They remain

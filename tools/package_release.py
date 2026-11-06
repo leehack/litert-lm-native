@@ -9,7 +9,11 @@ import json
 from pathlib import Path
 import subprocess
 
-from litert_lm_symbols import has_asr_bridge, uses_stream_chunk_api
+from litert_lm_symbols import (
+    has_asr_bridge,
+    stream_proxy_callback_abi_version,
+    uses_stream_chunk_api,
+)
 from prebuilt_overrides import prebuilt_override_manifest
 from ios_runtime_policy import provider_free_ios, validate_ios_directory, validate_ios_archives
 from release_version_policy import parse_upstream, validate_pair
@@ -315,7 +319,7 @@ def build_manifest(
         },
         "abi": {
             "upstreamC": "c/engine.h",
-            "streamProxyCallback": 1,
+            "streamProxyCallback": stream_proxy_callback_abi_version(compatibility_tag),
             "asrBridge": 1 if has_asr_bridge(compatibility_tag) else None,
         },
         "capabilities": {

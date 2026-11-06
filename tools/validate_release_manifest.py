@@ -13,6 +13,7 @@ from litert_lm_symbols import (
     has_asr_bridge,
     has_prebuilt_topk_samplers,
     is_at_least,
+    stream_proxy_callback_abi_version,
     uses_stream_chunk_api,
 )
 from prebuilt_overrides import prebuilt_override_manifest
@@ -247,7 +248,7 @@ def validate_schema_2_payload(
     expected_asr = 1 if has_asr_bridge(compatibility_tag) else None
     expected_abi = {
         "upstreamC": "c/engine.h",
-        "streamProxyCallback": 1,
+        "streamProxyCallback": stream_proxy_callback_abi_version(compatibility_tag),
         "asrBridge": expected_asr,
     }
     if abi != expected_abi:
