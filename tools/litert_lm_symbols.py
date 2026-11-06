@@ -109,8 +109,13 @@ def is_at_least(tag: str, version: tuple[int, int, int]) -> bool:
     return parsed >= version
 
 
+def stream_proxy_callback_abi_version(upstream_tag: str) -> int:
+    """Callback mode reported by the bridge for this compatibility baseline."""
+    return 2 if is_at_least(upstream_tag, (0, 15, 0)) else 1
+
+
 def uses_stream_chunk_api(upstream_tag: str) -> bool:
-    return is_at_least(upstream_tag, (0, 15, 0))
+    return stream_proxy_callback_abi_version(upstream_tag) == 2
 
 
 def has_asr_bridge(upstream_tag: str) -> bool:
