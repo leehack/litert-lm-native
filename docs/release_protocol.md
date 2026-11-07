@@ -61,7 +61,7 @@ and immediate lower same-line predecessor, reuse or decrease of a rebuild number
 legacy output forms, partial publication matrices, and publication without the
 required real-model smoke evidence.
 
-Stable manual preflight applies the same consumability decision as scheduled
+Stable manual preflight applies the same consumability decision as upstream
 detection before any of the eight platform builds start. A metadata-only tag at
 an already packaged commit is rejected unless the requested native identity is
 an explicitly ordered rebuild, and every stable input must publish the required
@@ -116,7 +116,7 @@ on Linux x64, Windows x64, and macOS arm64. It contains no publication input,
 write permission, release command, or call into the write-scoped publication
 job.
 
-The scheduled `.github/workflows/auto_upstream_release.yml` only detects a
+The manually dispatched `.github/workflows/auto_upstream_release.yml` only detects a
 consumable stable upstream candidate and uploads `preparation.json`. It has
 read-only permissions and cannot dispatch the build or publish.
 

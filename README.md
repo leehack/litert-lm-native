@@ -142,7 +142,7 @@ python3 tools/validate_artifacts.py
   transaction and exits without mutation. Draft recovery is restricted to a
   rerun of the original workflow run, so a new dispatch cannot replace another
   run's partial assets.
-- `Detect Upstream Release`: runs daily with read-only permissions. It detects
+- `Detect Upstream Release`: is dispatched manually, with read-only permissions. It detects
   and records a consumable stable candidate as `preparation.json`; it never
   dispatches the build and never publishes.
 
