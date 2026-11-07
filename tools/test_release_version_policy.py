@@ -47,11 +47,13 @@ class ReleaseVersionPolicyTest(unittest.TestCase):
                     ):
                         release_policy_main()
 
-    def test_scheduled_workflow_is_detection_only(self) -> None:
+    def test_detection_workflow_is_manual_and_detection_only(self) -> None:
         root = Path(__file__).resolve().parents[1]
         workflow = (root / ".github/workflows/auto_upstream_release.yml").read_text(
             encoding="utf-8"
         )
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("schedule:", workflow)
         self.assertIn("contents: read", workflow)
         self.assertIn("persist-credentials: false", workflow)
         self.assertIn("preparation.json", workflow)

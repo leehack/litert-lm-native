@@ -1,8 +1,6 @@
 name: Detect Upstream Release
 
 on:
-  schedule:
-    - cron: "17 6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -57,7 +55,7 @@ jobs:
           print(f"Reason: `{result['reason']}`")
           print(f"Preparation available: `{str(result['shouldPrepare']).lower()}`")
           print()
-          print("This scheduled workflow never dispatches a build and never publishes.")
+          print("This manually dispatched workflow never dispatches a build and never publishes.")
           if result["shouldPrepare"]:
               preparation = result["preparation"]
               print("A maintainer or central llamadart orchestration may use the exact inputs:")
