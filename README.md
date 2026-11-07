@@ -213,9 +213,10 @@ inference and ASR real-model smokes on Linux x64, Windows x64, and macOS arm64. 
 runtime/evidence artifacts for review but has no publication input or write
 permission.
 
-Pull-request qualification targets upstream `v0.19.0` at
-`83ce6067f2e2a3fb697556928f93936693ded971`, whose C API 1.0 breaks every
-pre-1.0 consumer. See the [v0.19 migration and carried-patch
+Pull-request qualification targets upstream `v0.19.1` at
+`7a03724cece417f1724c923b3d527b4319730841`. The v0.19 line's C API 1.0 breaks
+every pre-1.0 consumer; v0.19.1 keeps the v0.19.0 C ABI and every carried-patch
+decision. See the [v0.19 migration and carried-patch
 decisions](docs/v019_qualification.md). Android C API 1.0 source builds keep
 bundled protobuf private to the runtime link; see [isolation and qualification
 gates](docs/android_protobuf_isolation.md).
@@ -419,7 +420,7 @@ turn may report 0.
 
 A missing symbol or version 0 means the runtime never reports a cause; treat
 it as unknown, never infer truncation from output length. Version 1 requires
-the carried v0.18.0, v0.18.1 or v0.19.0 patch described in
+the carried v0.18.0, v0.18.1, v0.19.0 or v0.19.1 patch described in
 [`docs/upstream_patch_audit.md`](docs/upstream_patch_audit.md); Session-API
 streams always report 0. The patch's
 `litert_lm_native_stream_chunk_get_finish_reason` can appear in the runtime's

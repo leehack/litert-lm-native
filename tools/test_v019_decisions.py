@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from android_gpu_safety_patch import applies as android_gpu_safety_applies
 from asr_litertlm_container_patch import require_container_patch_decision
 from asr_overlap_patch import V019_MERGER_SOURCE, source_patch_manifest
 from litert_cpu_options_identifier_patch import require_cpu_options_identifier_patch_decision
@@ -16,6 +17,7 @@ from validate_release_manifest import allowed_spm_assets, required_spm_assets
 from validate_runtime_artifacts import required_runtime_artifacts
 from validate_runtime_dependencies import newest_glibc_requirement
 from workspace_build_patch import require_workspace_build_patch_decision
+from xnnpack_pf32_sme2_patch import commit_for as xnnpack_commit_for
 
 
 class V019DecisionsTest(unittest.TestCase):
@@ -83,6 +85,16 @@ class V019DecisionsTest(unittest.TestCase):
 
     def test_android_dawn_rollback_waits_for_device_evidence(self) -> None:
         self.assertEqual(prebuilt_overrides("v0.19.0"), prebuilt_overrides("v0.18.1"))
+
+    def test_v0191_keeps_every_v0190_decision(self) -> None:
+        # v0.19.1 changes no carried preimage, dependency pin or prebuilt.
+        self.assertEqual(source_patch_manifest("v0.19.1"), source_patch_manifest("v0.19.0"))
+        self.assertEqual(prebuilt_overrides("v0.19.1"), prebuilt_overrides("v0.19.0"))
+        self.assertEqual(xnnpack_commit_for("v0.19.1"), xnnpack_commit_for("v0.19.0"))
+        self.assertTrue(android_gpu_safety_applies("v0.19.1"))
+        self.assertFalse(require_container_patch_decision("v0.19.1"))
+        self.assertFalse(require_cpu_options_identifier_patch_decision("v0.19.1"))
+        self.assertFalse(require_workspace_build_patch_decision("v0.19.1"))
 
 
 if __name__ == "__main__":

@@ -5,8 +5,9 @@ import subprocess
 from pathlib import Path
 
 PATCH_PATH = "native/bridge/huggingface_token_bytes_v019.patch"
-AUDITED_TAGS = frozenset({"v0.19.0"})
-# LF-normalized upstream v0.19.0 / 83ce6067 preimages and patched postimages.
+AUDITED_TAGS = frozenset({"v0.19.0", "v0.19.1"})
+# LF-normalized upstream v0.19.0 / 83ce6067 preimages and patched postimages;
+# v0.19.1 / 7a03724c leaves every preimage unchanged.
 SOURCES = {
     "support/tokenizer/tokenizer.h": (
         "f80f9685c276c303bb3110203069ece92bcc61276db537baee50599eed2ad1da",

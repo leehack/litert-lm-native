@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 PATCH_PATH = "native/bridge/xnnpack_pf32_sme2.patch"
-AUDITED_TAGS = frozenset({"v0.18.1", "v0.19.0"})
+AUDITED_TAGS = frozenset({"v0.18.1", "v0.19.0", "v0.19.1"})
 # v0.18.1 pins TensorFlow a1179d3c, whose XLA pins this XNNPACK. It contains
 # 70a9c5e8ac, which moved the PF32 SME2 GEMM/GEMV to KleidiAI kernels that are
 # nondeterministic with more than one thread (google/XNNPACK#11789). The patch
@@ -35,7 +35,9 @@ SOURCES = {
     ),
 }
 # v0.19.0 pins TensorFlow 4f8e6d47, whose XLA pins this XNNPACK. It still
-# descends from REVERTED_COMMIT and google/XNNPACK#11789 is open.
+# descends from REVERTED_COMMIT and google/XNNPACK#11789 is open. v0.19.1 keeps
+# the same TensorFlow pin.
+V019_TAGS = frozenset({"v0.19.0", "v0.19.1"})
 V019_TENSORFLOW_REF = "4f8e6d470a7f2864a7b2af990d3ffcfc47f05c99"
 V019_XNNPACK_COMMIT = "28d1fc6d908bc4d80920be989177b7eb1a4aebc8"
 V019_XNNPACK_SHA256 = "b1d4ab092cd92b1241c1d14f440b5ed725530757b540fe4fb88a20b07577e8a8"
@@ -85,11 +87,11 @@ ARCHIVES = {
 
 
 def sources_for(compatibility_tag: str) -> dict[str, tuple[str, str]]:
-    return V019_SOURCES if compatibility_tag == "v0.19.0" else SOURCES
+    return V019_SOURCES if compatibility_tag in V019_TAGS else SOURCES
 
 
 def commit_for(compatibility_tag: str) -> str:
-    return V019_XNNPACK_COMMIT if compatibility_tag == "v0.19.0" else XNNPACK_COMMIT
+    return V019_XNNPACK_COMMIT if compatibility_tag in V019_TAGS else XNNPACK_COMMIT
 
 
 def require_xnnpack_pf32_patch_decision(compatibility_tag: str) -> bool:

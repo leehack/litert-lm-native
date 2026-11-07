@@ -5,6 +5,8 @@ import re
 import subprocess
 
 PATCH_PATH = "native/bridge/android_gpu_safety_v019.patch"
+# v0.19.1 leaves c/engine.cc and c/BUILD byte-identical to v0.19.0.
+AUDITED_TAGS = frozenset({"v0.19.0", "v0.19.1"})
 SOURCES = {'c/engine.cc': ('d2cefd0a04312b5808daddf730a924e8b83e2b1cc6214a5a12e8b454d56557c2',
                  '9ad52a303234df359a5a47256c512823b691c6c0c656b9a388bd544edda320e7'),
  'c/BUILD': ('f72d6fc3e341497cc9cc5b8ba405b81d8aff1e9eed080cc5e4f281832e066748',
@@ -12,7 +14,7 @@ SOURCES = {'c/engine.cc': ('d2cefd0a04312b5808daddf730a924e8b83e2b1cc6214a5a12e8
 
 
 def applies(tag: str) -> bool:
-    if tag == "v0.19.0":
+    if tag in AUDITED_TAGS:
         return True
     match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag)
     if match and tuple(map(int, match.groups())) < (0, 19, 0):

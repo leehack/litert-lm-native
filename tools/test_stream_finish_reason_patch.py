@@ -29,7 +29,7 @@ class StreamFinishReasonPatchTest(unittest.TestCase):
             self.assertEqual(finish_reason_patch_manifest(tag), [])
         for tag in ("v0.18.0", "v0.18.1"):
             self.assertTrue(require_finish_reason_patch_decision(tag))
-        for tag in ("v0.18.2", "v0.19.1", "main"):
+        for tag in ("v0.18.2", "v0.19.2", "main"):
             with self.subTest(tag=tag), self.assertRaisesRegex(
                 RuntimeError, "no explicit decision"
             ):

@@ -20,7 +20,7 @@ class HuggingFaceTokenBytesPatchTest(unittest.TestCase):
             self.assertFalse(carry.require_token_bytes_patch_decision(tag))
             self.assertEqual(carry.token_bytes_patch_manifest(tag), [])
         self.assertTrue(carry.require_token_bytes_patch_decision("v0.19.0"))
-        for tag in ("v0.19.1", "v0.20.0", "main"):
+        for tag in ("v0.19.2", "v0.20.0", "main"):
             with self.subTest(tag=tag), self.assertRaisesRegex(RuntimeError, "no explicit decision"):
                 carry.require_token_bytes_patch_decision(tag)
 

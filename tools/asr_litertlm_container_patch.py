@@ -5,8 +5,9 @@ from pathlib import Path
 
 AUDITED_CONTAINER_TAGS = frozenset({"v0.18.0", "v0.18.1"})
 # v0.19.0 contains UPSTREAM_FIX_COMMIT and replaces AsrEngine with Omni session
-# factories, which load the ASR section and tokenizer from the container.
-UPSTREAM_FIX_TAGS = frozenset({"v0.19.0"})
+# factories, which load the ASR section and tokenizer from the container;
+# v0.19.1 keeps that source.
+UPSTREAM_FIX_TAGS = frozenset({"v0.19.0", "v0.19.1"})
 PATCH_PATH = "native/bridge/asr_litertlm_container.patch"
 # Upstream google-ai-edge/LiteRT-LM bfdec21732 ("Support ASR models in
 # .litertlm") landed on main after the v0.18 release branch was cut.

@@ -43,7 +43,7 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
             self.assertFalse(require_xnnpack_pf32_patch_decision(tag))
             self.assertEqual(xnnpack_pf32_patch_manifest(tag), [])
         self.assertTrue(require_xnnpack_pf32_patch_decision("v0.18.1"))
-        for tag in ("v0.18.2", "v0.19.1", "main"):
+        for tag in ("v0.18.2", "v0.19.2", "main"):
             with self.subTest(tag=tag), self.assertRaisesRegex(
                 RuntimeError, "no explicit decision"
             ):
