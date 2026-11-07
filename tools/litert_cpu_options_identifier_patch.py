@@ -6,8 +6,9 @@ from pathlib import Path
 PATCH_PATH = "native/bridge/litert_cpu_options_identifier.patch"
 AUDITED_TAGS = frozenset({"v0.18.1"})
 # v0.19.0 ships Linux and Windows prebuilt libLiteRt that read "cpu_options",
-# the same identifier its pinned LiteRT dcb657e8 writes.
-UPSTREAM_FIX_TAGS = frozenset({"v0.19.0"})
+# the same identifier its pinned LiteRT dcb657e8 writes. v0.19.1 keeps both the
+# LiteRT pin and those prebuilts.
+UPSTREAM_FIX_TAGS = frozenset({"v0.19.0", "v0.19.1"})
 # LiteRT 724a247cc5 renamed the CPU options identifier from "xnnpack" to
 # "cpu_options". v0.18.1 pins LiteRT ca21dc99, which has the rename, but still
 # ships the 2026-09-28 prebuilt libLiteRt from before it. Linux and Windows

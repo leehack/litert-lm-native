@@ -6,7 +6,7 @@ from pathlib import Path
 PATCH_PATH = "native/bridge/stream_finish_reason.patch"
 BAZEL_DEFINE = "--define=litert_lm_finish_reason_api=true"
 # v0.18.1 changes dependencies only; all six preimages equal v0.18.0.
-AUDITED_FINISH_REASON_TAGS = frozenset({"v0.18.0", "v0.18.1", "v0.19.0"})
+AUDITED_FINISH_REASON_TAGS = frozenset({"v0.18.0", "v0.18.1", "v0.19.0", "v0.19.1"})
 # LF-normalized (preimage, postimage) SHA-256 per patched v0.18.0 source.
 SOURCES = {
     "c/conversation.cc": (
@@ -36,7 +36,9 @@ SOURCES = {
 }
 
 
-# v0.19.0 has no terminal cause either; the same change, re-ported.
+# v0.19.0 has no terminal cause either; the same change, re-ported. All six
+# v0.19.1 preimages equal v0.19.0.
+V019_TAGS = frozenset({"v0.19.0", "v0.19.1"})
 V019_PATCH_PATH = "native/bridge/stream_finish_reason_v019.patch"
 V019_SOURCES = {
     "c/conversation.cc": (
@@ -67,11 +69,11 @@ V019_SOURCES = {
 
 
 def patch_path_for(compatibility_tag: str) -> str:
-    return V019_PATCH_PATH if compatibility_tag == "v0.19.0" else PATCH_PATH
+    return V019_PATCH_PATH if compatibility_tag in V019_TAGS else PATCH_PATH
 
 
 def sources_for(compatibility_tag: str) -> dict[str, tuple[str, str]]:
-    return V019_SOURCES if compatibility_tag == "v0.19.0" else SOURCES
+    return V019_SOURCES if compatibility_tag in V019_TAGS else SOURCES
 
 
 def require_finish_reason_patch_decision(compatibility_tag: str) -> bool:

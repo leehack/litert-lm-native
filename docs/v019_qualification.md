@@ -110,3 +110,23 @@ typed-error/automatic-fallback integration remain release gates.
 | iOS Metal sampler path | Retire | The prebuilt it pointed at no longer exists. |
 | Android Dawn rollback | Keep pending device run | v0.19 rebuilds Dawn and the accelerator; no Pixel Mali-G715 run has qualified either choice. |
 | GPU environment teardown | Not selected | Upstream records options before `InitializeOpenCl`; the Android disassembly gate remains. |
+
+## v0.19.1
+
+Upstream tag `v0.19.1` is `7a03724cece417f1724c923b3d527b4319730841`, three
+commits over `83ce6067`. Its only runtime change, `e4e00eee`, makes the main
+executor's `max_num_images` default 4 (`kDefaultMaxNumImages`) instead of 0,
+with or without a vision backend; an explicit positive value, including one set
+through `litert_lm_engine_settings_set_max_num_images`, still wins. The Artisan
+executor that splits larger prefills is not in the open-source tree. The rest
+updates upstream `Package.swift` binary checksums, which owner packaging does
+not read, and Web tests. The release notes' Artisan vision and audio support has
+no other source change in the tag.
+
+The `c/` tree, `omni/`, `prebuilt/`, `WORKSPACE`, `.bazelrc` and every carried
+preimage are byte-identical to v0.19.0, so LiteRT `dcb657e8`, TensorFlow
+`4f8e6d47`, XNNPACK `28d1fc6d` and the prebuilt `libLiteRt`, accelerators and
+Dawn are unchanged. Every v0.19.0 decision above applies unchanged; v0.19.2 and
+later still fail closed until audited. The bridge and ASR bridge use neither
+`max_num_images` nor any changed file. Earlier v0.19.0 artifacts and smoke
+evidence are bound to `83ce6067` and do not qualify this source.

@@ -7,6 +7,7 @@ from xnnpack_pf32_sme2_patch import (
     AUDITED_TAGS,
     SOURCES as PF32_SOURCES,
     V019_SOURCES as PF32_V019_SOURCES,
+    V019_TAGS,
     commit_for,
 )
 
@@ -34,7 +35,7 @@ V019_SOURCES = {
 
 
 def sources_for(compatibility_tag: str) -> dict[str, tuple[str, str]]:
-    return V019_SOURCES if compatibility_tag == "v0.19.0" else SOURCES
+    return V019_SOURCES if compatibility_tag in V019_TAGS else SOURCES
 
 
 def require_xnnpack_qc4w_patch_decision(compatibility_tag: str) -> bool:

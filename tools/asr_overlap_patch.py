@@ -19,11 +19,12 @@ PATCH_PATH = "native/bridge/asr_untimed_overlap.patch"
 MERGER_SOURCE = "omni/asr/timestamp_text_merger.cc"
 # v0.19.0 moved and rewrote the merger; its seam-run fallback still mis-seams
 # repeated phrases at the bridge's 0.4 overlap (docs/asr_untimed_overlap.md).
+# The v0.19.1 merger is byte-identical to v0.19.0.
 V019_PREIMAGE_SHA256 = "1ddbc15f935d63ca123011e7e4864b33b78b8cd5ee292b9d3bccf90d2bdb378f"
 V019_POSTIMAGE_SHA256 = "3b135f027b369ceadb734117d416071e4e64837304f49b90e77e8f9d19fec060"
 V019_PATCH_PATH = "native/bridge/asr_untimed_overlap_v019.patch"
 V019_MERGER_SOURCE = "omni/speech2text/timestamp_text_merger.cc"
-V019_OVERLAP_TAGS = frozenset({"v0.19.0"})
+V019_OVERLAP_TAGS = frozenset({"v0.19.0", "v0.19.1"})
 
 
 def merger_source(compatibility_tag: str) -> str:
