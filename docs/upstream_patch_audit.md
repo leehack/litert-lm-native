@@ -175,7 +175,8 @@ google/XNNPACK#11793, verified on multithreaded SME2 decode.
 
 ## #89 workaround tracking: LiteRT CPU options identifier
 
-Linux and Windows builds use `--define=litert_runtime_link_mode=dynamic`, so
+v0.16 to v0.18 Linux and Windows builds use
+`--define=litert_runtime_link_mode=dynamic`, so
 `libLiteRtLm` creates compiled models through the upstream prebuilt
 `libLiteRt` (`kLiteRtRuntimeBuiltin`). The host serializes CPU options under
 `LrtGetCpuOptionsIdentifier()`, which LiteRT `ca21dc99` returns as

@@ -168,7 +168,23 @@ Downstream packages should not infer platform support from filenames alone.
 
 ## Desktop WebGPU runtime linkage
 
-For Linux and Windows builds using LiteRT-LM v0.16 or newer, pass
+From v0.19, Linux and Windows link LiteRT from the pinned `LITERT_REF` into
+`libLiteRtLm`/`LiteRtLm.dll`, as Apple and Android do, which also compiles in
+the WebGPU accelerator
+([#111](https://github.com/leehack/litert-lm-native/issues/111)). LiteRT-LM
+hands external and in-memory weights to LiteRT by writing C++ members of the
+opaque options struct (`SetExternalWeightScopedFile`, `SetWeightInMemoryMap`).
+The host is built against libstdc++ or the MSVC STL, while upstream's prebuilt
+`libLiteRt` carries its own libc++, so that write was not ABI-valid: Linux lost
+the weights and Windows crashed, which broke every bundle with external-weight
+sections, such as EmbeddingGemma-2. The build fails if a v0.19+ desktop host
+still imports `libLiteRt`. Bundles keep shipping the upstream `libLiteRt` and
+`libLiteRtWebGpuAccelerator` files so the consumer layout is unchanged, but the
+host loads neither.
+
+The rest of this section covers v0.16 to v0.18.
+
+For Linux and Windows builds using LiteRT-LM v0.16 to v0.18, pass
 `--define=litert_runtime_link_mode=dynamic` so the host uses the same shared
 LiteRT runtime as its prebuilt accelerators. `litert_link_capi_so=true` is a
 legacy setting and does not select the modern runtime dependency path. Keep
