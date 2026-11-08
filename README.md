@@ -299,6 +299,11 @@ callback loaders. For LiteRT-LM 0.15 and newer, it translates upstream opaque
 stream chunks back to the stable text/final/error callback consumed by existing
 FFI clients. `stream_proxy_callback_abi_version` lets consumers reject an
 incompatible bridge before starting an asynchronous callback.
+`litert_lm_native_in_process_litert_abi_version()` returns 1 when the build
+compiled LiteRT into the runtime and verified it imports no separate `libLiteRt`
+(every v0.19+ build), else 0; treat a missing export as 0. It covers the weight
+handoff only, not GPU qualification. See
+[`docs/platform_strategy.md`](docs/platform_strategy.md).
 
 LiteRT-LM 0.16 source contains a stateful ASR pipeline but does not publish it
 through `c/engine.h` or its official C binaries. Source-built 0.16+ runtimes
