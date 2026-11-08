@@ -28,6 +28,7 @@ from litert_cpu_options_identifier_patch import (
 from litert_lm_symbols import (
     has_asr_bridge,
     has_omni_asr_engine,
+    in_process_litert_abi_version,
     is_at_least,
     uses_c_api_v1,
     required_bridge_symbols,
@@ -582,6 +583,8 @@ def build_runtime(
         command.append("--define=litert_lm_asr_omni_engine=true")
     if uses_c_api_v1(upstream_tag):
         command.append("--define=litert_lm_c_api_v1=true")
+    if in_process_litert_abi_version(upstream_tag) == 1:
+        command.append("--define=litert_lm_in_process_litert=true")
     if require_finish_reason_patch_decision(upstream_tag):
         command.append(FINISH_REASON_DEFINE)
     if platform == "macos":
@@ -863,19 +866,25 @@ def validate_exported_symbols(output: Path, upstream_tag: str) -> None:
     print(f"Validated LiteRT-LM and bridge symbols in {output}", flush=True)
 
 
-def validate_desktop_litert_linkage(output: Path, platform: str, upstream_tag: str) -> None:
-    """Fails if a v0.19+ desktop host still loads LiteRT from another binary."""
-    if platform not in {"linux", "windows"} or not is_at_least(upstream_tag, (0, 19, 0)):
+SHARED_LITERT_NAMES = frozenset({"liblitert.so", "liblitert.dll", "liblitert.dylib", "litert"})
+
+
+def validate_in_process_litert_linkage(output: Path, platform: str, upstream_tag: str) -> None:
+    """Fails if a runtime that reports in-process LiteRT loads it from another binary."""
+    if in_process_litert_abi_version(upstream_tag) != 1:
         return
-    if platform == "linux":
-        imported = set(elf_needed_libraries(output))
+    if platform in {"linux", "android"}:
+        imported = elf_needed_libraries(output)
+    elif platform == "windows":
+        imported = list(windows_runtime.read_pe(output).all_imports())
     else:
-        imported = set(windows_runtime.read_pe(output).all_imports())
-    shared = sorted(name for name in imported if name.lower() in {"liblitert.so", "liblitert.dll"})
+        imported = macho_needed_libraries(output)
+    shared = sorted(name for name in imported if Path(name).name.lower() in SHARED_LITERT_NAMES)
     if shared:
         raise RuntimeError(
-            f"{output.name} imports {', '.join(shared)}; v0.19+ desktop hosts must "
-            "compile LiteRT in so external-weight options stay ABI-valid (#111)")
+            f"{output.name} imports {', '.join(shared)}; a runtime reporting "
+            "litert_lm_native_in_process_litert_abi_version() 1 must compile "
+            "LiteRT in so external-weight options stay ABI-valid (#111)")
     print(f"Validated in-process LiteRT linkage in {output}", flush=True)
 
 
@@ -895,6 +904,14 @@ def validate_android_gpu_environment_teardown(output: Path, platform: str) -> No
         return
     validate_library(output, find_ndk_llvm_objdump(os.environ.get("ANDROID_NDK_HOME")))
     print(f"Validated WebGPU teardown ordering in {output}", flush=True)
+
+
+def validate_runtime(output: Path, platform: str, upstream_tag: str) -> None:
+    validate_exported_symbols(output, upstream_tag)
+    validate_in_process_litert_linkage(output, platform, upstream_tag)
+    validate_android_global_visibility(output, platform)
+    validate_android_protobuf_isolation(output, platform, upstream_tag)
+    validate_android_gpu_environment_teardown(output, platform)
 
 
 def main() -> int:
@@ -934,11 +951,7 @@ def main() -> int:
             args.jobs,
             upstream_ref,
         )
-        validate_exported_symbols(output, args.upstream_tag)
-        validate_desktop_litert_linkage(output, args.platform, args.upstream_tag)
-        validate_android_global_visibility(output, args.platform)
-        validate_android_protobuf_isolation(output, args.platform, args.upstream_tag)
-        validate_android_gpu_environment_teardown(output, args.platform)
+        validate_runtime(output, args.platform, args.upstream_tag)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)
@@ -969,11 +982,7 @@ def main() -> int:
             args.jobs,
             upstream_ref,
         )
-        validate_exported_symbols(output, args.upstream_tag)
-        validate_desktop_litert_linkage(output, args.platform, args.upstream_tag)
-        validate_android_global_visibility(output, args.platform)
-        validate_android_protobuf_isolation(output, args.platform, args.upstream_tag)
-        validate_android_gpu_environment_teardown(output, args.platform)
+        validate_runtime(output, args.platform, args.upstream_tag)
         stage_runtime(output, args.platform, args.arch)
         stage_runtime_dependencies(output, source_root, args.platform, args.arch)
         stage_runtime_overrides(args.upstream_tag, args.platform, args.arch)

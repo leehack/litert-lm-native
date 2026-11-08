@@ -213,7 +213,7 @@ jobs:
           (matrix.platform == 'macos' && matrix.arch == 'arm64' && runner.arch == 'ARM64')
         run: python3 tools/fetch_litert_lm_asr_smoke_assets.py --output-dir asr-smoke-assets
 
-      - name: Run Unix ASR real-model smoke and finish-reason ABI check
+      - name: Run Unix ASR real-model smoke and bridge ABI checks
         if: >-
           (matrix.platform == 'linux' && matrix.arch == 'x64') ||
           (matrix.platform == 'macos' && matrix.arch == 'arm64' && runner.arch == 'ARM64')
@@ -284,7 +284,7 @@ jobs:
           whisper a1b2c3d4_parakeet_ctc.litertlm --clear-model-name \
             --enum-override decoder_type=1 --expect-engine-created
 
-      - name: Run Windows ASR real-model smoke and finish-reason ABI check
+      - name: Run Windows ASR real-model smoke and bridge ABI checks
         if: matrix.platform == 'windows' && matrix.arch == 'x64'
         shell: pwsh
         env:

@@ -245,6 +245,14 @@ LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_has_allocation_failure(
   return atomic_load_explicit(&context->allocation_failure, memory_order_acquire);
 }
 
+LITERT_LM_BRIDGE_EXPORT int32_t litert_lm_native_in_process_litert_abi_version(void) {
+#if defined(LITERT_LM_IN_PROCESS_LITERT)
+  return 1;
+#else
+  return 0;
+#endif
+}
+
 LITERT_LM_BRIDGE_EXPORT void stream_proxy_delete(void *callback_data) {
   free(callback_data);
 }

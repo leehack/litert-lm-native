@@ -48,6 +48,7 @@ BRIDGE_SYMBOLS = [
     b"stream_proxy_get_finish_reason",
     b"stream_proxy_allocation_failure_abi_version",
     b"stream_proxy_has_allocation_failure",
+    b"litert_lm_native_in_process_litert_abi_version",
 ]
 
 V0_16_ASR_BRIDGE_SYMBOLS = [
@@ -128,6 +129,16 @@ def has_omni_asr_engine(upstream_tag: str) -> bool:
 
 def uses_c_api_v1(upstream_tag: str) -> bool:
     return is_at_least(upstream_tag, (0, 19, 0))
+
+
+def in_process_litert_abi_version(upstream_tag: str) -> int:
+    """Value of litert_lm_native_in_process_litert_abi_version() for this baseline.
+
+    From v0.19 every platform compiles LiteRT into the runtime (#111), and the
+    build verifies it. Earlier desktop runtimes load upstream's prebuilt
+    libLiteRt, and earlier mobile linkage was never verified, so they report 0.
+    """
+    return 1 if is_at_least(upstream_tag, (0, 19, 0)) else 0
 
 
 def has_prebuilt_topk_samplers(upstream_tag: str) -> bool:

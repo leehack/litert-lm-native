@@ -53,8 +53,9 @@ def require_cpu_options_identifier_patch_decision(compatibility_tag: str) -> boo
         return False
     raise RuntimeError(
         f"LiteRT CPU options identifier rollback has no explicit decision for "
-        f"{compatibility_tag}; check which identifier the pinned LiteRT and the "
-        "Linux/Windows prebuilt libLiteRt use, then record the decision in "
+        f"{compatibility_tag}; v0.19+ hosts compile LiteRT in (#111), so the "
+        "rollback is needed only if a host links a separate libLiteRt that reads "
+        "another identifier than the pinned LiteRT writes. Record the decision in "
         "tools/litert_cpu_options_identifier_patch.py and "
         "docs/upstream_patch_audit.md")
 

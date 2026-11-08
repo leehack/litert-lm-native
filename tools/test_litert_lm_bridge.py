@@ -53,6 +53,7 @@ class LiteRtLmBridgeTest(unittest.TestCase):
                     "stream_proxy_allocation_failure_abi_version",
                     "stream_proxy_has_allocation_failure",
                     "stream_proxy_delete", "stream_proxy_free_string",
+                    "litert_lm_native_in_process_litert_abi_version",
                 )})
 
     def test_asr_session_adapter_preserves_both_upstream_apis(self) -> None:
@@ -115,6 +116,10 @@ class LiteRtLmBridgeTest(unittest.TestCase):
     def test_stream_chunk_finish_reason(self) -> None:
         self._compile_and_run(stream_chunk_api=True, finish_reason_api=True)
 
+    def test_in_process_litert_marker(self) -> None:
+        self._compile_and_run(stream_chunk_api=True, finish_reason_api=True,
+                              in_process_litert=True)
+
     def test_finish_reason_requires_stream_chunk_api(self) -> None:
         compiler = shutil.which("cc") or shutil.which("clang")
         if compiler is None:
@@ -127,7 +132,8 @@ class LiteRtLmBridgeTest(unittest.TestCase):
         self.assertIn("requires LITERT_LM_STREAM_CHUNK_API", result.stderr)
 
     def _compile_and_run(
-        self, *, stream_chunk_api: bool, finish_reason_api: bool = False
+        self, *, stream_chunk_api: bool, finish_reason_api: bool = False,
+        in_process_litert: bool = False,
     ) -> None:
         compiler = shutil.which("cc") or shutil.which("clang")
         if compiler is None:
@@ -146,6 +152,8 @@ class LiteRtLmBridgeTest(unittest.TestCase):
                 command.append("-DLITERT_LM_STREAM_CHUNK_API=1")
             if finish_reason_api:
                 command.append("-DLITERT_LM_FINISH_REASON_API=1")
+            if in_process_litert:
+                command.append("-DLITERT_LM_IN_PROCESS_LITERT=1")
             command.extend(
                 [
                     str(BRIDGE_SOURCE),

@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import unittest
+from contextlib import ExitStack
 from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
@@ -156,27 +157,52 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     dynamic = platform in {"linux", "windows"} and tag not in {"v0.15.0", "v0.19.0", "v0.19.1"}
                     self.assertEqual("--define=litert_runtime_link_mode=dynamic" in command, dynamic)
                     self.assertEqual("--define=litert_link_capi_so=true" in command, not dynamic)
+                    self.assertEqual("--define=litert_lm_in_process_litert=true" in command,
+                                     tag in {"v0.19.0", "v0.19.1"})
                     self.assertIn("--define=resolve_symbols_in_exec=false", command)
 
-    def test_v019_desktop_host_must_not_import_shared_litert(self) -> None:
+    def test_v019_runtime_must_not_import_shared_litert(self) -> None:
         cases = (("linux", ["libLiteRt.so", "libc.so.6"], ["libwebgpu_dawn.so", "libc.so.6"]),
-                 ("windows", {"libLiteRt.dll": frozenset()}, {"KERNEL32.dll": frozenset()}))
+                 ("android", ["libLiteRt.so", "libc.so"], ["libwebgpu_dawn.so", "libc.so"]),
+                 ("windows", {"libLiteRt.dll": frozenset()}, {"KERNEL32.dll": frozenset()}),
+                 ("macos", ["@rpath/libLiteRtLm.dylib", "@rpath/libLiteRt.dylib"],
+                  ["@rpath/libLiteRtLm.dylib", "@rpath/libwebgpu_dawn.dylib"]),
+                 ("ios", ["@rpath/LiteRtLm.framework/LiteRtLm", "@rpath/LiteRt.framework/LiteRt"],
+                  ["@rpath/LiteRtLm.framework/LiteRtLm", "/usr/lib/libc++.1.dylib"]))
         for platform, shared, static in cases:
-            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as temp:
-                output = Path(temp) / "host"
-                with patch.object(build_upstream_runtime, "elf_needed_libraries", return_value=shared), \
-                     patch.object(build_upstream_runtime.windows_runtime, "read_pe",
-                                  return_value=SimpleNamespace(all_imports=lambda: shared)):
+            with self.subTest(platform=platform):
+                output = Path("host")
+                with self._imports(shared):
                     with self.assertRaisesRegex(RuntimeError, "#111"):
-                        build_upstream_runtime.validate_desktop_litert_linkage(output, platform, "v0.19.1")
-                    build_upstream_runtime.validate_desktop_litert_linkage(output, platform, "v0.18.1")
-                with patch.object(build_upstream_runtime, "elf_needed_libraries", return_value=static), \
-                     patch.object(build_upstream_runtime.windows_runtime, "read_pe",
-                                  return_value=SimpleNamespace(all_imports=lambda: static)):
-                    build_upstream_runtime.validate_desktop_litert_linkage(output, platform, "v0.19.1")
-        with patch.object(build_upstream_runtime, "elf_needed_libraries") as needed:
-            build_upstream_runtime.validate_desktop_litert_linkage(Path("libLiteRtLm.so"), "android", "v0.19.1")
-            needed.assert_not_called()
+                        build_upstream_runtime.validate_in_process_litert_linkage(output, platform, "v0.19.1")
+                    build_upstream_runtime.validate_in_process_litert_linkage(output, platform, "v0.18.1")
+                with self._imports(static):
+                    build_upstream_runtime.validate_in_process_litert_linkage(output, platform, "v0.19.1")
+
+    def test_main_rejects_shared_litert_on_both_build_paths(self) -> None:
+        for source_root in (True, False):
+            with self.subTest(source_root=source_root), tempfile.TemporaryDirectory() as temp:
+                argv = ["build_upstream_runtime.py", "--upstream-tag", "v0.19.1",
+                        "--platform", "linux", "--arch", "x64"]
+                if source_root:
+                    argv += ["--source-root", temp]
+                with patch("sys.argv", argv), \
+                     patch.object(build_upstream_runtime, "download_upstream", return_value=Path(temp)), \
+                     patch.object(build_upstream_runtime, "build_runtime", return_value=Path(temp) / "libLiteRtLm.so"), \
+                     patch.object(build_upstream_runtime, "validate_exported_symbols"), \
+                     patch.object(build_upstream_runtime, "stage_runtime") as stage, \
+                     self._imports(["libLiteRt.so"]):
+                    with self.assertRaisesRegex(RuntimeError, "#111"):
+                        build_upstream_runtime.main()
+                stage.assert_not_called()
+
+    def _imports(self, imported):
+        stack = ExitStack()
+        stack.enter_context(patch.object(build_upstream_runtime, "elf_needed_libraries", return_value=imported))
+        stack.enter_context(patch.object(build_upstream_runtime, "macho_needed_libraries", return_value=imported))
+        stack.enter_context(patch.object(build_upstream_runtime.windows_runtime, "read_pe",
+                                         return_value=SimpleNamespace(all_imports=lambda: imported)))
+        return stack
 
     def test_linux_stages_matching_prebuilt_core_even_over_stale_copy(self) -> None:
         for arch, target in (("x64", "linux_x86_64"), ("arm64", "linux_arm64")):

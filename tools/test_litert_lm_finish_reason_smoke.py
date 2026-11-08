@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -68,6 +70,16 @@ class FinishReasonSmokeTest(unittest.TestCase):
         self.assertEqual(smoke.expected_abi_version("v0.17.1"), 0)
         with self.assertRaisesRegex(RuntimeError, "no explicit decision"):
             smoke.expected_abi_version("v0.19.2")
+
+    def test_abi_only_requires_the_tag_in_process_litert_marker(self) -> None:
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertFalse(smoke.in_process_litert_matches(SimpleNamespace(), "v0.19.1"))
+            for version, tag, expected in ((1, "v0.19.1", True), (0, "v0.19.1", False),
+                                           (0, "v0.18.1", True), (1, "v0.18.1", False)):
+                library = SimpleNamespace(
+                    litert_lm_native_in_process_litert_abi_version=Mock(return_value=version))
+                with self.subTest(version=version, tag=tag):
+                    self.assertEqual(smoke.in_process_litert_matches(library, tag), expected)
 
 
 if __name__ == "__main__":

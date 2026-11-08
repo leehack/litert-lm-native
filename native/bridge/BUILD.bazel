@@ -75,6 +75,13 @@ config_setting(
     define_values = {"litert_lm_c_api_v1": "true"},
 )
 
+# Set only when the build links LiteRT into the runtime and verifies that the
+# runtime imports no separate libLiteRt.
+config_setting(
+    name = "in_process_litert",
+    define_values = {"litert_lm_in_process_litert": "true"},
+)
+
 # Restrict the new export policy to the Android C API 1.0 runtime link.
 config_setting(
     name = "android_c_api_v1",
@@ -106,6 +113,9 @@ cc_library(
         "//conditions:default": [],
     }) + select({
         ":c_api_v1": ["LITERT_LM_C_API_V1=1"],
+        "//conditions:default": [],
+    }) + select({
+        ":in_process_litert": ["LITERT_LM_IN_PROCESS_LITERT=1"],
         "//conditions:default": [],
     }),
     linkopts = select({

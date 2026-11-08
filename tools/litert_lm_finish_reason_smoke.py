@@ -3,7 +3,8 @@
 
 Each scenario streams one conversation turn through stream_proxy_* and checks
 the reason reported after the final callback. With --abi-only it only checks
-that a built runtime reports the finish-reason ABI version its tag requires.
+that a built runtime reports the finish-reason and in-process LiteRT ABI
+versions its tag requires.
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from litert_lm_c_api import CApi
+from litert_lm_symbols import in_process_litert_abi_version
 from stream_finish_reason_patch import require_finish_reason_patch_decision
 
 FINISH_REASONS = {
@@ -184,6 +186,22 @@ def expected_abi_version(upstream_tag: str) -> int:
     return 1 if require_finish_reason_patch_decision(upstream_tag) else 0
 
 
+def in_process_litert_matches(library, upstream_tag: str) -> bool:
+    expected = in_process_litert_abi_version(upstream_tag)
+    try:
+        marker = library.litert_lm_native_in_process_litert_abi_version
+    except AttributeError:
+        print("runtime lacks litert_lm_native_in_process_litert_abi_version",
+              file=sys.stderr)
+        return False
+    marker.restype = ctypes.c_int32
+    marker.argtypes = []
+    version = marker()
+    print(f"litert_lm_native_in_process_litert_abi_version() = {version}; "
+          f"{upstream_tag} expects {expected}")
+    return version == expected
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--library", type=Path, required=True)
@@ -210,7 +228,8 @@ def main() -> int:
         expected = expected_abi_version(args.upstream_tag)
         print(f"stream_proxy_finish_reason_abi_version() = {version}; "
               f"{args.upstream_tag} expects {expected}")
-        return 0 if version == expected else 1
+        in_process = in_process_litert_matches(library, args.upstream_tag)
+        return 0 if version == expected and in_process else 1
     if version != 1:
         print(f"stream_proxy_finish_reason_abi_version() = {version}; "
               "this runtime does not report finish reasons", file=sys.stderr)
