@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -130,9 +131,9 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 command = run.call_args.args[0]
                 self.assertEqual("--define=litert_lm_capabilities_in_c_engine=true" in command, expected)
 
-    def test_desktop_gpu_build_selects_shared_runtime_without_legacy_define(self) -> None:
+    def test_desktop_build_selects_shared_runtime_only_for_v016_to_v018(self) -> None:
         for platform, arch in build_upstream_runtime.RUNTIME_TARGETS:
-            for tag in ("v0.15.0", "v0.16.0", "v0.17.0", "v0.17.1"):
+            for tag in ("v0.15.0", "v0.16.0", "v0.17.0", "v0.17.1", "v0.18.1", "v0.19.0", "v0.19.1"):
                 with self.subTest(platform=platform, arch=arch, tag=tag), tempfile.TemporaryDirectory() as temp:
                     root = Path(temp)
                     gate = root / "runtime/conversation/model_data_processor/BUILD"
@@ -140,16 +141,42 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     gate.write_bytes((Path(__file__).parent / "fixtures/ios_fst_gate.BUILD").read_bytes())
                     with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
                          patch.object(build_upstream_runtime, "patch_upstream_ios_sampler_path"), \
+                         patch.object(build_upstream_runtime, "patch_asr_untimed_overlap"), \
+                         patch.object(build_upstream_runtime, "patch_asr_litertlm_container"), \
+                         patch.object(build_upstream_runtime, "patch_stream_finish_reason"), \
+                         patch.object(build_upstream_runtime, "patch_huggingface_token_bytes"), \
+                         patch.object(build_upstream_runtime, "apply_android_gpu_safety"), \
+                         patch.object(build_upstream_runtime, "verify_dynamic_runtime"), \
                          patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]), \
                          patch.object(build_upstream_runtime, "run", side_effect=RuntimeError("captured build")) as run:
                         with self.assertRaisesRegex(RuntimeError, "captured build"):
                             build_upstream_runtime.build_runtime(root, platform, arch, tag, "3")
                     command = run.call_args.args[0]
-                    self.assertEqual("--define=LITERT_LM_FST_CONSTRAINTS_DISABLED=1" in command, platform == "ios" and tag in {"v0.17.0", "v0.17.1"})
-                    dynamic = platform in {"linux", "windows"} and tag != "v0.15.0"
+                    self.assertEqual("--define=LITERT_LM_FST_CONSTRAINTS_DISABLED=1" in command, platform == "ios" and tag not in {"v0.15.0", "v0.16.0"})
+                    dynamic = platform in {"linux", "windows"} and tag not in {"v0.15.0", "v0.19.0", "v0.19.1"}
                     self.assertEqual("--define=litert_runtime_link_mode=dynamic" in command, dynamic)
                     self.assertEqual("--define=litert_link_capi_so=true" in command, not dynamic)
                     self.assertIn("--define=resolve_symbols_in_exec=false", command)
+
+    def test_v019_desktop_host_must_not_import_shared_litert(self) -> None:
+        cases = (("linux", ["libLiteRt.so", "libc.so.6"], ["libwebgpu_dawn.so", "libc.so.6"]),
+                 ("windows", {"libLiteRt.dll": frozenset()}, {"KERNEL32.dll": frozenset()}))
+        for platform, shared, static in cases:
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as temp:
+                output = Path(temp) / "host"
+                with patch.object(build_upstream_runtime, "elf_needed_libraries", return_value=shared), \
+                     patch.object(build_upstream_runtime.windows_runtime, "read_pe",
+                                  return_value=SimpleNamespace(all_imports=lambda: shared)):
+                    with self.assertRaisesRegex(RuntimeError, "#111"):
+                        build_upstream_runtime.validate_desktop_litert_linkage(output, platform, "v0.19.1")
+                    build_upstream_runtime.validate_desktop_litert_linkage(output, platform, "v0.18.1")
+                with patch.object(build_upstream_runtime, "elf_needed_libraries", return_value=static), \
+                     patch.object(build_upstream_runtime.windows_runtime, "read_pe",
+                                  return_value=SimpleNamespace(all_imports=lambda: static)):
+                    build_upstream_runtime.validate_desktop_litert_linkage(output, platform, "v0.19.1")
+        with patch.object(build_upstream_runtime, "elf_needed_libraries") as needed:
+            build_upstream_runtime.validate_desktop_litert_linkage(Path("libLiteRtLm.so"), "android", "v0.19.1")
+            needed.assert_not_called()
 
     def test_linux_stages_matching_prebuilt_core_even_over_stale_copy(self) -> None:
         for arch, target in (("x64", "linux_x86_64"), ("arm64", "linux_arm64")):

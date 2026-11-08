@@ -166,6 +166,18 @@ PREBUILT_TARGETS = {
 LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 
 
+def uses_shared_desktop_litert(platform: str, upstream_tag: str) -> bool:
+    """Whether a desktop host links upstream's prebuilt libLiteRt (v0.16-v0.18).
+
+    LiteRT-LM hands external weights over by writing C++ members of LiteRT's
+    opaque options struct, which is ABI-valid only when LiteRT is compiled into
+    the host with the same C++ runtime, as on Apple and Android (#111).
+    """
+    return (platform in {"linux", "windows"}
+            and is_at_least(upstream_tag, (0, 16, 0))
+            and not is_at_least(upstream_tag, (0, 19, 0)))
+
+
 def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
     """Carry #673 only on an audited source; require review on drift."""
     require_asr_patch_decision(upstream_tag)
@@ -555,10 +567,8 @@ def build_runtime(
         *configs,
         *target.get("bazel_options", []),
         target["bazel_target"],
-        # Modern desktop accelerators require the shared LiteRT runtime. The
-        # legacy define is ignored by their current dependency selection.
         ("--define=litert_runtime_link_mode=dynamic"
-         if platform in {"linux", "windows"} and is_at_least(upstream_tag, (0, 16, 0))
+         if uses_shared_desktop_litert(platform, upstream_tag)
          else "--define=litert_link_capi_so=true"),
         "--define=resolve_symbols_in_exec=false",
     ]
@@ -853,6 +863,22 @@ def validate_exported_symbols(output: Path, upstream_tag: str) -> None:
     print(f"Validated LiteRT-LM and bridge symbols in {output}", flush=True)
 
 
+def validate_desktop_litert_linkage(output: Path, platform: str, upstream_tag: str) -> None:
+    """Fails if a v0.19+ desktop host still loads LiteRT from another binary."""
+    if platform not in {"linux", "windows"} or not is_at_least(upstream_tag, (0, 19, 0)):
+        return
+    if platform == "linux":
+        imported = set(elf_needed_libraries(output))
+    else:
+        imported = set(windows_runtime.read_pe(output).all_imports())
+    shared = sorted(name for name in imported if name.lower() in {"liblitert.so", "liblitert.dll"})
+    if shared:
+        raise RuntimeError(
+            f"{output.name} imports {', '.join(shared)}; v0.19+ desktop hosts must "
+            "compile LiteRT in so external-weight options stay ABI-valid (#111)")
+    print(f"Validated in-process LiteRT linkage in {output}", flush=True)
+
+
 def validate_android_global_visibility(output: Path, platform: str) -> None:
     if platform != "android":
         return
@@ -909,6 +935,7 @@ def main() -> int:
             upstream_ref,
         )
         validate_exported_symbols(output, args.upstream_tag)
+        validate_desktop_litert_linkage(output, args.platform, args.upstream_tag)
         validate_android_global_visibility(output, args.platform)
         validate_android_protobuf_isolation(output, args.platform, args.upstream_tag)
         validate_android_gpu_environment_teardown(output, args.platform)
@@ -943,6 +970,7 @@ def main() -> int:
             upstream_ref,
         )
         validate_exported_symbols(output, args.upstream_tag)
+        validate_desktop_litert_linkage(output, args.platform, args.upstream_tag)
         validate_android_global_visibility(output, args.platform)
         validate_android_protobuf_isolation(output, args.platform, args.upstream_tag)
         validate_android_gpu_environment_teardown(output, args.platform)
