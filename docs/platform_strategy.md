@@ -52,6 +52,13 @@ reaches LiteRT:
 | 0 | Not established. Builds before v0.19 report 0; their Linux and Windows runtimes for v0.16 to v0.18 load upstream's prebuilt `libLiteRt` (#111). |
 | missing | The runtime predates the marker; treat it as 0. |
 
+The marker covers only the LiteRT-LM to LiteRT weight handoff. It is not GPU
+qualification: the `gpu_registry.cc` fallback to the prebuilt accelerator still
+resolves LiteRT symbols from the host, which is the
+[#47](https://github.com/leehack/litert-lm-native/issues/47) crash class. On
+Linux, a consumer that preloads a separate `libLiteRt` with `RTLD_GLOBAL`
+recreates the #111 state while the marker still reads 1.
+
 Every source build from LiteRT-LM v0.19 reports 1 on every platform. The
 export is additive and carries no other ABI change. It is a bridge export
 because `litert_lm_get_api_version` reports upstream's C API version, which this

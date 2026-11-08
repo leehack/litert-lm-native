@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import litert_lm_finish_reason_smoke as smoke
 
@@ -80,6 +81,22 @@ class FinishReasonSmokeTest(unittest.TestCase):
                     litert_lm_native_in_process_litert_abi_version=Mock(return_value=version))
                 with self.subTest(version=version, tag=tag):
                     self.assertEqual(smoke.in_process_litert_matches(library, tag), expected)
+
+    def test_abi_only_main_fails_when_the_in_process_marker_mismatches(self) -> None:
+        tag = "v0.19.1"
+        for marker, expected_status in ((1, 0), (0, 1)):
+            library = SimpleNamespace(
+                stream_proxy_finish_reason_abi_version=Mock(
+                    return_value=smoke.expected_abi_version(tag)),
+                litert_lm_native_in_process_litert_abi_version=Mock(return_value=marker),
+            )
+            argv = ["smoke", "--library", "runtime.so", "--abi-only",
+                    "--upstream-tag", tag]
+            with self.subTest(marker=marker), \
+                    patch.object(sys, "argv", argv), \
+                    patch.object(smoke, "bind", return_value=SimpleNamespace(library=library)), \
+                    redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(smoke.main(), expected_status)
 
 
 if __name__ == "__main__":

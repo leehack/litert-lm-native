@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 import tempfile
 import unittest
@@ -160,6 +161,14 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     self.assertEqual("--define=litert_lm_in_process_litert=true" in command,
                                      tag in {"v0.19.0", "v0.19.1"})
                     self.assertIn("--define=resolve_symbols_in_exec=false", command)
+
+    def test_in_process_litert_define_matches_bazel_config_setting(self) -> None:
+        bazel = (build_upstream_runtime.REPO_ROOT / "native/bridge/BUILD.bazel").read_text()
+        setting = re.search(
+            r'name = "in_process_litert",\s*define_values = \{"([^"]+)": "true"\}', bazel)
+        self.assertIsNotNone(setting)
+        script = Path(build_upstream_runtime.__file__).read_text()
+        self.assertIn(f'"--define={setting.group(1)}=true"', script)
 
     def test_v019_runtime_must_not_import_shared_litert(self) -> None:
         cases = (("linux", ["libLiteRt.so", "libc.so.6"], ["libwebgpu_dawn.so", "libc.so.6"]),
