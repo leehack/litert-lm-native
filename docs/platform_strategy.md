@@ -41,11 +41,30 @@ callbacks. LiteRT-LM 0.15+ opaque stream chunks are translated to that stable
 callback contract inside the bridge. Consumers can probe
 `stream_proxy_callback_abi_version` before registering callbacks. Runtimes built
 with the carried v0.18.0/v0.18.1 finish-reason patch also report why a conversation
-stream ended; consumers probe `stream_proxy_finish_reason_abi_version`. Source-built
-native runtimes use Bazel `--package_path` on Unix-like runners and copy the
-bridge package into the extracted source tree on Windows to avoid Bazel's
-Windows package-path parser, without patching upstream source files in the
-repository.
+stream ended; consumers probe `stream_proxy_finish_reason_abi_version`.
+
+`litert_lm_native_in_process_litert_abi_version()` reports how the runtime
+reaches LiteRT:
+
+| Value | Meaning |
+| --- | --- |
+| 1 | LiteRT is compiled into the runtime binary, and the build verified that the binary imports no separate `libLiteRt`. LiteRT-LM's external and in-memory weight handoff to LiteRT is ABI-valid. |
+| 0 | Not established. Builds before v0.19 report 0; their Linux and Windows runtimes for v0.16 to v0.18 load upstream's prebuilt `libLiteRt` (#111). |
+| missing | The runtime predates the marker; treat it as 0. |
+
+Every source build from LiteRT-LM v0.19 reports 1 on every platform. The
+export is additive and carries no other ABI change. It is a bridge export
+because `litert_lm_get_api_version` reports upstream's C API version, which this
+repository does not change. A later change to what the marker guarantees gets a
+new value, so consumers accept only values they know. Releases up to and
+including `v0.19.1-1` lack the export; `v0.19.1-1` already links LiteRT in on
+Linux and Windows, so a consumer that must accept it identifies it some other
+way, such as a pinned checksum.
+
+Source-built native runtimes use Bazel `--package_path` on Unix-like runners and
+copy the bridge package into the extracted source tree on Windows to avoid
+Bazel's Windows package-path parser, without patching upstream source files in
+the repository.
 
 For LiteRT-LM 0.16+, the same runtime exports `litert_lm_asr_*` ABI version 1.
 It adapts upstream `AsrEngine`/`AsrSession` to bounded push PCM and
@@ -177,10 +196,12 @@ opaque options struct (`SetExternalWeightScopedFile`, `SetWeightInMemoryMap`).
 The host is built against libstdc++ or the MSVC STL, while upstream's prebuilt
 `libLiteRt` carries its own libc++, so that write was not ABI-valid: Linux lost
 the weights and Windows crashed, which broke every bundle with external-weight
-sections, such as EmbeddingGemma-2. The build fails if a v0.19+ desktop host
-still imports `libLiteRt`. Bundles keep shipping the upstream `libLiteRt` and
-`libLiteRtWebGpuAccelerator` files so the consumer layout is unchanged, but the
-host loads neither.
+sections, such as EmbeddingGemma-2. The build fails if a v0.19+ host on any
+platform still imports `libLiteRt`, and those hosts report
+`litert_lm_native_in_process_litert_abi_version()` 1, so consumers can refuse
+external-weight bundles on older desktop runtimes. Bundles keep shipping the
+upstream `libLiteRt` and `libLiteRtWebGpuAccelerator` files so the consumer
+layout is unchanged, but the host loads neither.
 
 The rest of this section covers v0.16 to v0.18.
 

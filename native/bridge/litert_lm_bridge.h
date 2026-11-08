@@ -27,6 +27,12 @@ LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_allocation_failure_abi_version(void
 LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_has_allocation_failure(
     const void *callback_data);
 
+// 1 means LiteRT is compiled into this runtime binary, which imports no
+// separate libLiteRt, so LiteRT-LM's external and in-memory weight handoff to
+// LiteRT is ABI-valid (#111). 0 means that is not established. A runtime that
+// lacks this export predates the marker and must be treated as 0.
+LITERT_LM_BRIDGE_EXPORT int32_t litert_lm_native_in_process_litert_abi_version(void);
+
 #ifdef __cplusplus
 }
 #endif

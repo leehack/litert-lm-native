@@ -54,6 +54,7 @@ void stream_proxy_free_string(char *value);
 int32_t stream_proxy_callback_abi_version(void);
 int32_t stream_proxy_finish_reason_abi_version(void);
 int32_t stream_proxy_get_finish_reason(const void *callback_data);
+int32_t litert_lm_native_in_process_litert_abi_version(void);
 
 typedef struct callback_result {
   char *chunk;
@@ -207,6 +208,15 @@ static int check_finish_reasons(void) {
 }
 
 int main(void) {
+#if defined(LITERT_LM_IN_PROCESS_LITERT)
+  if (litert_lm_native_in_process_litert_abi_version() != 1) {
+    return 8;
+  }
+#else
+  if (litert_lm_native_in_process_litert_abi_version() != 0) {
+    return 8;
+  }
+#endif
 #if defined(LITERT_LM_STREAM_CHUNK_API)
   if (stream_proxy_callback_abi_version() != 2) {
     return 9;

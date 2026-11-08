@@ -9,6 +9,7 @@ from litert_lm_symbols import (
     V0_15_C_API_SYMBOLS,
     V0_16_ASR_BRIDGE_SYMBOLS,
     has_asr_bridge,
+    in_process_litert_abi_version,
     required_bridge_symbols,
     required_c_api_symbols,
     uses_stream_chunk_api,
@@ -50,6 +51,12 @@ class LiteRtLmSymbolsTest(unittest.TestCase):
         self.assertEqual({symbol.decode() for symbol in BRIDGE_SYMBOLS}, exports)
         for tag in ("v0.15.0", "v0.17.1", "v0.18.0"):
             self.assertTrue(set(BRIDGE_SYMBOLS).issubset(required_bridge_symbols(tag)))
+
+    def test_in_process_litert_marker_starts_at_v019(self) -> None:
+        for tag in ("v0.15.0", "v0.18.1"):
+            self.assertEqual(in_process_litert_abi_version(tag), 0)
+        for tag in ("v0.19.0", "v0.19.1", "v0.20.0"):
+            self.assertEqual(in_process_litert_abi_version(tag), 1)
 
 
 if __name__ == "__main__":
