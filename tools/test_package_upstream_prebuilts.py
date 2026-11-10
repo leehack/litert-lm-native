@@ -67,6 +67,36 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
                 b"\x7fELF materialized",
             )
 
+    def test_skips_apple_metal_accelerator_from_v019(self) -> None:
+        targets = {
+            "macos_arm64": ("macos", "arm64"),
+            "ios_arm64": ("ios", "arm64"),
+            "android_arm64": ("android", "arm64"),
+        }
+        for tag, metal_copied in (("v0.18.1", True), ("v0.19.1", False)):
+            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                for upstream_name in targets:
+                    source_dir = root / "source" / "prebuilt" / upstream_name
+                    source_dir.mkdir(parents=True)
+                    for name in ("libLiteRt.dylib", "libLiteRtMetalAccelerator.dylib"):
+                        (source_dir / name).write_bytes(b"binary")
+                output = root / "bin"
+                with patch.object(package_upstream_prebuilts, "BIN_DIR", output), \
+                        patch.object(package_upstream_prebuilts, "PREBUILT_TARGETS", targets), \
+                        patch.object(package_upstream_prebuilts,
+                                     "materialize_git_lfs_libraries", return_value=0):
+                    package_upstream_prebuilts.copy_prebuilts(
+                        root / "source", upstream_tag=tag, clean=True)
+
+                for platform in ("macos", "ios", "android"):
+                    staged = output / platform / "arm64"
+                    self.assertTrue((staged / "libLiteRt.dylib").is_file())
+                    self.assertEqual(
+                        (staged / "libLiteRtMetalAccelerator.dylib").is_file(),
+                        metal_copied or platform == "android",
+                    )
+
     def test_overrides_only_does_not_download_or_copy_upstream_source(self) -> None:
         with patch(
             "sys.argv",

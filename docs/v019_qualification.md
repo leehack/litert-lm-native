@@ -33,6 +33,7 @@ The exact-tag verification gate remains enabled.
 | ASR | `omni/asr` and the legacy engine are gone; `omni/speech2text` factories route through `OmniRegistry` and require a container | C ASR ABI v1 is unchanged. Containers use the registry; a `.tflite` plus tokenizer uses a bridge factory (`litert_lm_asr_omni_engine.cc`). Container metadata and Parakeet sections pick the registry name, so file names, free-form `model_name`s and `decoder_type` do not change routing, and a `model_name` naming another family fails at engine creation. Other LLM containers lost the generic LLM route and need a registered name. Start tokens are dropped for LM-backed families, whose decoders reject them. |
 | Protos | `Asr*` became `Speech2Text*` | Internal to the adapter. |
 | Packaging | No `LiteRtTopK*Sampler` library; `libLiteRtLm` links Dawn | Validators and manifests key this on `has_prebuilt_topk_samplers`. |
+| Apple GPU | `LiteRtLm` links its GPU accelerator: ml_drift Metal on iOS, WebGPU on macOS | LiteRT registers it before searching for a shared one, so the prebuilt Metal accelerator is never opened ([llamadart#1798](https://github.com/leehack/llamadart/issues/1798)). Packaging after `v0.19.1-2` skips it on iOS and macOS, requires the static accelerator symbol in `LiteRtLm`, and rejects a candidate that still ships it (`has_prebuilt_apple_metal_accelerator`). |
 
 `ubuntu-latest` moved to 26.04, so a Linux x64 build there needs glibc 2.43 and
 fails to load on Ubuntu 24.04. Linux x64 now builds on `ubuntu-24.04` and

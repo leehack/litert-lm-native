@@ -88,7 +88,9 @@ support. Source-built Apple releases can publish additional companion binary
 targets when the primary runtime links or dynamically loads them. The v0.16 iOS
 package includes `GemmaModelConstraintProvider`, `LiteRtMetalAccelerator`, and
 `LiteRtTopKMetalSampler`; the Metal modules use framework-relative loader paths
-that are compatible with App Store bundle layout.
+that are compatible with App Store bundle layout. v0.19 `LiteRtLm` links its
+GPU accelerator and sampler on iOS and macOS; releases after `v0.19.1-2` ship
+no Metal module.
 
 Each SPM framework slice embeds a privacy manifest generated from an audited
 per-framework declaration, and packaging rejects an archive whose declarations

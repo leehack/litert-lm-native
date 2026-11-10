@@ -95,6 +95,16 @@ APPLE_METAL_ACCELERATOR_SYMBOLS = [
     "LiteRtAcceleratorImpl",
 ]
 
+APPLE_METAL_ACCELERATOR_LIBRARY = "libLiteRtMetalAccelerator.dylib"
+
+# LiteRT registers a statically linked GPU accelerator before it searches for a
+# shared one (gpu_registry.cc), so these classes make the prebuilt Metal
+# accelerator unreachable.
+APPLE_STATIC_GPU_ACCELERATOR_SYMBOLS = {
+    "ios": b"_ZN19GpuMetalAccelerator14CreateDelegate",
+    "macos": b"_ZN20GpuWebGpuAccelerator14CreateDelegate",
+}
+
 
 def _version_tuple(tag: str) -> tuple[int, int, int] | None:
     match = re.search(r"v?(\d+)\.(\d+)\.(\d+)", tag)
@@ -143,6 +153,11 @@ def in_process_litert_abi_version(upstream_tag: str) -> int:
 
 def has_prebuilt_topk_samplers(upstream_tag: str) -> bool:
     """v0.19 links TopK samplers from source and ships no prebuilt sampler."""
+    return not is_at_least(upstream_tag, (0, 19, 0))
+
+
+def has_prebuilt_apple_metal_accelerator(upstream_tag: str) -> bool:
+    """v0.19 Apple runtimes link their GPU accelerator and never open the prebuilt one."""
     return not is_at_least(upstream_tag, (0, 19, 0))
 
 

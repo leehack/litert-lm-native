@@ -11,7 +11,9 @@ import zipfile
 from pathlib import Path
 
 from litert_lm_symbols import (
+    APPLE_STATIC_GPU_ACCELERATOR_SYMBOLS,
     BRIDGE_SYMBOLS,
+    has_prebuilt_apple_metal_accelerator,
     has_asr_bridge,
     required_bridge_symbols,
     required_c_api_symbols,
@@ -126,6 +128,8 @@ def validate_source_built_symbols(output: Path, upstream_tag: str) -> None:
         required_c_api_symbols(upstream_tag)
         + required_bridge_symbols(upstream_tag)
     )
+    if not has_prebuilt_apple_metal_accelerator(upstream_tag):
+        required_symbols.append(APPLE_STATIC_GPU_ACCELERATOR_SYMBOLS["macos"])
     missing = [
         symbol.decode("ascii")
         for symbol in required_symbols

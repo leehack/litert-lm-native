@@ -15,6 +15,9 @@ from pathlib import Path
 
 from ios_framework_metadata import framework_minimum_os, validate_framework_metadata
 from litert_lm_symbols import (
+    APPLE_METAL_ACCELERATOR_LIBRARY,
+    APPLE_STATIC_GPU_ACCELERATOR_SYMBOLS,
+    has_prebuilt_apple_metal_accelerator,
     has_prebuilt_topk_samplers,
     BRIDGE_SYMBOLS,
     has_asr_bridge,
@@ -40,9 +43,11 @@ IOS_GPU_SYMBOLS = (
     b"LiteRtTopKMetalSampler_SampleToIdAndScoreBuffer_Static",
 )
 def ios_dlopen_dependencies(upstream_tag: str) -> tuple[str, ...]:
+    if not has_prebuilt_apple_metal_accelerator(upstream_tag):
+        return ()
     if has_prebuilt_topk_samplers(upstream_tag):
-        return ("libLiteRtMetalAccelerator.dylib", "libLiteRtTopKMetalSampler.dylib")
-    return ("libLiteRtMetalAccelerator.dylib",)
+        return (APPLE_METAL_ACCELERATOR_LIBRARY, "libLiteRtTopKMetalSampler.dylib")
+    return (APPLE_METAL_ACCELERATOR_LIBRARY,)
 EXPECTED_OFFICIAL_ARCHIVE_SHA256 = {
     "v0.14.0": "dddac2f6713ed65eaf01c18e115d9fec22184adf575cc7856a21387e8ba937e1",
 }
@@ -156,6 +161,8 @@ def validate_source_built_symbols(output: Path, upstream_tag: str) -> None:
         required_c_api_symbols(upstream_tag)
         + required_bridge_symbols(upstream_tag)
     )
+    if not has_prebuilt_apple_metal_accelerator(upstream_tag):
+        required_symbols.append(APPLE_STATIC_GPU_ACCELERATOR_SYMBOLS["ios"])
     missing = [
         symbol.decode("ascii")
         for symbol in required_symbols
