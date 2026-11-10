@@ -9,12 +9,21 @@ from asr_litertlm_container_patch import require_container_patch_decision
 from asr_overlap_patch import V019_MERGER_SOURCE, source_patch_manifest
 from litert_cpu_options_identifier_patch import require_cpu_options_identifier_patch_decision
 from ios_runtime_policy import verify_upstream_fst_gate
-from litert_lm_symbols import has_prebuilt_topk_samplers, uses_c_api_v1
+from litert_lm_symbols import (
+    APPLE_STATIC_GPU_ACCELERATOR_SYMBOLS,
+    has_prebuilt_apple_metal_accelerator,
+    has_prebuilt_topk_samplers,
+    required_bridge_symbols,
+    required_c_api_symbols,
+    uses_c_api_v1,
+)
 from package_ios_runtime import ios_dlopen_dependencies
+from package_ios_runtime import validate_source_built_symbols as ios_source_built_symbols
+from package_macos_runtime import validate_source_built_symbols as macos_source_built_symbols
 from prebuilt_overrides import prebuilt_overrides
 from stream_finish_reason_patch import require_finish_reason_patch_decision
 from validate_release_manifest import allowed_spm_assets, required_spm_assets
-from validate_runtime_artifacts import required_runtime_artifacts
+from validate_runtime_artifacts import forbidden_runtime_artifacts, required_runtime_artifacts
 from validate_runtime_dependencies import newest_glibc_requirement
 from workspace_build_patch import require_workspace_build_patch_decision
 from xnnpack_pf32_sme2_patch import commit_for as xnnpack_commit_for
@@ -45,12 +54,47 @@ class V019DecisionsTest(unittest.TestCase):
         self.assertFalse(uses_c_api_v1("v0.18.1"))
         self.assertIn("libLiteRtTopKMetalSampler.dylib",
                       ios_dlopen_dependencies("v0.18.1"))
-        self.assertEqual(ios_dlopen_dependencies("v0.19.0"),
-                         ("libLiteRtMetalAccelerator.dylib",))
+        self.assertEqual(ios_dlopen_dependencies("v0.19.0"), ())
         for assets in (required_spm_assets("v0.19.0"), allowed_spm_assets("v0.19.0")):
             self.assertFalse([name for name in assets if "TopK" in name])
         self.assertTrue([name for name in required_spm_assets("v0.18.1") if "TopK" in name])
         self.assertFalse([path for path in required_runtime_artifacts("v0.19.0") if "TopK" in str(path)])
+
+    def test_apple_metal_accelerator_packaging_stops_at_v019(self) -> None:
+        metal_zip = "litert-lm-native-apple-LiteRtMetalAccelerator-xcframework-{tag}.zip"
+        self.assertTrue(has_prebuilt_apple_metal_accelerator("v0.18.1"))
+        self.assertFalse(has_prebuilt_apple_metal_accelerator("v0.19.1"))
+        self.assertIn("libLiteRtMetalAccelerator.dylib", ios_dlopen_dependencies("v0.18.1"))
+        self.assertIn(metal_zip, required_spm_assets("v0.18.1"))
+        self.assertNotIn(metal_zip, allowed_spm_assets("v0.19.1"))
+        self.assertTrue([p for p in required_runtime_artifacts("v0.18.1") if "Metal" in str(p)])
+        self.assertFalse([p for p in required_runtime_artifacts("v0.19.1") if "Metal" in str(p)])
+        self.assertEqual(forbidden_runtime_artifacts("v0.18.1"), [])
+        self.assertEqual(
+            {p.as_posix() for p in forbidden_runtime_artifacts("v0.19.1")},
+            {
+                "bin/ios/arm64/LiteRtMetalAccelerator.framework/LiteRtMetalAccelerator",
+                "bin/ios/arm64-sim/LiteRtMetalAccelerator.framework/LiteRtMetalAccelerator",
+                "bin/ios/arm64/libLiteRtMetalAccelerator.dylib",
+                "bin/ios/arm64-sim/libLiteRtMetalAccelerator.dylib",
+                "bin/macos/arm64/libLiteRtMetalAccelerator.dylib",
+            },
+        )
+
+    def test_v019_apple_runtimes_require_a_static_gpu_accelerator(self) -> None:
+        required = (required_c_api_symbols("v0.19.1")
+                    + required_bridge_symbols("v0.19.1"))
+        for platform, validate in (("ios", ios_source_built_symbols),
+                                   ("macos", macos_source_built_symbols)):
+            static = APPLE_STATIC_GPU_ACCELERATOR_SYMBOLS[platform]
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as temp:
+                binary = Path(temp) / "LiteRtLm"
+                binary.write_bytes(b"\0".join(required))
+                with self.assertRaisesRegex(RuntimeError, static.decode()):
+                    validate(binary, "v0.19.1")
+                validate(binary, "v0.18.1")
+                binary.write_bytes(b"\0".join([*required, static]))
+                validate(binary, "v0.19.1")
 
     def test_ios_fst_gate_follows_the_build_config_layout(self) -> None:
         provider = '"//runtime/components/constrained_decoding:gemma_model_constraint_provider_lib",\n'

@@ -10,6 +10,10 @@ from pathlib import Path
 
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
+from litert_lm_symbols import (
+    APPLE_METAL_ACCELERATOR_LIBRARY,
+    has_prebuilt_apple_metal_accelerator,
+)
 from prebuilt_overrides import (
     UPSTREAM_MEDIA_BASE_URL,
     PrebuiltOverride,
@@ -61,6 +65,14 @@ def extract_source(archive: Path, output_dir: Path) -> Path:
     return roots[0]
 
 
+def unused_prebuilts(upstream_tag: str, platform: str) -> frozenset[str]:
+    if platform in {"ios", "macos"} and not has_prebuilt_apple_metal_accelerator(
+        upstream_tag
+    ):
+        return frozenset({APPLE_METAL_ACCELERATOR_LIBRARY})
+    return frozenset()
+
+
 def copy_prebuilts(
     source_root: Path,
     upstream_tag: str,
@@ -84,8 +96,12 @@ def copy_prebuilts(
             shutil.rmtree(target_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
 
+        unused = unused_prebuilts(upstream_tag, platform)
         for file in sorted(source_dir.iterdir()):
             if not file.is_file() or not file.name.endswith(LIB_SUFFIXES):
+                continue
+            if file.name in unused:
+                print(f"Skipped unused {upstream_name}/{file.name}", flush=True)
                 continue
             shutil.copy2(file, target_dir / file.name)
             copied += 1

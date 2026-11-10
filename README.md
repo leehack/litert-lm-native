@@ -321,10 +321,12 @@ XCFramework contains the primary iOS runtime and macOS framework wrapper.
 `CLiteRTLMMac` is retained as a macOS compatibility re-export target. Upstream
 `v0.14.0` uses the official consolidated Apple XCFrameworks and does not require
 a separate iOS `GemmaModelConstraintProvider` target. Source-built Apple
-releases also publish any required companion XCFrameworks. For v0.16 this
-includes the iOS `LiteRtMetalAccelerator` and `LiteRtTopKMetalSampler` modules;
-their framework-relative loader paths avoid flat dylibs that App Store bundles
-cannot ship.
+releases also publish any required companion XCFrameworks. For v0.16 through
+v0.18 this includes the iOS `LiteRtMetalAccelerator` and
+`LiteRtTopKMetalSampler` modules; their framework-relative loader paths avoid
+flat dylibs that App Store bundles cannot ship. v0.19 `LiteRtLm` links its GPU
+accelerator and sampler, so neither is needed; releases after `v0.19.1-2` ship
+no Metal module.
 
 The macOS packager embeds the primary framework's private dylib dependencies
 inside `LiteRtLm.framework/Versions/A/Dependencies` and rewrites their loader

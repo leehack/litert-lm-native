@@ -36,6 +36,9 @@ No framework tracks, contacts tracking domains, or collects data.
 | `LiteRtTopKMetalSampler` | iOS | User Defaults | `CA92.1` |
 | `LiteRtTopKMetalSampler` | macOS | none | |
 
+`LiteRtTopKMetalSampler` ships only before v0.19, and `LiteRtMetalAccelerator`
+only up to `v0.19.1-2`.
+
 Reason texts are in Apple's
 [NSPrivacyAccessedAPITypeReasons](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitypereasons)
 reference.

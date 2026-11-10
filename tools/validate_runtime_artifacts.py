@@ -4,7 +4,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from litert_lm_symbols import has_prebuilt_topk_samplers, is_at_least
+from litert_lm_symbols import (
+    has_prebuilt_apple_metal_accelerator,
+    has_prebuilt_topk_samplers,
+    is_at_least,
+)
 from windows_dxc import dxc_license_paths, dxc_runtime_paths, requires_dxc
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +32,12 @@ V0_16_IOS_GPU_ARTIFACTS = [
     Path("bin/ios/arm64-sim/LiteRtMetalAccelerator.framework/LiteRtMetalAccelerator"),
 ]
 
+APPLE_METAL_ACCELERATOR_ARTIFACTS = V0_16_IOS_GPU_ARTIFACTS + [
+    Path("bin/ios/arm64/libLiteRtMetalAccelerator.dylib"),
+    Path("bin/ios/arm64-sim/libLiteRtMetalAccelerator.dylib"),
+    Path("bin/macos/arm64/libLiteRtMetalAccelerator.dylib"),
+]
+
 PREBUILT_SAMPLER_IOS_ARTIFACTS = [
     Path("bin/ios/arm64/LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler"),
     Path("bin/ios/arm64-sim/LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler"),
@@ -44,7 +54,8 @@ def required_runtime_artifacts(
 ) -> list[Path]:
     required = list(REQUIRED_RUNTIME_ARTIFACTS)
     if is_at_least(upstream_tag, (0, 16, 0)):
-        required.extend(V0_16_IOS_GPU_ARTIFACTS)
+        if has_prebuilt_apple_metal_accelerator(upstream_tag):
+            required.extend(V0_16_IOS_GPU_ARTIFACTS)
         if has_prebuilt_topk_samplers(upstream_tag):
             required.extend(PREBUILT_SAMPLER_IOS_ARTIFACTS)
     if requires_dxc(upstream_tag):
@@ -55,6 +66,12 @@ def required_runtime_artifacts(
             for archive in OFFICIAL_APPLE_RUNTIME_ARCHIVES
         )
     return required
+
+
+def forbidden_runtime_artifacts(upstream_tag: str) -> list[Path]:
+    if has_prebuilt_apple_metal_accelerator(upstream_tag):
+        return []
+    return list(APPLE_METAL_ACCELERATOR_ARTIFACTS)
 
 
 def main() -> int:
@@ -85,6 +102,14 @@ def main() -> int:
     if missing:
         formatted = "\n".join(f"- {path.as_posix()}" for path in missing)
         raise SystemExit(f"Missing required runtime artifacts:\n{formatted}")
+    unused = [
+        path
+        for path in forbidden_runtime_artifacts(args.upstream_tag)
+        if (REPO_ROOT / path).exists()
+    ]
+    if unused:
+        formatted = "\n".join(f"- {path.as_posix()}" for path in unused)
+        raise SystemExit(f"Runtime packaging contains unused artifacts:\n{formatted}")
 
     print(f"Validated {len(required_with_licences)} required runtime artifacts")
     return 0

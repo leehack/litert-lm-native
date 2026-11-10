@@ -11,6 +11,7 @@ import re
 from fetch_litert_lm_asr_smoke_assets import ASSETS
 from litert_lm_symbols import (
     has_asr_bridge,
+    has_prebuilt_apple_metal_accelerator,
     has_prebuilt_topk_samplers,
     is_at_least,
     stream_proxy_callback_abi_version,
@@ -622,7 +623,8 @@ def validate_schema_2_payload(
 def required_spm_assets(compatibility_tag: str) -> list[str]:
     assets = list(REQUIRED_SPM_XCFRAMEWORKS)
     if is_at_least(compatibility_tag, (0, 16, 0)):
-        assets.extend(V0_16_IOS_GPU_SPM_XCFRAMEWORKS)
+        if has_prebuilt_apple_metal_accelerator(compatibility_tag):
+            assets.extend(V0_16_IOS_GPU_SPM_XCFRAMEWORKS)
         if has_prebuilt_topk_samplers(compatibility_tag):
             assets.extend(PREBUILT_SAMPLER_SPM_XCFRAMEWORKS)
     return assets
