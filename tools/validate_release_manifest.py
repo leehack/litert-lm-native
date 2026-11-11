@@ -11,6 +11,7 @@ import re
 from fetch_litert_lm_asr_smoke_assets import ASSETS
 from litert_lm_symbols import (
     has_asr_bridge,
+    has_prebuilt_apple_litert_companions,
     has_prebuilt_apple_metal_accelerator,
     has_prebuilt_topk_samplers,
     is_at_least,
@@ -54,10 +55,13 @@ PREBUILT_SAMPLER_SPM_XCFRAMEWORKS = [
 
 # The Apple packager emits these when their pinned v0.16 runtime inputs exist.
 # Keep the optional inventory explicit so arbitrary manifest-added zips still fail.
-V0_16_ALLOWED_SPM_COMPANION_XCFRAMEWORKS = [
-    "litert-lm-native-apple-GemmaModelConstraintProvider-xcframework-{tag}.zip",
+APPLE_LITERT_COMPANION_SPM_XCFRAMEWORKS = [
     "litert-lm-native-apple-LiteRt-xcframework-{tag}.zip",
     "litert-lm-native-apple-LiteRtWebGpuAccelerator-xcframework-{tag}.zip",
+]
+
+V0_16_ALLOWED_SPM_COMPANION_XCFRAMEWORKS = [
+    "litert-lm-native-apple-GemmaModelConstraintProvider-xcframework-{tag}.zip",
     "litert-lm-native-apple-WebgpuDawn-xcframework-{tag}.zip",
 ]
 
@@ -634,6 +638,8 @@ def allowed_spm_assets(compatibility_tag: str) -> list[str]:
     assets = required_spm_assets(compatibility_tag)
     if is_at_least(compatibility_tag, (0, 16, 0)):
         assets.extend(V0_16_ALLOWED_SPM_COMPANION_XCFRAMEWORKS)
+        if has_prebuilt_apple_litert_companions(compatibility_tag):
+            assets.extend(APPLE_LITERT_COMPANION_SPM_XCFRAMEWORKS)
         if has_prebuilt_topk_samplers(compatibility_tag):
             assets.append(
                 "litert-lm-native-apple-LiteRtTopKWebGpuSampler-xcframework-{tag}.zip"

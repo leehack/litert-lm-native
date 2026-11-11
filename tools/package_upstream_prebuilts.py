@@ -12,6 +12,9 @@ from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
 from litert_lm_symbols import (
     APPLE_METAL_ACCELERATOR_LIBRARY,
+    APPLE_LITERT_LIBRARY,
+    APPLE_WEBGPU_ACCELERATOR_LIBRARY,
+    has_prebuilt_apple_litert_companions,
     has_prebuilt_apple_metal_accelerator,
 )
 from prebuilt_overrides import (
@@ -66,11 +69,15 @@ def extract_source(archive: Path, output_dir: Path) -> Path:
 
 
 def unused_prebuilts(upstream_tag: str, platform: str) -> frozenset[str]:
-    if platform in {"ios", "macos"} and not has_prebuilt_apple_metal_accelerator(
-        upstream_tag
-    ):
-        return frozenset({APPLE_METAL_ACCELERATOR_LIBRARY})
-    return frozenset()
+    unused: set[str] = set()
+    if platform in {"ios", "macos"}:
+        if not has_prebuilt_apple_metal_accelerator(upstream_tag):
+            unused.add(APPLE_METAL_ACCELERATOR_LIBRARY)
+        if not has_prebuilt_apple_litert_companions(upstream_tag):
+            unused.add(APPLE_LITERT_LIBRARY)
+            if platform == "macos":
+                unused.add(APPLE_WEBGPU_ACCELERATOR_LIBRARY)
+    return frozenset(unused)
 
 
 def copy_prebuilts(
