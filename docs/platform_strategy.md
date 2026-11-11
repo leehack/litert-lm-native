@@ -209,8 +209,11 @@ sections, such as EmbeddingGemma-2. The build fails if a v0.19+ host on any
 platform still imports `libLiteRt`, and those hosts report
 `litert_lm_native_in_process_litert_abi_version()` 1, so consumers can refuse
 external-weight bundles on older desktop runtimes. Bundles keep shipping the
-upstream `libLiteRt` and `libLiteRtWebGpuAccelerator` files so the consumer
-layout is unchanged, but the host loads neither.
+upstream `libLiteRt` and `libLiteRtWebGpuAccelerator` files on Linux, Windows
+and Android, but the host loads neither. Apple bundles after `v0.19.1-3` omit
+the macOS `libLiteRt` and `libLiteRtWebGpuAccelerator` and the iOS loose
+`libLiteRt` (`has_prebuilt_apple_litert_companions`), and so publish no
+`LiteRt` or `LiteRtWebGpuAccelerator` XCFramework.
 
 The rest of this section covers v0.16 to v0.18.
 

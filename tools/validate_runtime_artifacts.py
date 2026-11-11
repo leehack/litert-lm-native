@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 
 from litert_lm_symbols import (
+    has_prebuilt_apple_litert_companions,
     has_prebuilt_apple_metal_accelerator,
     has_prebuilt_topk_samplers,
     is_at_least,
@@ -38,6 +39,13 @@ APPLE_METAL_ACCELERATOR_ARTIFACTS = V0_16_IOS_GPU_ARTIFACTS + [
     Path("bin/macos/arm64/libLiteRtMetalAccelerator.dylib"),
 ]
 
+APPLE_LITERT_COMPANION_ARTIFACTS = [
+    Path("bin/ios/arm64/libLiteRt.dylib"),
+    Path("bin/ios/arm64-sim/libLiteRt.dylib"),
+    Path("bin/macos/arm64/libLiteRt.dylib"),
+    Path("bin/macos/arm64/libLiteRtWebGpuAccelerator.dylib"),
+]
+
 PREBUILT_SAMPLER_IOS_ARTIFACTS = [
     Path("bin/ios/arm64/LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler"),
     Path("bin/ios/arm64-sim/LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler"),
@@ -69,9 +77,12 @@ def required_runtime_artifacts(
 
 
 def forbidden_runtime_artifacts(upstream_tag: str) -> list[Path]:
-    if has_prebuilt_apple_metal_accelerator(upstream_tag):
-        return []
-    return list(APPLE_METAL_ACCELERATOR_ARTIFACTS)
+    forbidden: list[Path] = []
+    if not has_prebuilt_apple_metal_accelerator(upstream_tag):
+        forbidden.extend(APPLE_METAL_ACCELERATOR_ARTIFACTS)
+    if not has_prebuilt_apple_litert_companions(upstream_tag):
+        forbidden.extend(APPLE_LITERT_COMPANION_ARTIFACTS)
+    return forbidden
 
 
 def main() -> int:

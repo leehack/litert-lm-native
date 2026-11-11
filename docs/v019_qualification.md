@@ -34,6 +34,7 @@ The exact-tag verification gate remains enabled.
 | Protos | `Asr*` became `Speech2Text*` | Internal to the adapter. |
 | Packaging | No `LiteRtTopK*Sampler` library; `libLiteRtLm` links Dawn | Validators and manifests key this on `has_prebuilt_topk_samplers`. |
 | Apple GPU | `LiteRtLm` links its GPU accelerator: ml_drift Metal on iOS, WebGPU on macOS | LiteRT registers it before searching for a shared one, so the prebuilt Metal accelerator is never opened ([llamadart#1798](https://github.com/leehack/llamadart/issues/1798)). Packaging after `v0.19.1-2` skips it on iOS and macOS, requires the static accelerator symbol in `LiteRtLm`, and rejects a candidate that still ships it (`has_prebuilt_apple_metal_accelerator`). |
+| Apple LiteRT companions | `LiteRtLm` embeds LiteRT and its GPU accelerator | dyld traces on macOS (CPU, GPU, vision, audio, MTP, embeddings, ASR) and an iOS simulator probe load neither `libLiteRt` nor `libLiteRtWebGpuAccelerator` ([llamadart#1911](https://github.com/leehack/llamadart/issues/1911)). Packaging after `v0.19.1-3` skips the macOS `libLiteRt` and `libLiteRtWebGpuAccelerator` and the iOS loose `libLiteRt`, and rejects a candidate that still ships them (`has_prebuilt_apple_litert_companions`). |
 
 `ubuntu-latest` moved to 26.04, so a Linux x64 build there needs glibc 2.43 and
 fails to load on Ubuntu 24.04. Linux x64 now builds on `ubuntu-24.04` and

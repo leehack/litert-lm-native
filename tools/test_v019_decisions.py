@@ -11,6 +11,7 @@ from litert_cpu_options_identifier_patch import require_cpu_options_identifier_p
 from ios_runtime_policy import verify_upstream_fst_gate
 from litert_lm_symbols import (
     APPLE_STATIC_GPU_ACCELERATOR_SYMBOLS,
+    has_prebuilt_apple_litert_companions,
     has_prebuilt_apple_metal_accelerator,
     has_prebuilt_topk_samplers,
     required_bridge_symbols,
@@ -71,7 +72,7 @@ class V019DecisionsTest(unittest.TestCase):
         self.assertFalse([p for p in required_runtime_artifacts("v0.19.1") if "Metal" in str(p)])
         self.assertEqual(forbidden_runtime_artifacts("v0.18.1"), [])
         self.assertEqual(
-            {p.as_posix() for p in forbidden_runtime_artifacts("v0.19.1")},
+            {p.as_posix() for p in forbidden_runtime_artifacts("v0.19.1") if "Metal" in p.name},
             {
                 "bin/ios/arm64/LiteRtMetalAccelerator.framework/LiteRtMetalAccelerator",
                 "bin/ios/arm64-sim/LiteRtMetalAccelerator.framework/LiteRtMetalAccelerator",
@@ -79,6 +80,27 @@ class V019DecisionsTest(unittest.TestCase):
                 "bin/ios/arm64-sim/libLiteRtMetalAccelerator.dylib",
                 "bin/macos/arm64/libLiteRtMetalAccelerator.dylib",
             },
+        )
+
+    def test_apple_litert_companion_packaging_stops_at_v019(self) -> None:
+        litert_zips = {
+            "litert-lm-native-apple-LiteRt-xcframework-{tag}.zip",
+            "litert-lm-native-apple-LiteRtWebGpuAccelerator-xcframework-{tag}.zip",
+        }
+        self.assertTrue(has_prebuilt_apple_litert_companions("v0.18.1"))
+        self.assertFalse(has_prebuilt_apple_litert_companions("v0.19.1"))
+        self.assertTrue(litert_zips <= set(allowed_spm_assets("v0.18.1")))
+        self.assertFalse(litert_zips & set(allowed_spm_assets("v0.19.1")))
+        self.assertFalse(litert_zips & set(required_spm_assets("v0.19.1")))
+        self.assertEqual(forbidden_runtime_artifacts("v0.18.1"), [])
+        self.assertLessEqual(
+            {
+                "bin/ios/arm64/libLiteRt.dylib",
+                "bin/ios/arm64-sim/libLiteRt.dylib",
+                "bin/macos/arm64/libLiteRt.dylib",
+                "bin/macos/arm64/libLiteRtWebGpuAccelerator.dylib",
+            },
+            {p.as_posix() for p in forbidden_runtime_artifacts("v0.19.1")},
         )
 
     def test_v019_apple_runtimes_require_a_static_gpu_accelerator(self) -> None:
