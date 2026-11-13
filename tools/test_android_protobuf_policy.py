@@ -12,7 +12,7 @@ import build_upstream_runtime as builder
 
 import android_protobuf_policy as policy
 from litert_lm_symbols import (
-    ANDROID_OPENCL_SAMPLER_SYMBOLS,
+    android_static_gpu_sampler_symbols,
     required_bridge_symbols,
     required_c_api_symbols,
 )
@@ -151,7 +151,7 @@ class AndroidProtobufLinkerTest(unittest.TestCase):
     def compile(self, directory, arch, *, private=True, global_flag=True, missing=None, alignment=16384, dependency=None):
         directory.mkdir(parents=True, exist_ok=True)
         required = {symbol.decode() for symbol in required_c_api_symbols('v0.19.0') + required_bridge_symbols('v0.19.0')}
-        public = required | set(ANDROID_OPENCL_SAMPLER_SYMBOLS) | {'LiteRtAcceleratorImpl'}
+        public = required | set(android_static_gpu_sampler_symbols('v0.19.0')) | {'LiteRtAcceleratorImpl'}
         self.assertFalse(any('protobuf' in symbol for symbol in public))
         source = directory / 'fixture.cc'
         source.write_text('''namespace google { namespace protobuf { namespace internal {

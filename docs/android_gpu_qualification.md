@@ -55,6 +55,18 @@ immutable wrapper version, then qualify its exact packaged artifact before
 updating downstream pins. The local single-library candidate does not qualify
 a future release or authorize consumer PR #503 to merge unchanged.
 
+## WebGPU sampler (v0.19.0 through v0.19.1-4)
+
+Android runtimes `v0.19.0` through `v0.19.1-4` define the OpenCL sampler
+functions but not the WebGPU ones. On a device or app without loadable OpenCL,
+the linked accelerator selects WebGPU, the engine loads, and the first
+`SampleLogits` returns `Can not find OpenCL library on this device` because the
+OpenCL sampler is the only one linked and does not report itself unavailable
+(Galaxy S24, Gemma 4 E2B,
+[litert-lm-native#120](https://github.com/leehack/litert-lm-native/issues/120)).
+Later runtimes link both samplers and the build rejects a candidate missing
+either. Device result on the fixed runtime: pending.
+
 ## GPU environment teardown patch
 
 LiteRT `9fe5be45`, pinned by LiteRT-LM 0.17.x, loads OpenCL before it records

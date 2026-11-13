@@ -81,6 +81,16 @@ ANDROID_OPENCL_SAMPLER_SYMBOLS = [
     "LiteRtTopKOpenClSampler_SetInferenceFuncAndInputTensors",
 ]
 
+ANDROID_WEBGPU_SAMPLER_SYMBOLS = [
+    "LiteRtTopKWebGpuSampler_Create",
+    "LiteRtTopKWebGpuSampler_Destroy",
+    "LiteRtTopKWebGpuSampler_SampleToIdAndScoreBuffer",
+    "LiteRtTopKWebGpuSampler_UpdateConfig",
+    "LiteRtTopKWebGpuSampler_CanHandleInput",
+    "LiteRtTopKWebGpuSampler_HandlesInput",
+    "LiteRtTopKWebGpuSampler_SetInferenceFuncAndInputTensors",
+]
+
 APPLE_METAL_SAMPLER_SYMBOLS = [
     "LiteRtTopKMetalSampler_Create",
     "LiteRtTopKMetalSampler_Destroy",
@@ -156,6 +166,17 @@ def in_process_litert_abi_version(upstream_tag: str) -> int:
 def has_prebuilt_topk_samplers(upstream_tag: str) -> bool:
     """v0.19 links TopK samplers from source and ships no prebuilt sampler."""
     return not is_at_least(upstream_tag, (0, 19, 0))
+
+
+def android_static_gpu_sampler_symbols(upstream_tag: str) -> list[str]:
+    """Sampler functions an Android libLiteRtLm.so must define itself.
+
+    The v0.19 Android GPU accelerator runs on OpenCL, or on WebGPU when OpenCL
+    cannot be loaded, and the sampler is created for whichever it chose (#120).
+    """
+    if has_prebuilt_topk_samplers(upstream_tag):
+        return []
+    return ANDROID_OPENCL_SAMPLER_SYMBOLS + ANDROID_WEBGPU_SAMPLER_SYMBOLS
 
 
 def has_prebuilt_apple_metal_accelerator(upstream_tag: str) -> bool:

@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 import build_upstream_runtime
 import package_upstream_prebuilts
+from litert_lm_symbols import ANDROID_OPENCL_SAMPLER_SYMBOLS, ANDROID_WEBGPU_SAMPLER_SYMBOLS
+from test_runtime_dependency_utils import write_elf_with_exports
 
 
 class BuildUpstreamRuntimeTest(unittest.TestCase):
@@ -161,6 +163,43 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     self.assertEqual("--define=litert_lm_in_process_litert=true" in command,
                                      tag in {"v0.19.0", "v0.19.1"})
                     self.assertIn("--define=resolve_symbols_in_exec=false", command)
+                    self.assertEqual("--define=litert_lm_android_webgpu_sampler=true" in command,
+                                     platform == "android" and tag in {"v0.19.0", "v0.19.1"})
+
+    def test_android_webgpu_sampler_define_links_the_static_sampler(self) -> None:
+        bazel = (build_upstream_runtime.REPO_ROOT / "native/bridge/BUILD.bazel").read_text()
+        setting = re.search(
+            r'name = "android_webgpu_sampler",\s*constraint_values = \["@platforms//os:android"\],'
+            r'\s*define_values = \{"([^"]+)": "true"\}', bazel)
+        self.assertIsNotNone(setting)
+        script = Path(build_upstream_runtime.__file__).read_text()
+        self.assertIn(f'"--define={setting.group(1)}=true"', script)
+        self.assertEqual(len(re.findall(
+            r'":android_webgpu_sampler": \["//runtime/components:top_k_webgpu_sampler_static"\]',
+            bazel)), 1)
+
+    def test_android_v019_build_rejects_a_runtime_without_both_gpu_samplers(self) -> None:
+        both = ANDROID_OPENCL_SAMPLER_SYMBOLS + ANDROID_WEBGPU_SAMPLER_SYMBOLS
+        published = ANDROID_OPENCL_SAMPLER_SYMBOLS + [
+            f"{symbol}_Static" for symbol in ANDROID_WEBGPU_SAMPLER_SYMBOLS]
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "libLiteRtLm.so"
+            write_elf_with_exports(output, published)
+            with self.assertRaisesRegex(RuntimeError, r"LiteRtTopKWebGpuSampler_Create,.*#120"):
+                build_upstream_runtime.validate_android_gpu_samplers(output, "android", "v0.19.1")
+            build_upstream_runtime.validate_android_gpu_samplers(output, "android", "v0.18.1")
+            build_upstream_runtime.validate_android_gpu_samplers(output, "linux", "v0.19.1")
+            write_elf_with_exports(output, both)
+            build_upstream_runtime.validate_android_gpu_samplers(output, "android", "v0.19.1")
+            with patch.object(build_upstream_runtime, "validate_exported_symbols"), \
+                 patch.object(build_upstream_runtime, "validate_in_process_litert_linkage"), \
+                 patch.object(build_upstream_runtime, "validate_android_global_visibility"), \
+                 patch.object(build_upstream_runtime, "validate_android_protobuf_isolation"), \
+                 patch.object(build_upstream_runtime, "validate_android_gpu_environment_teardown"):
+                build_upstream_runtime.validate_runtime(output, "android", "v0.19.1")
+                write_elf_with_exports(output, published)
+                with self.assertRaisesRegex(RuntimeError, "#120"):
+                    build_upstream_runtime.validate_runtime(output, "android", "v0.19.1")
 
     def test_in_process_litert_define_matches_bazel_config_setting(self) -> None:
         bazel = (build_upstream_runtime.REPO_ROOT / "native/bridge/BUILD.bazel").read_text()
