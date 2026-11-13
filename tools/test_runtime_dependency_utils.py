@@ -10,7 +10,9 @@ from unittest.mock import patch
 import runtime_dependency_utils
 from litert_lm_symbols import (
     ANDROID_OPENCL_SAMPLER_SYMBOLS,
+    ANDROID_WEBGPU_SAMPLER_SYMBOLS,
     APPLE_METAL_SAMPLER_SYMBOLS,
+    android_static_gpu_sampler_symbols,
 )
 from validate_runtime_dependencies import (
     newest_glibc_requirement,
@@ -224,6 +226,45 @@ class RuntimeDependencyUtilsTest(unittest.TestCase):
             write_elf_with_exports(library, ANDROID_OPENCL_SAMPLER_SYMBOLS)
 
             self.assertEqual(validate_elf_dependencies(root, "v0.18.0"), 1)
+
+    def test_android_v019_runtime_requires_both_linked_gpu_samplers(self) -> None:
+        # sampler_factory.cc resolves the same seven functions for each family.
+        self.assertEqual(
+            ANDROID_WEBGPU_SAMPLER_SYMBOLS,
+            [symbol.replace("OpenCl", "WebGpu") for symbol in ANDROID_OPENCL_SAMPLER_SYMBOLS],
+        )
+        self.assertEqual(android_static_gpu_sampler_symbols("v0.18.1"), [])
+        both = ANDROID_OPENCL_SAMPLER_SYMBOLS + ANDROID_WEBGPU_SAMPLER_SYMBOLS
+        for tag in ("v0.19.0", "v0.19.1", "v0.20.0"):
+            self.assertEqual(android_static_gpu_sampler_symbols(tag), both)
+        # The published v0.19.1-4 shape: OpenCL functions plus the WebGPU
+        # function pointers sampler_factory.cc always defines.
+        published = ANDROID_OPENCL_SAMPLER_SYMBOLS + [
+            f"{symbol}_Static" for symbol in ANDROID_WEBGPU_SAMPLER_SYMBOLS
+        ]
+        for arch in ("arm64", "x64"):
+            with self.subTest(arch=arch), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                library = root / "bin" / "android" / arch / "libLiteRtLm.so"
+                library.parent.mkdir(parents=True)
+                write_elf_with_exports(library, published)
+                with self.assertRaises(SystemExit) as raised:
+                    validate_elf_dependencies(root, "v0.19.1")
+                message = str(raised.exception)
+                for symbol in ANDROID_WEBGPU_SAMPLER_SYMBOLS:
+                    self.assertRegex(message, rf"{symbol}(,|$|\n)")
+                self.assertNotIn("LiteRtTopKOpenClSampler", message)
+                write_elf_with_exports(library, both)
+                with self.assertRaises(SystemExit) as raised:
+                    validate_elf_dependencies(root, "v0.19.1")
+                self.assertNotIn("Sampler", str(raised.exception))
+                write_elf_with_exports(library, ANDROID_WEBGPU_SAMPLER_SYMBOLS)
+                with self.assertRaisesRegex(SystemExit, "LiteRtTopKOpenClSampler_Create"):
+                    validate_elf_dependencies(root, "v0.19.1")
+                write_elf_with_exports(library, published)
+                with self.assertRaises(SystemExit) as raised:
+                    validate_elf_dependencies(root, "v0.18.1")
+                self.assertNotIn("Sampler", str(raised.exception))
 
     def test_ios_metal_sampler_requires_complete_plugin_api(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

@@ -20,6 +20,7 @@ from runtime_dependency_utils import (
 )
 from litert_lm_symbols import (
     ANDROID_OPENCL_SAMPLER_SYMBOLS,
+    android_static_gpu_sampler_symbols,
     APPLE_METAL_ACCELERATOR_SYMBOLS,
     APPLE_METAL_SAMPLER_SYMBOLS,
 )
@@ -118,6 +119,15 @@ def validate_elf_dependencies(root: Path, upstream_tag: str) -> int:
                     validate_android_protobuf_isolation(library, platform, upstream_tag)
                 except RuntimeError as error:
                     errors.append(str(error))
+                missing = sorted(
+                    set(android_static_gpu_sampler_symbols(upstream_tag))
+                    - elf_exported_symbols(library)
+                )
+                if missing:
+                    errors.append(
+                        f"{library.relative_to(root).as_posix()} does not "
+                        "define the GPU sampler functions: " + ", ".join(missing)
+                    )
             if library.name == "libLiteRtTopKOpenClSampler.so":
                 exported = elf_exported_symbols(library)
                 missing = sorted(set(ANDROID_OPENCL_SAMPLER_SYMBOLS) - exported)

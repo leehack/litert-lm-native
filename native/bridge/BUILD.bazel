@@ -89,6 +89,14 @@ config_setting(
     define_values = {"litert_lm_c_api_v1": "true"},
 )
 
+# Upstream links only the OpenCL TopK sampler on Android, but its GPU
+# accelerator runs on WebGPU when OpenCL cannot be loaded.
+config_setting(
+    name = "android_webgpu_sampler",
+    constraint_values = ["@platforms//os:android"],
+    define_values = {"litert_lm_android_webgpu_sampler": "true"},
+)
+
 # v0.17 moved the capabilities C implementation into //c:engine.
 config_setting(
     name = "capabilities_in_c_engine",
@@ -278,7 +286,10 @@ cc_binary(
         ":litert_lm_bridge",
         ":litert_lm_asr_bridge",
         "//c:engine",
-    ] + CAPABILITIES_DEPS,
+    ] + CAPABILITIES_DEPS + select({
+        ":android_webgpu_sampler": ["//runtime/components:top_k_webgpu_sampler_static"],
+        "//conditions:default": [],
+    }),
 )
 
 cc_binary(

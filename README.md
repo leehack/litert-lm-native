@@ -326,7 +326,9 @@ v0.18 this includes the iOS `LiteRtMetalAccelerator` and
 `LiteRtTopKMetalSampler` modules; their framework-relative loader paths avoid
 flat dylibs that App Store bundles cannot ship. v0.19 `LiteRtLm` links its GPU
 accelerator and sampler, so neither is needed; releases after `v0.19.1-2` ship
-no Metal module. Releases after `v0.19.1-3` also drop the macOS `libLiteRt` and
+no Metal module. Android v0.19 runtimes after `v0.19.1-4` link both the OpenCL
+and WebGPU samplers, because the linked Android GPU accelerator can serve either
+backend. Releases after `v0.19.1-3` also drop the macOS `libLiteRt` and
 `libLiteRtWebGpuAccelerator` dylibs, the iOS loose `libLiteRt` and the matching
 `LiteRt` and `LiteRtWebGpuAccelerator` XCFramework zips: v0.19 `LiteRtLm`
 embeds LiteRT and never opens them.

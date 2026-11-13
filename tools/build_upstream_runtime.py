@@ -26,8 +26,10 @@ from litert_cpu_options_identifier_patch import (
     verify_dynamic_runtime,
 )
 from litert_lm_symbols import (
+    android_static_gpu_sampler_symbols,
     has_asr_bridge,
     has_omni_asr_engine,
+    has_prebuilt_topk_samplers,
     in_process_litert_abi_version,
     is_at_least,
     uses_c_api_v1,
@@ -39,6 +41,7 @@ from macos_runtime_identity import normalize_macos_runtime_identity
 from macos_runtime_policy import UNSUPPORTED_MACOS_ARCH_REASON
 from package_upstream_prebuilts import apply_prebuilt_overrides
 from runtime_dependency_utils import (
+    elf_exported_symbols,
     elf_has_global_flag,
     elf_needed_libraries,
     is_elf,
@@ -585,6 +588,8 @@ def build_runtime(
         command.append("--define=litert_lm_c_api_v1=true")
     if in_process_litert_abi_version(upstream_tag) == 1:
         command.append("--define=litert_lm_in_process_litert=true")
+    if platform == "android" and not has_prebuilt_topk_samplers(upstream_tag):
+        command.append("--define=litert_lm_android_webgpu_sampler=true")
     if require_finish_reason_patch_decision(upstream_tag):
         command.append(FINISH_REASON_DEFINE)
     if platform == "macos":
@@ -899,6 +904,19 @@ def validate_android_global_visibility(output: Path, platform: str) -> None:
     print(f"Validated Android global symbol visibility in {output}", flush=True)
 
 
+def validate_android_gpu_samplers(output: Path, platform: str, upstream_tag: str) -> None:
+    if platform != "android":
+        return
+    missing = sorted(
+        set(android_static_gpu_sampler_symbols(upstream_tag)) - elf_exported_symbols(output))
+    if missing:
+        raise RuntimeError(
+            f"{output} does not define the GPU sampler functions "
+            f"{', '.join(missing)}; generation fails on the GPU backend they "
+            "serve (#120)")
+    print(f"Validated linked OpenCL and WebGPU samplers in {output}", flush=True)
+
+
 def validate_android_gpu_environment_teardown(output: Path, platform: str) -> None:
     if platform != "android":
         return
@@ -911,6 +929,7 @@ def validate_runtime(output: Path, platform: str, upstream_tag: str) -> None:
     validate_in_process_litert_linkage(output, platform, upstream_tag)
     validate_android_global_visibility(output, platform)
     validate_android_protobuf_isolation(output, platform, upstream_tag)
+    validate_android_gpu_samplers(output, platform, upstream_tag)
     validate_android_gpu_environment_teardown(output, platform)
 
 
