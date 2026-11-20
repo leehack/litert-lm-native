@@ -292,13 +292,17 @@ def main() -> int:
     args = parser.parse_args()
     if (platform.system(), platform.machine()) != ("Darwin", "arm64"):
         parser.error("this oracle qualifies macOS arm64")
-    args.evidence.mkdir(parents=True, exist_ok=False)
     archive = args.archive.resolve()
     models = {"recurrent": args.model.resolve(), "attention": args.attention_model.resolve()}
-    bindings = {archive: args.archive_sha256, **{path: MODELS[name] for name, path in models.items()}}
-    for path, expected in bindings.items():
-        if sha256_file(path) != expected:
-            raise RuntimeError(f"SHA-256 mismatch for {path}")
+    if models["recurrent"].samefile(models["attention"]):
+        raise RuntimeError("--model and --attention-model refer to the same model file")
+    if sha256_file(archive) != args.archive_sha256:
+        raise RuntimeError(f"SHA-256 mismatch for {archive}")
+    for role, flag in (("recurrent", "--model"), ("attention", "--attention-model")):
+        path = models[role]
+        if sha256_file(path) != MODELS[role]:
+            raise RuntimeError(f"{flag} SHA-256 mismatch for {path}")
+    args.evidence.mkdir(parents=True, exist_ok=False)
     with tarfile.open(archive, "r:gz") as packaged:
         packaged.extractall(args.evidence, filter="data")
     library = args.evidence.resolve() / "macos/arm64" / LIBRARY

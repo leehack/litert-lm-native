@@ -1,4 +1,11 @@
+import os
+import sys
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import litert_lm_step_zero_smoke as smoke
 
 from litert_lm_step_zero_smoke import MARKER, PROMPT, grade
 
@@ -64,3 +71,63 @@ class StepZeroSmokeTest(unittest.TestCase):
                       grade_sequence(clean, cancelled=no_drain)["failures"])
         self.assertIn("incomplete independent or fresh stream",
                       grade_sequence(clean, after_cancel=turn(""))["failures"])
+
+
+class StepZeroSmokeInputTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.recurrent = self.root / "recurrent.litertlm"
+        self.recurrent.write_bytes(b"recurrent model")
+        self.attention = self.root / "attention.litertlm"
+        self.attention.write_bytes(b"attention model")
+        self.archive = self.root / "runtime.tar.gz"
+        self.archive.write_bytes(b"runtime archive")
+        self.evidence = self.root / "evidence"
+        self.enterContext(patch.dict(smoke.MODELS, {
+            "recurrent": smoke.sha256_file(self.recurrent),
+            "attention": smoke.sha256_file(self.attention),
+        }))
+        self.enterContext(patch.object(smoke.platform, "system", return_value="Darwin"))
+        self.enterContext(patch.object(smoke.platform, "machine", return_value="arm64"))
+        self.extract = self.enterContext(patch.object(
+            smoke.tarfile, "open",
+            side_effect=AssertionError("invalid inputs reached runtime extraction"),
+        ))
+
+    def assert_model_rejected(self, recurrent: Path, attention: Path, message: str) -> None:
+        argv = [
+            smoke.__file__,
+            "--archive", str(self.archive),
+            "--archive-sha256", smoke.sha256_file(self.archive),
+            "--library-sha256", "unused",
+            "--model", str(recurrent),
+            "--attention-model", str(attention),
+            "--backend", "cpu",
+            "--evidence", str(self.evidence),
+        ]
+        with patch.object(sys, "argv", argv):
+            with self.assertRaisesRegex(RuntimeError, message):
+                smoke.main()
+        self.extract.assert_not_called()
+        self.assertFalse(self.evidence.exists())
+
+    def test_rejects_one_model_path_for_both_roles(self) -> None:
+        self.assert_model_rejected(self.attention, self.attention, "same model file")
+
+    def test_rejects_model_paths_that_resolve_to_the_same_file(self) -> None:
+        alias = self.root / "alias.litertlm"
+        alias.symlink_to(self.attention)
+        self.assert_model_rejected(alias, self.attention, "same model file")
+
+    def test_rejects_hard_link_to_the_same_model_file(self) -> None:
+        alias = self.root / "hard-link.litertlm"
+        os.link(self.attention, alias)
+        self.assert_model_rejected(alias, self.attention, "same model file")
+
+    def test_rejects_wrong_recurrent_model_at_a_distinct_path(self) -> None:
+        self.recurrent.write_bytes(self.attention.read_bytes())
+        self.assert_model_rejected(self.recurrent, self.attention, "--model SHA-256 mismatch")
+
+    def test_rejects_wrong_attention_model_at_a_distinct_path(self) -> None:
+        self.attention.write_bytes(self.recurrent.read_bytes())
+        self.assert_model_rejected(self.recurrent, self.attention, "--attention-model SHA-256 mismatch")
