@@ -1,0 +1,44 @@
+--- a/runtime/executor/llm_litert_compiled_model_executor.cc
++++ b/runtime/executor/llm_litert_compiled_model_executor.cc
+@@ -1681,13 +1681,15 @@
+   llm_context_ = std::move(context_data);
+   mtp_primed_ = false;
+ 
+-  // We can keep our kv cache buffers if this is the first step. This lets us
+-  // restore from LlmContexts at step 0 with an empty kv cache.
++  // A context at step 0 has no state of its own: reset the state buffers
++  // instead of restoring them.
+   if (llm_context_->runtime_state().current_step > 0) {
+     auto restored_state = std::move(
+         static_cast<LlmProcessedContext&>(llm_context_->processed_context())
+             .state());
+     ABSL_RETURN_IF_ERROR(RestoreState(std::move(restored_state)));
++  } else {
++    ABSL_RETURN_IF_ERROR(Reset());
+   }
+ 
+   force_prepare_needed_ = true;
+@@ -1891,6 +1893,9 @@
+     llm_context_->runtime_state().current_step = new_step;
+     return absl::OkStatus();
+   }
++  if (new_step == 0) {
++    return Reset();
++  }
+   RET_CHECK_LE(new_step, max_step).SetCode(absl::StatusCode::kInvalidArgument)
+       << "New step cannot be greater than the max step: " << max_step;
+   if (new_step < 0) {
+@@ -1907,5 +1912,13 @@
+ absl::Status LlmLiteRtCompiledModelExecutorBase::Reset() {
+   llm_context_->runtime_state().current_step = 0;
+   mtp_primed_ = false;
++  // Linear attention summarizes all earlier tokens, including ones that a
++  // positional attention mask would hide in a KV cache.
++  if (state_ != nullptr) {
++    ABSL_RETURN_IF_ERROR(state_->Clear());
++  }
++  if (decode_state_ != nullptr) {
++    ABSL_RETURN_IF_ERROR(decode_state_->Clear());
++  }
+   return absl::OkStatus();
+ }

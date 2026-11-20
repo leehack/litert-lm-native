@@ -152,9 +152,10 @@ class V019DecisionsTest(unittest.TestCase):
     def test_android_dawn_rollback_waits_for_device_evidence(self) -> None:
         self.assertEqual(prebuilt_overrides("v0.19.0"), prebuilt_overrides("v0.18.1"))
 
-    def test_v0191_keeps_every_v0190_decision(self) -> None:
-        # v0.19.1 changes no carried preimage, dependency pin or prebuilt.
-        self.assertEqual(source_patch_manifest("v0.19.1"), source_patch_manifest("v0.19.0"))
+    def test_v0191_keeps_the_v0190_carries_and_adds_step_zero_reset(self) -> None:
+        records = source_patch_manifest("v0.19.1")
+        self.assertEqual(records[:-1], source_patch_manifest("v0.19.0"))
+        self.assertEqual(records[-1]["id"], "step-zero-state")
         self.assertEqual(prebuilt_overrides("v0.19.1"), prebuilt_overrides("v0.19.0"))
         self.assertEqual(xnnpack_commit_for("v0.19.1"), xnnpack_commit_for("v0.19.0"))
         self.assertTrue(android_gpu_safety_applies("v0.19.1"))

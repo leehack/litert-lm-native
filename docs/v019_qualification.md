@@ -134,3 +134,34 @@ Dawn are unchanged. Every v0.19.0 decision above applies unchanged; v0.19.2 and
 later still fail closed until audited. The bridge and ASR bridge use neither
 `max_num_images` nor any changed file. Earlier v0.19.0 artifacts and smoke
 evidence are bound to `83ce6067` and do not qualify this source.
+
+### Step-zero state reset
+
+Source builds of v0.19.1 backport
+[LiteRT-LM e1f86b05](https://github.com/google-ai-edge/LiteRT-LM/commit/e1f86b05bf8a731331622a2622440e9f93d9a9f5)
+for [#70](https://github.com/leehack/litert-lm-native/issues/70). Independent
+conversations on one engine start from zero-filled state, including the
+separate batched decode state. A linear attention tensor summarizes every
+preceding token, so a positional mask cannot isolate a new conversation.
+The source patch record binds the preimage, postimage and patch digest.
+Official upstream prebuilts retain their original source identity.
+
+On the exact upstream commit above, apply
+`native/bridge/step_zero_state_v0191_test.patch` to a scratch source checkout
+and run `bazel test //runtime/executor:llm_litert_compiled_model_executor_test`.
+On macOS arm64, materialize the Git LFS dylibs in `prebuilt/macos_arm64`
+and add `--config=macos_arm64`. Run the same target after applying
+`native/bridge/step_zero_state_v0191.patch`.
+Remove the step-zero restore branch, the `state_` clear and the
+`decode_state_` clear individually to verify that each omission breaks its
+regression case. The test patch is for qualification only.
+
+Run `tools/litert_lm_step_zero_smoke.py` against each macOS arm64 runtime
+archive, before and after the backport and again from the published release.
+Supply the expected archive and extracted dylib hashes plus the pinned
+Qwen3.5-0.8B and corrected Qwen3-0.6B model files. Run both `--backend cpu`
+and `--backend gpu` with separate evidence directories. The JSON and native
+logs record the streamed content, fresh-process controls, reload, conversation
+reuse, drained cancellation, placement and timing. The Qwen3.5 comparison
+uses the joined content bytes. For the attention-only model, compare counting
+variants with the independent-process results and check the arithmetic control.
