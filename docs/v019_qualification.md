@@ -165,3 +165,12 @@ logs record the streamed content, fresh-process controls, reload, conversation
 reuse, drained cancellation, placement and timing. The Qwen3.5 comparison
 uses the joined content bytes. For the attention-only model, compare counting
 variants with the independent-process results and check the arithmetic control.
+
+On macOS WebGPU, models that declare linear-attention state use
+executor-managed decode inputs. The sampler still selects tokens on the GPU.
+The lookahead path can consume divergent logits after an engine is reused.
+The GPU placement check uses `--require-executor-managed-inputs` to verify this
+routing and check that the attention-only arithmetic control still uses
+sampler-managed input. The counting oracle also checks an independent request
+after an unrelated word prompt. Removing the sampler guard must re-enable
+lookahead in the linear-attention executor test.

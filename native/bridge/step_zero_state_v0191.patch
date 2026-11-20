@@ -1,7 +1,12 @@
 --- a/runtime/executor/llm_litert_compiled_model_executor.cc
 +++ b/runtime/executor/llm_litert_compiled_model_executor.cc
-@@ -1681,13 +1681,15 @@
-   llm_context_ = std::move(context_data);
+@@ -58,4 +58,5 @@
+ #include "litert/cc/litert_tensor_buffer_types.h"  // from @litert
+ #if defined(__APPLE__)
++#include <TargetConditionals.h>
+ #include "litert/cc/options/litert_gpu_options.h"  // from @litert
+ #endif  // defined(__APPLE__)
+@@ -1682,6 +1683,6 @@
    mtp_primed_ = false;
  
 -  // We can keep our kv cache buffers if this is the first step. This lets us
@@ -10,16 +15,38 @@
 +  // instead of restoring them.
    if (llm_context_->runtime_state().current_step > 0) {
      auto restored_state = std::move(
-         static_cast<LlmProcessedContext&>(llm_context_->processed_context())
+@@ -1689,4 +1690,6 @@
              .state());
      ABSL_RETURN_IF_ERROR(RestoreState(std::move(restored_state)));
 +  } else {
 +    ABSL_RETURN_IF_ERROR(Reset());
    }
  
-   force_prepare_needed_ = true;
-@@ -1891,6 +1893,9 @@
-     llm_context_->runtime_state().current_step = new_step;
+@@ -1741,4 +1744,23 @@
+         executor_settings_.GetAdvancedSettings()->sampler_handles_input;
+   }
++#if defined(__APPLE__) && TARGET_OS_OSX
++  if (sampler_handles_input && sampler_backend == Backend::GPU &&
++      executor_settings_.GetBackend() == Backend::GPU &&
++      executor_metadata_ != nullptr &&
++      executor_metadata_->has_llm_executor_metadata() &&
++      absl::c_any_of(
++          executor_metadata_->llm_executor_metadata().state_buffers(),
++          [](const proto::StateBuffer& state) {
++            return state.type() == proto::StateBuffer::TYPE_LINEAR_ATTENTION;
++          })) {
++    const auto options = env_.GetOptions();
++    if (options.HasValue() &&
++        options->GetOption(EnvironmentOptions::Tag::kWebGpuDevice).HasValue()) {
++      sampler_handles_input = false;
++      ABSL_LOG(INFO) << "Using executor-managed decode inputs for WebGPU "
++                        "linear attention on macOS.";
++    }
++  }
++#endif
+   sampler_handles_input_ =
+       sampler_handles_input && sampler_->CanHandleInput() &&
+@@ -1892,4 +1914,7 @@
      return absl::OkStatus();
    }
 +  if (new_step == 0) {
@@ -27,9 +54,7 @@
 +  }
    RET_CHECK_LE(new_step, max_step).SetCode(absl::StatusCode::kInvalidArgument)
        << "New step cannot be greater than the max step: " << max_step;
-   if (new_step < 0) {
-@@ -1907,5 +1912,13 @@
- absl::Status LlmLiteRtCompiledModelExecutorBase::Reset() {
+@@ -1908,4 +1933,12 @@
    llm_context_->runtime_state().current_step = 0;
    mtp_primed_ = false;
 +  // Linear attention summarizes all earlier tokens, including ones that a

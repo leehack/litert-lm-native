@@ -1,4 +1,4 @@
-"""Version-bound backport of LiteRT-LM e1f86b05 for independent sequences."""
+"""Version-bound step-zero reset and macOS linear-attention sampler policy."""
 import hashlib
 import re
 import subprocess
@@ -7,7 +7,7 @@ from pathlib import Path
 PATCH_PATH = "native/bridge/step_zero_state_v0191.patch"
 SOURCE = "runtime/executor/llm_litert_compiled_model_executor.cc"
 PREIMAGE = "5e6898eb07178719c554ed49e4bc79d891badea4ad0576d00af54ef1bd8dbb4c"
-POSTIMAGE = "55d0e11532e0e4036fadf0ad7fd122b46b0867adafaf49fd648b7144991b7743"
+POSTIMAGE = "b2c73fbcb400654072bf926dbaa3b81e252acf750f8fc1a60dd0b51df84d890d"
 PATCH = Path(__file__).resolve().parents[1] / PATCH_PATH
 
 

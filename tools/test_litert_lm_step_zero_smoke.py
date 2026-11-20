@@ -1,6 +1,6 @@
 import unittest
 
-from litert_lm_step_zero_smoke import PROMPT, grade
+from litert_lm_step_zero_smoke import MARKER, PROMPT, grade
 
 REFERENCE = "Here are the numbers from one to twenty in English:\n\n1, 2, 3, 4, 5, 6, 7,"
 DRIFT = "Here are the numbers from one to twenty in English:\n\n1. 2. 3. 4. 5. 6. 7."
@@ -21,6 +21,8 @@ def grade_sequence(contents: list[str], reference: str = REFERENCE, **changes) -
     repeated = {
         "independent": [turn(content) for content in contents],
         "reloaded": turn(reference),
+        "marker": turn(MARKER),
+        "after_marker": turn(reference),
         "after_cancel": turn(reference),
         "cancelled": turn("1", cancel_requested=True, stream_errors=["CANCELLED: Task cancelled"]),
         "reused": [turn(reference), turn("You asked me to count to twenty.")],
@@ -44,6 +46,16 @@ class StepZeroSmokeTest(unittest.TestCase):
                       grade_sequence([PROMPT] * 5, reference=PROMPT)["failures"])
         self.assertIn("independent or fresh answer failed counting semantics",
                       grade_sequence(["OK"] * 5, reference="OK")["failures"])
+
+    def test_rejects_duplicate_leading_digit_in_warm_and_post_marker_answers(self) -> None:
+        duplicate = "1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10"
+        clean = [REFERENCE] * 5
+        result = grade_sequence([REFERENCE, REFERENCE, duplicate, REFERENCE, REFERENCE])
+        self.assertEqual(result["independent_outside_fresh"], [3])
+        self.assertIn("independent or fresh answer failed counting semantics", result["failures"])
+        result = grade_sequence(clean, after_marker=turn("1, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8,"))
+        self.assertEqual(result["independent_outside_fresh"], [6])
+        self.assertIn("Qwen3.5 content differs from its fresh reference", result["failures"])
 
     def test_requires_drain_and_clean_generation_after_cancel(self) -> None:
         clean = [REFERENCE] * 5

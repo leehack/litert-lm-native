@@ -1,16 +1,35 @@
+diff --git a/runtime/executor/BUILD b/runtime/executor/BUILD
+index 8ef5be9..1211a84 100644
+--- a/runtime/executor/BUILD
++++ b/runtime/executor/BUILD
+@@ -485,7 +485,10 @@ cc_test(
+         "//runtime/util:litert_status_util",
+         "//runtime/util:scoped_file",
+         "//runtime/util:test_utils",
+-    ],
++    ] + select({
++        "@platforms//os:macos": ["//runtime/components:top_k_webgpu_sampler_static"],
++        "//conditions:default": [],
++    }),
+ )
+ 
+ cc_library(
 diff --git a/runtime/executor/llm_litert_compiled_model_executor_test.cc b/runtime/executor/llm_litert_compiled_model_executor_test.cc
-index d0cbd0f..ca72e95 100644
+index d0cbd0f..8cc5ebf 100644
 --- a/runtime/executor/llm_litert_compiled_model_executor_test.cc
 +++ b/runtime/executor/llm_litert_compiled_model_executor_test.cc
-@@ -17,6 +17,7 @@
+@@ -17,6 +17,10 @@
  #include <cmath>
  #include <cstdint>
  #include <cstdlib>
 +#include <cstring>
++#if defined(__APPLE__)
++#include <TargetConditionals.h>
++#endif
  #include <filesystem>  // NOLINT: Required for path manipulation.
  #include <fstream>
  #include <functional>
-@@ -75,6 +76,9 @@
+@@ -75,6 +79,9 @@
  namespace litert::lm {
  namespace {
  
@@ -20,7 +39,21 @@ index d0cbd0f..ca72e95 100644
  using ::testing::status::StatusIs;
  
  constexpr char kTestStaticModelPath[] =
-@@ -1118,6 +1122,10 @@ class TfLiteModelResources : public ModelResources {
+@@ -645,6 +652,13 @@ class FakeSamplerWithInputHandling : public Sampler {
+ class TestableLlmLiteRtCompiledModelExecutorStatic
+     : public LlmLiteRtCompiledModelExecutorStatic {
+  public:
++  static void SetSamplerMetadataForTest(
++      LlmLiteRtCompiledModelExecutorStatic* executor,
++      const proto::ExecutorMetadata* metadata) {
++    executor->*&TestableLlmLiteRtCompiledModelExecutorStatic::executor_metadata_ =
++        metadata;
++  }
++
+   static void SetSamplerForTest(LlmLiteRtCompiledModelExecutorStatic* executor,
+                                 std::unique_ptr<Sampler> sampler) {
+     auto* testable =
+@@ -1118,6 +1132,10 @@ class TfLiteModelResources : public ModelResources {
      with_mtp_drafter_ = with_mtp_drafter;
    }
  
@@ -31,7 +64,7 @@ index d0cbd0f..ca72e95 100644
    // ModelResources implementation:
    absl::StatusOr<const Model*> GetTFLiteModel(
        proto::LlmMetadata::TfLiteModelType model_type) override {
-@@ -1150,6 +1158,9 @@ class TfLiteModelResources : public ModelResources {
+@@ -1150,6 +1168,9 @@ class TfLiteModelResources : public ModelResources {
  
    absl::StatusOr<const proto::ExecutorMetadata*> GetExecutorMetadata()
        override {
@@ -41,7 +74,7 @@ index d0cbd0f..ca72e95 100644
      return absl::UnimplementedError("GetExecutorMetadata not implemented.");
    }
  
-@@ -1181,6 +1192,7 @@ class TfLiteModelResources : public ModelResources {
+@@ -1181,6 +1202,7 @@ class TfLiteModelResources : public ModelResources {
   private:
    Model model_;
    bool with_mtp_drafter_;
@@ -49,7 +82,7 @@ index d0cbd0f..ca72e95 100644
  };
  
  TEST(LlmLiteRtCompiledModelExecutorStaticTest,
-@@ -1775,6 +1787,261 @@ TEST(LlmLiteRtCompiledModelExecutorStaticTest,
+@@ -1775,6 +1797,315 @@ TEST(LlmLiteRtCompiledModelExecutorStaticTest,
    EXPECT_EQ(step_and_token.token.size(), 1);
  }
  
@@ -95,14 +128,19 @@ index d0cbd0f..ca72e95 100644
 +  static constexpr absl::string_view kValueCacheName = "kv_cache_v_0";
 +
 +  void CreateExecutor(absl::string_view model_file,
-+                      bool with_linear_attention_state) {
++                      bool with_linear_attention_state,
++                      Backend backend = Backend::CPU,
++                      bool sampler_handles_input = true) {
 +    const std::filesystem::path model_path =
 +        std::filesystem::path(::testing::SrcDir()) /
 +        absl::StrCat("litert_lm/runtime/testdata/", model_file);
 +    ASSERT_OK_AND_ASSIGN(auto model_assets,
 +                         ModelAssets::Create(model_path.string()));
 +    ASSERT_OK_AND_ASSIGN(auto executor_settings,
-+                         LlmExecutorSettings::CreateDefault(model_assets));
++                         LlmExecutorSettings::CreateDefault(model_assets, backend));
++    executor_settings.SetCacheDir(":nocache");
++    executor_settings.SetAdvancedSettings(
++        AdvancedSettings{.sampler_handles_input = sampler_handles_input});
 +    LITERT_ASSERT_OK_AND_ASSIGN(
 +        auto env, Environment::Create(std::vector<Environment::Option>()));
 +    env_ = std::move(env);
@@ -307,6 +345,55 @@ index d0cbd0f..ca72e95 100644
 +  EXPECT_THAT(key_cache_, Each(0));
 +  EXPECT_THAT(value_cache_, Each(0));
 +}
++
++#if defined(__APPLE__) && TARGET_OS_OSX
++TEST_F(LlmLiteRtCompiledModelExecutorLinearAttentionTest,
++       SamplerLookaheadEligibilityOnMacOS) {
++  struct Case {
++    Backend backend;
++    bool linear_attention;
++    bool caller_enabled;
++    int first_decode_graphs;
++  };
++  const Case cases[] = {
++      {Backend::GPU, true, true, 1},
++      {Backend::GPU, false, true, 2},
++      {Backend::CPU, true, true, 1},
++      {Backend::GPU, true, false, 1},
++  };
++  for (const auto& test : cases) {
++    SCOPED_TRACE(absl::StrCat(static_cast<int>(test.backend), "/",
++                              test.linear_attention, "/", test.caller_enabled));
++    proto::ExecutorMetadata metadata;
++    ASSERT_NO_FATAL_FAILURE(CreateExecutor("magic_test_none.tflite", false,
++                                           test.backend, test.caller_enabled));
++    if (test.linear_attention) {
++      for (const char* name : {"kv_cache_lc_0", "kv_cache_lr_0"}) {
++        auto* state = metadata.mutable_llm_executor_metadata()->add_state_buffers();
++        state->set_decode_input_name(name);
++        state->set_type(proto::StateBuffer::TYPE_LINEAR_ATTENTION);
++      }
++      // Provide the affected model's sampler metadata without changing the
++      // synthetic model's tensor names or its compiled state layout.
++      TestableLlmLiteRtCompiledModelExecutorStatic::SetSamplerMetadataForTest(
++          executor_.get(), &metadata);
++    }
++    int decode_graphs = 0;
++    executor_->UpdatePreGraphRunCallback(
++        [&decode_graphs](absl::string_view signature, int, auto&) {
++          if (signature == "decode") ++decode_graphs;
++        });
++    ASSERT_OK(Prefill());
++    ASSERT_OK(executor_->Decode());
++    EXPECT_EQ(decode_graphs, test.first_decode_graphs);
++    ASSERT_OK(executor_->Decode());
++    EXPECT_EQ(decode_graphs, test.first_decode_graphs + 1);
++    executor_.reset();
++    resources_.reset();
++    env_.reset();
++  }
++}
++#endif
 +
  absl::StatusOr<
      std::pair<std::unique_ptr<ModelResources>,

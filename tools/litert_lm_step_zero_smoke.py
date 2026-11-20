@@ -21,6 +21,9 @@ from litert_lm_chat_smoke import response_text
 from validate_artifacts import sha256_file
 
 PROMPT = "List the numbers from one to twenty in English."
+MARKER = "CEDAR"
+MANAGED_INPUTS = "Using executor-managed decode inputs for WebGPU linear attention on macOS."
+LOOKAHEAD = "Sampler will handle decode input tensors."
 ARITHMETIC = "What is 3 + 4? Reply with exactly: 3 + 4 = 7"
 MODELS = {
     "recurrent": "684d4d34adf7176eb47f6026ff65c33d42584737254e5524a8d1ad62edc21b98",
@@ -172,7 +175,12 @@ def collect(library: Path, model: Path, backend: str, mode: str, prompt: str) ->
         with runtime.engine(model, backend, cache, timings.setdefault("initial", {})) as engine:
             independent = [runtime.independent(engine, prompt)
                            for _ in range(5 if mode == "repeated" else 1)]
-        result = {"independent": independent, "api_version": runtime.version}
+            controls = {}
+            if mode == "repeated" and prompt == PROMPT:
+                controls["marker"] = runtime.independent(
+                    engine, f"Reply with exactly the word {MARKER}.")
+                controls["after_marker"] = runtime.independent(engine, prompt)
+        result = {"independent": independent, "api_version": runtime.version, **controls}
         if mode == "repeated":
             with runtime.engine(model, backend, cache, timings.setdefault("reload", {})) as engine:
                 reloaded = runtime.independent(engine, prompt)
@@ -201,6 +209,10 @@ def run_process(library: Path, model: Path, backend: str, mode: str,
     result["placement_log"] = [
         line for line in records if re.search(r"adapter|delegate|backend", line, re.I)
     ]
+    result["sampler_log"] = [
+        line for line in records
+        if any(marker in line for marker in (MANAGED_INPUTS, LOOKAHEAD, "GPU sampler unavailable"))
+    ]
     return result
 
 
@@ -219,8 +231,11 @@ def answers_counting_prompt(content: str) -> bool:
     return False
 
 
-def grade(backend: str, family: str, repeated: dict, fresh: list[dict]) -> dict:
-    independent = repeated["independent"] + [repeated["reloaded"], repeated["after_cancel"]]
+def grade(backend: str, family: str, repeated: dict, fresh: list[dict], *,
+          require_executor_managed_inputs: bool = False) -> dict:
+    independent = repeated["independent"] + [
+        repeated["after_marker"], repeated["reloaded"], repeated["after_cancel"],
+    ]
     reference_turns = [result["independent"][0] for result in fresh]
     references = {turn["content"] for turn in reference_turns}
     turns = independent + reference_turns
@@ -236,12 +251,21 @@ def grade(backend: str, family: str, repeated: dict, fresh: list[dict]) -> dict:
         failures.append("cancellation did not reach a cancelled terminal callback and drain")
     if not all(map(stream_ok, repeated["reused"])):
         failures.append("reuse control did not complete")
+    if not stream_ok(repeated["marker"]) or repeated["marker"]["content"].strip() != MARKER:
+        failures.append("unrelated request did not return the marker")
     if backend == "gpu":
         for process in [repeated, *fresh]:
             placement = "\n".join(process["placement_log"])
             if not (re.search(r"(?im)^(?=.*metal)(?=.*adapter)", placement)
                     and re.search(r"(?im)^(?=.*delegate)(?=.*kernel)", placement)):
                 failures.append("Metal adapter and delegate kernels not established")
+            if require_executor_managed_inputs:
+                sampler_log = "\n".join(process["sampler_log"])
+                expected, prohibited = ((MANAGED_INPUTS, LOOKAHEAD) if family == "recurrent"
+                                        else (LOOKAHEAD, MANAGED_INPUTS))
+                if (expected not in sampler_log or prohibited in sampler_log
+                        or "GPU sampler unavailable" in sampler_log):
+                    failures.append(f"GPU sampler input handling not established for {family}")
     if any(PROMPT.casefold() in turn["content"].casefold() for turn in turns):
         failures.append("independent request echoed the input")
     outside_fresh = [index for index, item in enumerate(independent, 1)
@@ -264,6 +288,7 @@ def main() -> int:
     parser.add_argument("--attention-model", required=True, type=Path)
     parser.add_argument("--backend", required=True, choices=("cpu", "gpu"))
     parser.add_argument("--evidence", required=True, type=Path)
+    parser.add_argument("--require-executor-managed-inputs", action="store_true")
     args = parser.parse_args()
     if (platform.system(), platform.machine()) != ("Darwin", "arm64"):
         parser.error("this oracle qualifies macOS arm64")
@@ -289,7 +314,8 @@ def main() -> int:
 
         fresh = [run("fresh", f"fresh-{index}") for index in range(1, 3)]
         repeated = run("repeated", "repeated")
-        grade_result = grade(args.backend, family, repeated, fresh)
+        grade_result = grade(args.backend, family, repeated, fresh,
+                             require_executor_managed_inputs=args.require_executor_managed_inputs)
         lane = {"repeated": repeated, "fresh": fresh, **grade_result}
         if family == "attention":
             arithmetic = run("repeated", "arithmetic", ARITHMETIC)
@@ -297,6 +323,9 @@ def main() -> int:
             lane["arithmetic"] = arithmetic
             if not all(stream_ok(turn) and turn["content"].strip() == "3 + 4 = 7" for turn in turns):
                 lane["failures"].append("attention-only arithmetic control failed")
+            if args.backend == "gpu" and args.require_executor_managed_inputs:
+                if not any(LOOKAHEAD in line for line in arithmetic["sampler_log"]):
+                    lane["failures"].append("attention-only arithmetic GPU sampler lookahead not established")
         report["lanes"][family] = lane
     (args.evidence / "w672-oracle.json").write_text(json.dumps(report, indent=2) + "\n")
     for family, lane in report["lanes"].items():

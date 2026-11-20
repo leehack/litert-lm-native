@@ -19,7 +19,7 @@ class StepZeroStatePatchTest(unittest.TestCase):
             "sha256": hashlib.sha256(carry.PATCH.read_bytes()).hexdigest(),
             "source": carry.SOURCE,
             "preimageSha256Lf": carry.PREIMAGE,
-            "postimageSha256Lf": carry.POSTIMAGE,
+            "postimageSha256Lf": "b2c73fbcb400654072bf926dbaa3b81e252acf750f8fc1a60dd0b51df84d890d",
             "scope": "source-built runtimes only; excludes official upstream prebuilts",
         })
         headers = [line for line in carry.PATCH.read_text().splitlines()
