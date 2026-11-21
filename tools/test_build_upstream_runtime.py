@@ -194,6 +194,8 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     self.assertEqual("--define=litert_lm_in_process_litert=true" in command,
                                      tag in {"v0.19.0", "v0.19.1"})
                     self.assertIn("--define=resolve_symbols_in_exec=false", command)
+                    self.assertEqual("--noenable_bzlmod" in command,
+                                     tag in {"v0.18.1", "v0.19.0", "v0.19.1"})
                     self.assertEqual("--define=litert_lm_android_webgpu_sampler=true" in command,
                                      platform == "android" and tag in {"v0.19.0", "v0.19.1"})
 
@@ -361,6 +363,47 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                             root, patch_stage_spatial_tensors=True,
                         )
                     self.assertEqual(workspace.read_text(encoding="utf-8"), drift)
+
+    def test_build_routes_reject_identical_workspace_files_before_patching(self) -> None:
+        workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(
+            f'TENSORFLOW_REF = "{V019_TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            work_dir = Path(temp)
+            root = work_dir / "source"
+            root.mkdir()
+            for name in ("WORKSPACE", "WORKSPACE.bazel"):
+                (root / name).write_text(workspace, encoding="utf-8")
+            message = "both WORKSPACE and WORKSPACE.bazel"
+
+            args = ["build_upstream_runtime.py", "--source-root", str(root),
+                    "--upstream-tag", "v0.19.1", "--platform", "macos", "--arch", "arm64"]
+            with self.subTest(route="prepared"), patch("sys.argv", args), patch.object(
+                build_upstream_runtime, "patch_asr_untimed_overlap",
+                side_effect=RuntimeError("reached source patching"),
+            ) as patch_source, patch.object(build_upstream_runtime, "run") as run:
+                with self.assertRaisesRegex(RuntimeError, message):
+                    build_upstream_runtime.main()
+                patch_source.assert_not_called()
+                run.assert_not_called()
+
+            with self.subTest(route="archive"), patch.object(
+                build_upstream_runtime, "download_to_path",
+            ), patch.object(build_upstream_runtime.tarfile, "open"), patch.object(
+                build_upstream_runtime, "patch_workspace_build",
+                side_effect=RuntimeError("reached workspace patching"),
+            ) as patch_workspace:
+                with self.assertRaisesRegex(RuntimeError, message):
+                    build_upstream_runtime.download_upstream("v0.19.1", "v0.19.1", work_dir)
+                patch_workspace.assert_not_called()
+
+            with self.subTest(route="verifier"), self.assertRaisesRegex(RuntimeError, message):
+                build_upstream_runtime.verify_carried_dependency_pins(
+                    root, "v0.19.1", spatial_staging=True, cpu_options=False, xnnpack=True,
+                )
+
+            for name in ("WORKSPACE", "WORKSPACE.bazel"):
+                self.assertEqual((root / name).read_text(encoding="utf-8"), workspace)
 
     def test_source_root_rejects_dependency_archive_drift_before_bazel(self) -> None:
         parent_ref = "d0ef0ad58bd87565a92000feef5be758505af84f"

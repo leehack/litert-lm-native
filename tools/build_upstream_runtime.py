@@ -343,6 +343,13 @@ def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> Non
         subprocess.run(command, cwd=cwd, env=env, check=True)
 
 
+def reject_ambiguous_workspace(source_root: Path) -> None:
+    # Bazel prefers WORKSPACE.bazel, while the owner patches and verifies WORKSPACE.
+    if (os.path.lexists(source_root / "WORKSPACE")
+            and os.path.lexists(source_root / "WORKSPACE.bazel")):
+        raise RuntimeError("Ambiguous Bazel workspace with both WORKSPACE and WORKSPACE.bazel")
+
+
 def download_upstream(
     upstream_ref: str, compatibility_tag: str, work_dir: Path
 ) -> Path:
@@ -361,6 +368,7 @@ def download_upstream(
     if len(candidates) != 1:
         raise RuntimeError(f"Expected one extracted source directory, got {candidates}")
     source_root = candidates[0]
+    reject_ambiguous_workspace(source_root)
     patch_workspace_build(source_root, compatibility_tag)
     patch_upstream_workspace(
         source_root,
@@ -429,6 +437,7 @@ def verify_carried_dependency_pins(
     source_root: Path, compatibility_tag: str, *,
     spatial_staging: bool, cpu_options: bool, xnnpack: bool,
 ) -> None:
+    reject_ambiguous_workspace(source_root)
     if not (spatial_staging or cpu_options or xnnpack):
         return
     workspace = (source_root / "WORKSPACE").read_text(encoding="utf-8")
@@ -685,6 +694,9 @@ def build_runtime(
         command.append("--ios_minimum_os=13.0")
     if jobs:
         command.append(f"--jobs={jobs}")
+    if patch_stage_spatial_tensors or patch_cpu_options_identifier or patch_xnnpack:
+        # An rc option in a prepared source tree must not activate MODULE.bazel.
+        command.append("--noenable_bzlmod")
     run(command, source_root)
     if patch_xnnpack:
         verify_xnnpack_postimages(source_root, upstream_tag)
