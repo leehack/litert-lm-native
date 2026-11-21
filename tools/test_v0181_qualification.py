@@ -17,6 +17,7 @@ from xnnpack_pf32_sme2_patch import xnnpack_pf32_patch_manifest
 from xnnpack_pqs8_qc4w_sme2_patch import xnnpack_qc4w_patch_manifest
 from prebuilt_overrides import ANDROID_DAWN_ROLLBACKS, prebuilt_overrides
 from test_asr_litertlm_container_patch import stage_preimage
+from test_workspace_build_patch import stage_v0181
 from validate_release_manifest import validate_schema_2_identity
 
 REPO = Path(__file__).resolve().parents[1]
@@ -30,6 +31,12 @@ class V0181QualificationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             stage_preimage(root)
+            stage_v0181(root)
+            build.patch_workspace_build(root, "v0.18.1")
+            build.patch_upstream_workspace(
+                root, patch_bpe_null_piece=True, patch_xnnpack_pf32_sme2=True,
+                patch_cpu_options_identifier=True,
+            )
             merger = root / "omni/asr/timestamp_text_merger.cc"
             merger.write_bytes((REPO / "tools/fixtures/timestamp_text_merger_v018.cc").read_bytes())
             with (patch.object(build, "materialize_git_lfs_libraries", return_value=0),

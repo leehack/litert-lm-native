@@ -90,6 +90,7 @@ class CpuOptionsIdentifierPatchTest(unittest.TestCase):
         for tag, checked in (("v0.18.0", False), ("v0.18.1", True)):
             calls = MagicMock()
             with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp, \
+                 patch.object(build, "verify_carried_dependency_pins"), \
                  patch.object(build, "patch_asr_untimed_overlap"), \
                  patch.object(build, "patch_asr_litertlm_container"), \
                  patch.object(build, "patch_stream_finish_reason"), \

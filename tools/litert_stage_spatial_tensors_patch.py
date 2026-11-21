@@ -39,17 +39,6 @@ def require_stage_spatial_tensors_patch_decision(compatibility_tag: str) -> bool
     )
 
 
-def verify_litert_pin(workspace: str) -> None:
-    # Bazel verifies the archive digest before applying patches, binding the preimages.
-    for name, expected in (("LITERT_REF", LITERT_REF),
-                           ("LITERT_SHA256", LITERT_ARCHIVE_SHA256)):
-        values = re.findall(rf'^{name} = "([0-9a-f]+)"$', workspace, re.MULTILINE)
-        if values != [expected]:
-            raise RuntimeError(
-                f"Unexpected {name} for LiteRT spatial tensor staging; requalify"
-            )
-
-
 def stage_spatial_tensors_patch_manifest(compatibility_tag: str) -> list[dict]:
     if not require_stage_spatial_tensors_patch_decision(compatibility_tag):
         return []

@@ -17,6 +17,7 @@ UPSTREAM_FIX_TAGS = frozenset({"v0.19.0", "v0.19.1"})
 # read the identifier from the same function, so the patch is neutral there.
 RENAME_COMMIT = "724a247cc5"
 LITERT_REF = "ca21dc99de51c76bdcc572afeea1dd937d3c9e5c"
+LITERT_ARCHIVE_SHA256 = "d3c0455b405fadc597c840c8d708ced4f2a89c78eae21d9c0252f744b94c7fbc"
 SOURCE = "litert/c/options/litert_cpu_options.cc"
 # LF-normalized (preimage, postimage) SHA-256 of SOURCE.
 SOURCES = {

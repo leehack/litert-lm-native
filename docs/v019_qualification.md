@@ -193,8 +193,9 @@ requires separate qualification. Qwen3.5 retains the linear-attention sampler
 guard described above.
 
 The build pins the LiteRT archive at
-`dcb657e8a537b2dc944e53e14c7eb43bcd9ededa` and verifies the four extracted
-postimages. The manifest records these LF-normalized hashes and patch SHA-256
+`dcb657e8a537b2dc944e53e14c7eb43bcd9ededa`. Before invoking Bazel, both build
+entry points verify the effective archive declaration, revision and digest.
+After Bazel, the build verifies the four extracted postimages. The manifest records these LF-normalized hashes and patch SHA-256
 `6012c5203a7f2586294cac3642dc0a7cc16d36c33cf1d8aee02f23599ed95436`
 for source-built runtimes.
 
