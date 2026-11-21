@@ -174,3 +174,93 @@ routing and check that the attention-only arithmetic control still uses
 sampler-managed input. The counting oracle also checks an independent request
 after an unrelated word prompt. Removing the sampler guard must re-enable
 lookahead in the linear-attention executor test.
+
+### Spatial tensor bindings during GPU command-buffer preparation
+
+Source builds of v0.19.1 carry
+[LiteRT aa9e40cd](https://github.com/google-ai-edge/LiteRT/commit/aa9e40cd5e2d892b3a5d8579a7ec6faa696e321e)
+for [llamadart#2134](https://github.com/leehack/llamadart/issues/2134). Cached
+WebGPU and Vulkan dispatches stage new spatial bindings while the preceding
+dispatch records its next command buffer. Reads see staged bindings immediately,
+and dispatch applies them after joining the recording thread. Without staging,
+Qwen3-0.6B can replay a cached buffer with another step's KV cache bindings and
+repeat a token, or Dawn can reject a command buffer with overlapping bindings.
+
+The patch retains the pinned LiteRT's `last_ctx_` behavior. Upstream
+[LiteRT b6b64443](https://github.com/google-ai-edge/LiteRT/commit/b6b64443)
+tracks that state per WebGPU environment for concurrent in-process engines and
+requires separate qualification. Qwen3.5 retains the linear-attention sampler
+guard described above.
+
+The build pins the LiteRT archive at
+`dcb657e8a537b2dc944e53e14c7eb43bcd9ededa` and verifies the four extracted
+postimages. The manifest records these LF-normalized hashes and patch SHA-256
+`6012c5203a7f2586294cac3642dc0a7cc16d36c33cf1d8aee02f23599ed95436`
+for source-built runtimes.
+
+| Source in `ml_drift_delegate/delegate/` | Preimage SHA-256 | Postimage SHA-256 |
+| --- | --- | --- |
+| `gpu_backend_vulkan.cc` | `94510294e45a568440e87366facbae6294a1087a52bbbcbab05e5f6ceec6d3dd` | `ee5943a90770691b5e959152c02aaad642d9f6b42ddfbe08b1e3cb79bf8e614a` |
+| `gpu_backend_vulkan.h` | `10482b2f4cc84e5db67f7385499307dcc930ffa24bfba397e42d2299808d9736` | `0695e45c94da94b87bbb91325b37ff0162c48deaaf5755abeaa51e68f6d1f0ed` |
+| `gpu_backend_webgpu.cc` | `633b5483a3b25660135e5fff01edbebf43854c547726b85583a0fe4906fb7b8e` | `d2d0fc662b7dfd0b9fa5f95c04ada48f414b08c8f350a9e1169022371d3df968` |
+| `gpu_backend_webgpu.h` | `bf318922fa10a4de702c9ac39212188e90809a0f9de918c29480c5317229c65c` | `5b756ac60ad2f183eae4981679bf6235befb2e70b82d6ad0807f7831277706b4` |
+
+Run the model-free test on a macOS arm64 host with Metal from the prepared
+v0.19.1 LiteRT-LM workspace with its materialized LFS dylibs. Set
+`owner` to the absolute path to this checkout.
+
+```bash
+bazel test --package_path="$owner/native:$PWD" --config=macos --config=macos_arm64 \
+  --macos_minimum_os=14.0 --nocache_test_results \
+  //bridge:litert_stage_spatial_tensors_test
+```
+
+The stock build failed staging, the late-hint guard, and the ping-pong replay
+(`255` instead of `767` after step 2). The uncached control passed. The
+patched build passed all four cases. Bypassing staging, omitting the flush, and
+allowing a late hint each failed its corresponding case. Mutating a pinned
+postimage digest failed both the build verifier and the source-identity test.
+Set `LITERT_STAGE_SPATIAL_TENSORS_SOURCE` to the unpatched LiteRT source root
+to run that test with `python3 -m unittest discover -s tools`.
+
+`tools/litert_lm_spatial_staging_smoke.py` reconstructs the investigation's
+Montréal probe and uses the same harness for arithmetic. It opens one engine
+per prompt, runs at least 100 independent conversations under eight SHA-256
+workers, and records exact outputs, Metal placement, lookahead, and Dawn
+validation errors.
+Use the corrected Qwen3-0.6B bundle (`c5f39b41…`) and separate evidence folders.
+Run both archives with `--backend gpu --count 200` and with `--backend cpu`
+at the default count. Add `--expect-reproduction` only for the published
+v0.19.1-6 GPU run.
+
+```bash
+python3 tools/litert_lm_spatial_staging_smoke.py \
+  --archive "$archive" --archive-sha256 "$archive_sha256" \
+  --library-sha256 "$dylib_sha256" --model "$qwen3_model" \
+  --backend gpu --count 200 --evidence "$evidence"
+```
+
+The packaged macOS arm64 candidate archive SHA-256 was
+`77a347a414f2d088718e6c3588caf48ee9a2d9f54ecfdb04b7140c8c504456e9`
+and its `libLiteRtLm.dylib` SHA-256 was
+`57c0bfb13f77ad588bafbbd330b0a92bbeefbe7fd59061bd170f68b44ab2d26f`.
+
+On Apple M4 Max Metal, both libraries reported sampler lookahead. The first
+100-turn v0.19.1-6 control reproduced four Montréal duplicates and returned
+exact arithmetic. The matched 200-turn comparison reproduced both failures.
+
+| Prompt | v0.19.1-6 exact | Candidate exact | Dawn validation errors, before → after |
+| --- | ---: | ---: | ---: |
+| `3 + 4 = 7` | 196/200 | 200/200 | 8 → 0 |
+| `Montréal 👋` | 189/200 | 200/200 | 0 → 0 |
+
+Both CPU packages returned 100/100 exact for each prompt under the same
+eight-worker load, with zero Dawn validation errors.
+The packaged candidate also passed the Qwen3.5-0.8B and Qwen3-0.6B step-zero
+smoke on CPU and Metal. Warm Qwen3-0.6B Metal decode with lookahead measured
+141.1 tok/s on v0.19.1-6 and 141.4 tok/s on the candidate, using the median of
+three interleaved rounds of five warm turns each.
+
+Revisit the carry when a tagged LiteRT-LM release pins a LiteRT containing
+the staging fix. Re-run the cached-dispatch test and packaged Metal probes
+against the unpatched replacement before retiring it.

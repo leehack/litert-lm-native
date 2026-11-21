@@ -12,6 +12,11 @@ from unittest.mock import patch
 import build_upstream_runtime
 import package_upstream_prebuilts
 from litert_lm_symbols import ANDROID_OPENCL_SAMPLER_SYMBOLS, ANDROID_WEBGPU_SAMPLER_SYMBOLS
+from litert_stage_spatial_tensors_patch import (
+    LITERT_ARCHIVE_SHA256,
+    LITERT_REF,
+    PATCH_PATH as STAGING_PATCH,
+)
 from test_runtime_dependency_utils import write_elf_with_exports
 
 
@@ -308,6 +313,64 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             self.assertNotIn("refs", archive.name)
             self.assertNotIn("..", archive.name)
             self.assertRegex(archive.name, r"^LiteRT-LM-[0-9a-f]{64}\.tar\.gz$")
+
+    def test_workspace_applies_spatial_staging_only_to_the_audited_pin(self) -> None:
+        original = (
+            f'LITERT_REF = "{LITERT_REF}"\n'
+            f'LITERT_SHA256 = "{LITERT_ARCHIVE_SHA256}"\n'
+            f'http_archive(\n    name = "minizip",\n    url = "{build_upstream_runtime.ZLIB_URL}",\n)\n'
+            'http_archive(\n    name = "litert",\n    sha256 = LITERT_SHA256,\n)\n'
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "WORKSPACE"
+            workspace.write_text(original, encoding="utf-8")
+            build_upstream_runtime.patch_upstream_workspace(root, patch_stage_spatial_tensors=True)
+            build_upstream_runtime.patch_upstream_workspace(root, patch_stage_spatial_tensors=True)
+            marker = f'"@//bridge:{Path(STAGING_PATCH).name}"'
+            self.assertEqual(workspace.read_text(encoding="utf-8").count(marker), 1)
+
+            for pin, digest in (("LITERT_REF", LITERT_REF),
+                                ("LITERT_SHA256", LITERT_ARCHIVE_SHA256)):
+                with self.subTest(pin=pin):
+                    drift = original.replace(digest, "0" * len(digest))
+                    workspace.write_text(drift, encoding="utf-8")
+                    with self.assertRaisesRegex(RuntimeError, f"Unexpected {pin}"):
+                        build_upstream_runtime.patch_upstream_workspace(
+                            root, patch_stage_spatial_tensors=True,
+                        )
+                    self.assertEqual(workspace.read_text(encoding="utf-8"), drift)
+
+    def test_spatial_staging_postimages_fail_on_drift_or_missing_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            output_base = Path(temp) / "output_base"
+            source_root = Path(temp) / "source"
+            exec_root = output_base / "execroot" / "litert_lm"
+            (exec_root / "bazel-out").mkdir(parents=True)
+            source_root.mkdir()
+            (source_root / "bazel-out").symlink_to(exec_root / "bazel-out", target_is_directory=True)
+            sources = {}
+            files = []
+            for name in build_upstream_runtime.STAGE_SPATIAL_TENSORS_SOURCES:
+                postimage = name.encode() + b"\n"
+                sources[name] = ("", build_upstream_runtime.source_sha256(postimage))
+                file = output_base / "external" / "litert" / name
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(postimage.replace(b"\n", b"\r\n"))
+                files.append(file)
+
+            with patch.object(build_upstream_runtime, "STAGE_SPATIAL_TENSORS_SOURCES", sources):
+                build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
+                for file in files:
+                    with self.subTest(file=file.name):
+                        original = file.read_bytes()
+                        file.write_bytes(b"wrong postimage")
+                        with self.assertRaisesRegex(RuntimeError, f"postimage mismatch for .*{file.name}"):
+                            build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
+                        file.unlink()
+                        with self.assertRaisesRegex(RuntimeError, f"postimage mismatch for .*{file.name}"):
+                            build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
+                        file.write_bytes(original)
 
     def test_workspace_adds_litert_apple_framework_patch(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

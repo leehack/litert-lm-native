@@ -37,6 +37,12 @@ from litert_lm_symbols import (
     required_c_api_symbols,
     uses_stream_chunk_api,
 )
+from litert_stage_spatial_tensors_patch import (
+    PATCH_PATH as STAGE_SPATIAL_TENSORS_PATCH_PATH,
+    SOURCES as STAGE_SPATIAL_TENSORS_SOURCES,
+    require_stage_spatial_tensors_patch_decision,
+    verify_litert_pin as verify_stage_spatial_tensors_litert_pin,
+)
 from macos_runtime_identity import normalize_macos_runtime_identity
 from macos_runtime_policy import UNSUPPORTED_MACOS_ARCH_REASON
 from package_upstream_prebuilts import apply_prebuilt_overrides
@@ -309,6 +315,16 @@ def verify_cpu_options_identifier_postimage(source_root: Path) -> None:
     print("Verified LiteRT CPU options identifier postimage", flush=True)
 
 
+def verify_stage_spatial_tensors_postimages(source_root: Path) -> None:
+    """Fails unless Bazel used the audited LiteRT WebGPU and Vulkan sources."""
+    repository = (source_root / "bazel-out").resolve().parents[2] / "external" / "litert"
+    for name, (_, postimage) in STAGE_SPATIAL_TENSORS_SOURCES.items():
+        source = repository / name
+        if not source.is_file() or source_sha256(source.read_bytes()) != postimage:
+            raise RuntimeError(f"LiteRT spatial tensor staging postimage mismatch for {name}; requalify")
+    print("Verified LiteRT spatial tensor staging postimages", flush=True)
+
+
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
     ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
     return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
@@ -356,6 +372,9 @@ def download_upstream(
         patch_cpu_options_identifier=require_cpu_options_identifier_patch_decision(
             compatibility_tag
         ),
+        patch_stage_spatial_tensors=require_stage_spatial_tensors_patch_decision(
+            compatibility_tag
+        ),
     )
     return source_root
 
@@ -385,6 +404,7 @@ def patch_upstream_workspace(
     patch_gpu_environment_teardown: bool = False,
     patch_xnnpack_pf32_sme2: bool = False,
     patch_cpu_options_identifier: bool = False,
+    patch_stage_spatial_tensors: bool = False,
 ) -> None:
     workspace = source_root / "WORKSPACE"
     text = workspace.read_text(encoding="utf-8")
@@ -410,6 +430,9 @@ def patch_upstream_workspace(
         litert_patches.append("litert_gpu_environment_destroy_callback.patch")
     if patch_cpu_options_identifier:
         litert_patches.append("litert_cpu_options_identifier.patch")
+    if patch_stage_spatial_tensors:
+        verify_stage_spatial_tensors_litert_pin(text)
+        litert_patches.append(Path(STAGE_SPATIAL_TENSORS_PATCH_PATH).name)
     litert_archive = 'http_archive(\n    name = "litert",\n'
     litert_archive_with_patch = (
         litert_archive
@@ -524,6 +547,7 @@ def build_runtime(
     jobs: str | None,
     upstream_ref: str | None = None,
 ) -> Path:
+    patch_stage_spatial_tensors = require_stage_spatial_tensors_patch_decision(upstream_tag)
     patch_asr_untimed_overlap(source_root, upstream_tag)
     patch_asr_litertlm_container(source_root, upstream_tag)
     patch_stream_finish_reason(source_root, upstream_tag)
@@ -608,6 +632,8 @@ def build_runtime(
         verify_xnnpack_postimages(source_root, upstream_tag)
     if patch_cpu_options_identifier:
         verify_cpu_options_identifier_postimage(source_root)
+    if patch_stage_spatial_tensors:
+        verify_stage_spatial_tensors_postimages(source_root)
 
     if "output" in target:
         output = source_root / target["output"]

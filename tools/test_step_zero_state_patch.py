@@ -13,7 +13,9 @@ class StepZeroStatePatchTest(unittest.TestCase):
         self.assertEqual(carry.manifest("v0.19.0"), [])
         with self.assertRaisesRegex(RuntimeError, "no explicit decision"):
             carry.manifest("v0.19.2")
-        self.assertEqual(source_patch_manifest("v0.19.1")[-1], {
+        records = [record for record in source_patch_manifest("v0.19.1")
+                   if record["id"] == "step-zero-state"]
+        self.assertEqual(records, [{
             "id": "step-zero-state",
             "path": carry.PATCH_PATH,
             "sha256": hashlib.sha256(carry.PATCH.read_bytes()).hexdigest(),
@@ -21,7 +23,7 @@ class StepZeroStatePatchTest(unittest.TestCase):
             "preimageSha256Lf": carry.PREIMAGE,
             "postimageSha256Lf": "b2c73fbcb400654072bf926dbaa3b81e252acf750f8fc1a60dd0b51df84d890d",
             "scope": "source-built runtimes only; excludes official upstream prebuilts",
-        })
+        }])
         headers = [line for line in carry.PATCH.read_text().splitlines()
                    if line.startswith(("--- ", "+++ "))]
         self.assertEqual(headers, [f"--- a/{carry.SOURCE}", f"+++ b/{carry.SOURCE}"])
