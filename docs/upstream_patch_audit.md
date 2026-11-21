@@ -205,6 +205,11 @@ arm64 container on M4 Max):
 | 4 | 11.5 | 25.5 | 25.8 |
 | 8 | 11.5 | 28.7 | 28.3 |
 
+Before invoking Bazel, the build checks the audited LiteRT revision, archive
+digest and archive declaration for the CPU options rollback. It also checks the
+version-specific XNNPACK archive declaration for both SME2 patches. These checks
+apply to downloaded and prepared source trees.
+
 Retire the patch when a tagged upstream release ships Linux and Windows
 prebuilt runtimes built from its pinned LiteRT.
 

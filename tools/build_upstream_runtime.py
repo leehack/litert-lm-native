@@ -15,12 +15,15 @@ from android_protobuf_policy import validate_android_protobuf_isolation
 from android_gpu_safety_patch import apply as apply_android_gpu_safety
 from asr_litertlm_container_patch import SOURCES as CONTAINER_PATCH_SOURCES, require_container_patch_decision
 from asr_overlap_patch import AUDITED_OVERLAP_TAGS, V019_OVERLAP_TAGS, merger_source, overlap_identity, source_sha256, require_asr_patch_decision
+from bazel_repository_provenance import release_workspace_rc, verify_resolved_archives
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
 from gpu_environment_teardown import find_ndk_llvm_objdump, validate_library
 from huggingface_token_bytes_patch import apply as patch_huggingface_token_bytes
 from litert_cpu_options_identifier_patch import (
+    LITERT_ARCHIVE_SHA256 as CPU_OPTIONS_LITERT_ARCHIVE_SHA256,
+    LITERT_REF as CPU_OPTIONS_LITERT_REF,
     SOURCES as CPU_OPTIONS_IDENTIFIER_SOURCES,
     require_cpu_options_identifier_patch_decision,
     verify_dynamic_runtime,
@@ -36,6 +39,13 @@ from litert_lm_symbols import (
     required_bridge_symbols,
     required_c_api_symbols,
     uses_stream_chunk_api,
+)
+from litert_stage_spatial_tensors_patch import (
+    LITERT_ARCHIVE_SHA256 as STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256,
+    LITERT_REF as STAGE_SPATIAL_TENSORS_LITERT_REF,
+    PATCH_PATH as STAGE_SPATIAL_TENSORS_PATCH_PATH,
+    SOURCES as STAGE_SPATIAL_TENSORS_SOURCES,
+    require_stage_spatial_tensors_patch_decision,
 )
 from macos_runtime_identity import normalize_macos_runtime_identity
 from macos_runtime_policy import UNSUPPORTED_MACOS_ARCH_REASON
@@ -62,9 +72,12 @@ from workspace_build_patch import (
     require_workspace_build_patch_decision,
 )
 from xnnpack_pf32_sme2_patch import (
+    archive_sha256_for as xnnpack_archive_sha256,
+    commit_for as xnnpack_commit,
     declare_patched_xnnpack,
     require_xnnpack_pf32_patch_decision,
     sources_for as xnnpack_pf32_sources,
+    verify_patched_xnnpack_archive,
 )
 from xnnpack_pqs8_qc4w_sme2_patch import sources_for as xnnpack_qc4w_sources
 from upstream_archive import github_source_archive_url
@@ -309,6 +322,16 @@ def verify_cpu_options_identifier_postimage(source_root: Path) -> None:
     print("Verified LiteRT CPU options identifier postimage", flush=True)
 
 
+def verify_stage_spatial_tensors_postimages(source_root: Path) -> None:
+    """Fails unless Bazel used the audited LiteRT WebGPU and Vulkan sources."""
+    repository = (source_root / "bazel-out").resolve().parents[2] / "external" / "litert"
+    for name, (_, postimage) in STAGE_SPATIAL_TENSORS_SOURCES.items():
+        source = repository / name
+        if not source.is_file() or source_sha256(source.read_bytes()) != postimage:
+            raise RuntimeError(f"LiteRT spatial tensor staging postimage mismatch for {name}; requalify")
+    print("Verified LiteRT spatial tensor staging postimages", flush=True)
+
+
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
     ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
     return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
@@ -318,9 +341,16 @@ def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> Non
     printable = " ".join(command)
     print(f"+ {printable}", flush=True)
     if os.name == "nt":
-        subprocess.run(printable, cwd=cwd, env=env, check=True, shell=True)
+        subprocess.run(subprocess.list2cmdline(command), cwd=cwd, env=env, check=True, shell=True)
     else:
         subprocess.run(command, cwd=cwd, env=env, check=True)
+
+
+def reject_ambiguous_workspace(source_root: Path) -> None:
+    # Bazel prefers WORKSPACE.bazel, while the owner patches and verifies WORKSPACE.
+    if (os.path.lexists(source_root / "WORKSPACE")
+            and os.path.lexists(source_root / "WORKSPACE.bazel")):
+        raise RuntimeError("Ambiguous Bazel workspace with both WORKSPACE and WORKSPACE.bazel")
 
 
 def download_upstream(
@@ -341,6 +371,7 @@ def download_upstream(
     if len(candidates) != 1:
         raise RuntimeError(f"Expected one extracted source directory, got {candidates}")
     source_root = candidates[0]
+    reject_ambiguous_workspace(source_root)
     patch_workspace_build(source_root, compatibility_tag)
     patch_upstream_workspace(
         source_root,
@@ -354,6 +385,9 @@ def download_upstream(
         ),
         patch_xnnpack_pf32_sme2=require_xnnpack_pf32_patch_decision(compatibility_tag),
         patch_cpu_options_identifier=require_cpu_options_identifier_patch_decision(
+            compatibility_tag
+        ),
+        patch_stage_spatial_tensors=require_stage_spatial_tensors_patch_decision(
             compatibility_tag
         ),
     )
@@ -377,6 +411,53 @@ def needs_gpu_environment_teardown_patch(
     return matches[-1] in LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING
 
 
+def verify_litert_archive_pin(workspace: str, ref: str, sha256: str, carry: str) -> None:
+    archive = list(re.finditer(
+        r'^http_archive\(\n    name = "litert",\n(.*?)^\)$',
+        workspace, re.MULTILINE | re.DOTALL,
+    ))
+    if len(archive) != 1:
+        raise RuntimeError(f"Expected one LiteRT archive in WORKSPACE for {carry}; requalify")
+    for name, expected in (("LITERT_REF", ref), ("LITERT_SHA256", sha256)):
+        assignments = list(re.finditer(rf'^{name}[ \t]*=[ \t]*(.*)$', workspace, re.MULTILINE))
+        if (len(assignments) != 1 or assignments[0].group(1) != f'"{expected}"'
+                or assignments[0].start() >= archive[0].start()):
+            raise RuntimeError(f"Unexpected {name} for {carry}; requalify")
+
+    # Bazel checks the downloaded bytes against this digest before applying patches.
+    attributes = {
+        "sha256": "LITERT_SHA256,",
+        "strip_prefix": '"LiteRT-" + LITERT_REF,',
+        "url": '"https://github.com/google-ai-edge/LiteRT/archive/" + LITERT_REF + ".tar.gz",',
+    }
+    for name, expected in attributes.items():
+        values = re.findall(rf'^    {name}[ \t]*=[ \t]*(.*)$', archive[0].group(1), re.MULTILINE)
+        if values != [expected]:
+            raise RuntimeError(f"Unexpected LiteRT archive {name} for {carry}; requalify")
+
+
+def verify_carried_dependency_pins(
+    source_root: Path, compatibility_tag: str, *,
+    spatial_staging: bool, cpu_options: bool, xnnpack: bool,
+) -> None:
+    reject_ambiguous_workspace(source_root)
+    if not (spatial_staging or cpu_options or xnnpack):
+        return
+    workspace = (source_root / "WORKSPACE").read_text(encoding="utf-8")
+    if spatial_staging:
+        verify_litert_archive_pin(
+            workspace, STAGE_SPATIAL_TENSORS_LITERT_REF,
+            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256, "LiteRT spatial tensor staging",
+        )
+    if cpu_options:
+        verify_litert_archive_pin(
+            workspace, CPU_OPTIONS_LITERT_REF, CPU_OPTIONS_LITERT_ARCHIVE_SHA256,
+            "LiteRT CPU options identifier rollback",
+        )
+    if xnnpack:
+        verify_patched_xnnpack_archive(workspace, compatibility_tag)
+
+
 def patch_upstream_workspace(
     source_root: Path,
     *,
@@ -385,6 +466,7 @@ def patch_upstream_workspace(
     patch_gpu_environment_teardown: bool = False,
     patch_xnnpack_pf32_sme2: bool = False,
     patch_cpu_options_identifier: bool = False,
+    patch_stage_spatial_tensors: bool = False,
 ) -> None:
     workspace = source_root / "WORKSPACE"
     text = workspace.read_text(encoding="utf-8")
@@ -410,6 +492,12 @@ def patch_upstream_workspace(
         litert_patches.append("litert_gpu_environment_destroy_callback.patch")
     if patch_cpu_options_identifier:
         litert_patches.append("litert_cpu_options_identifier.patch")
+    if patch_stage_spatial_tensors:
+        verify_litert_archive_pin(
+            text, STAGE_SPATIAL_TENSORS_LITERT_REF,
+            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256, "LiteRT spatial tensor staging",
+        )
+        litert_patches.append(Path(STAGE_SPATIAL_TENSORS_PATCH_PATH).name)
     litert_archive = 'http_archive(\n    name = "litert",\n'
     litert_archive_with_patch = (
         litert_archive
@@ -516,6 +604,19 @@ def prepare_bridge_package(source_root: Path) -> list[str]:
     return []
 
 
+def fetch_audited_archives(
+    startup: list[str], source_root: Path, bridge_options: list[str],
+    resolved: Path, pins: dict[str, tuple[str, str]],
+) -> None:
+    # A targeted sync emits the resolved rule even with a warm repository cache.
+    run([
+        *startup, "sync", "--noenable_bzlmod", *bridge_options,
+        *(f"--only={name}" for name in pins),
+        f"--experimental_repository_resolved_file={bazel_path(resolved)}",
+    ], source_root)
+    verify_resolved_archives(resolved, pins)
+
+
 def build_runtime(
     source_root: Path,
     platform: str,
@@ -524,6 +625,13 @@ def build_runtime(
     jobs: str | None,
     upstream_ref: str | None = None,
 ) -> Path:
+    patch_stage_spatial_tensors = require_stage_spatial_tensors_patch_decision(upstream_tag)
+    patch_cpu_options_identifier = require_cpu_options_identifier_patch_decision(upstream_tag)
+    patch_xnnpack = require_xnnpack_pf32_patch_decision(upstream_tag)
+    verify_carried_dependency_pins(
+        source_root, upstream_tag, spatial_staging=patch_stage_spatial_tensors,
+        cpu_options=patch_cpu_options_identifier, xnnpack=patch_xnnpack,
+    )
     patch_asr_untimed_overlap(source_root, upstream_tag)
     patch_asr_litertlm_container(source_root, upstream_tag)
     patch_stream_finish_reason(source_root, upstream_tag)
@@ -549,7 +657,6 @@ def build_runtime(
                 f"{platform}/{arch}",
                 flush=True,
             )
-    patch_cpu_options_identifier = require_cpu_options_identifier_patch_decision(upstream_tag)
     if patch_cpu_options_identifier:
         verify_dynamic_runtime(source_root / "prebuilt", platform, arch)
     target = RUNTIME_TARGETS[(platform, arch)]
@@ -558,16 +665,16 @@ def build_runtime(
         for config in target.get("bazel_configs", [target.get("bazel_config")])
         if config
     ]
-    command = bazel_command()
+    startup = [*bazel_command(), "--nohome_rc", "--nosystem_rc"]
     output_user_root = os.environ.get("BAZEL_OUTPUT_USER_ROOT")
     if output_user_root:
         if not os.path.isabs(output_user_root):
             output_user_root = bazel_path(REPO_ROOT / output_user_root)
         elif os.name == "nt":
             output_user_root = Path(output_user_root).resolve().as_posix()
-        command.append(f"--output_user_root={output_user_root}")
+        startup.append(f"--output_user_root={output_user_root}")
     bridge_options = prepare_bridge_package(source_root)
-    command += [
+    command = [
         "build",
         *bridge_options,
         *configs,
@@ -603,11 +710,36 @@ def build_runtime(
         command.append("--ios_minimum_os=13.0")
     if jobs:
         command.append(f"--jobs={jobs}")
-    run(command, source_root)
-    if require_xnnpack_pf32_patch_decision(upstream_tag):
+    pins = {}
+    if patch_stage_spatial_tensors:
+        pins["litert"] = (
+            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256,
+            f"LiteRT-{STAGE_SPATIAL_TENSORS_LITERT_REF}",
+        )
+    if patch_cpu_options_identifier:
+        pins["litert"] = (CPU_OPTIONS_LITERT_ARCHIVE_SHA256, f"LiteRT-{CPU_OPTIONS_LITERT_REF}")
+    if patch_xnnpack:
+        pins["XNNPACK"] = (xnnpack_archive_sha256(upstream_tag), f"XNNPACK-{xnnpack_commit(upstream_tag)}")
+
+    if pins:
+        workspace_rc = source_root / ".bazelrc"
+        rc_text = workspace_rc.read_text(encoding="utf-8") if workspace_rc.is_file() else ""
+        with tempfile.TemporaryDirectory(prefix="litert-bazel-") as temp:
+            config = Path(temp) / "release.bazelrc"
+            config.write_text(release_workspace_rc(rc_text), encoding="utf-8")
+            startup.extend(("--noworkspace_rc", f"--bazelrc={bazel_path(config)}"))
+            # Keep both commands in the WORKSPACE mode used by the pin verifier.
+            command.append("--noenable_bzlmod")
+            fetch_audited_archives(startup, source_root, bridge_options, Path(temp) / "resolved.bzl", pins)
+            run([*startup, *command], source_root)
+    else:
+        run([*startup, *command], source_root)
+    if patch_xnnpack:
         verify_xnnpack_postimages(source_root, upstream_tag)
     if patch_cpu_options_identifier:
         verify_cpu_options_identifier_postimage(source_root)
+    if patch_stage_spatial_tensors:
+        verify_stage_spatial_tensors_postimages(source_root)
 
     if "output" in target:
         output = source_root / target["output"]

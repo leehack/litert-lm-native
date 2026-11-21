@@ -160,7 +160,8 @@ class StreamProxyCallbackAbiTest(unittest.TestCase):
                         "patch_asr_untimed_overlap", "patch_asr_litertlm_container",
                         "patch_stream_finish_reason", "patch_huggingface_token_bytes",
                         "apply_android_gpu_safety", "patch_upstream_ios_sampler_path",
-                        "verify_upstream_fst_gate",
+                        "verify_upstream_fst_gate", "verify_carried_dependency_pins",
+                        "fetch_audited_archives",
                     ):
                         mocks.enter_context(patch.object(build_upstream_runtime, name))
                     mocks.enter_context(patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0))

@@ -7,6 +7,7 @@ from android_gpu_safety_patch import manifest as android_gpu_safety_manifest
 from asr_litertlm_container_patch import container_patch_manifest
 from huggingface_token_bytes_patch import token_bytes_patch_manifest
 from litert_cpu_options_identifier_patch import cpu_options_identifier_patch_manifest
+from litert_stage_spatial_tensors_patch import stage_spatial_tensors_patch_manifest
 from step_zero_state_patch import manifest as step_zero_state_manifest
 from stream_finish_reason_patch import finish_reason_patch_manifest
 from workspace_build_patch import workspace_build_patch_manifest
@@ -84,4 +85,5 @@ def source_patch_manifest(compatibility_tag: str) -> list[dict]:
         *xnnpack_qc4w_patch_manifest(compatibility_tag),
         *cpu_options_identifier_patch_manifest(compatibility_tag),
         *token_bytes_patch_manifest(compatibility_tag),
-        *step_zero_state_manifest(compatibility_tag)]
+        *step_zero_state_manifest(compatibility_tag),
+        *stage_spatial_tensors_patch_manifest(compatibility_tag)]
