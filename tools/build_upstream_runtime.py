@@ -47,6 +47,7 @@ from runtime_dependency_utils import (
     is_elf,
     is_system_needed,
 )
+from step_zero_state_patch import apply as patch_step_zero_state
 from stream_finish_reason_patch import (
     BAZEL_DEFINE as FINISH_REASON_DEFINE,
     patch_path_for as finish_reason_patch_path,
@@ -527,6 +528,7 @@ def build_runtime(
     patch_asr_litertlm_container(source_root, upstream_tag)
     patch_stream_finish_reason(source_root, upstream_tag)
     patch_huggingface_token_bytes(source_root, upstream_tag)
+    patch_step_zero_state(source_root, upstream_tag)
     apply_android_gpu_safety(source_root, upstream_tag)
     # v0.19.0 removed the prebuilt TopK sampler this path points at.
     if (platform == "ios" and has_asr_bridge(upstream_tag)

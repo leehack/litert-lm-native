@@ -149,12 +149,14 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                          patch.object(build_upstream_runtime, "patch_asr_litertlm_container"), \
                          patch.object(build_upstream_runtime, "patch_stream_finish_reason"), \
                          patch.object(build_upstream_runtime, "patch_huggingface_token_bytes"), \
+                         patch.object(build_upstream_runtime, "patch_step_zero_state") as apply_state, \
                          patch.object(build_upstream_runtime, "apply_android_gpu_safety"), \
                          patch.object(build_upstream_runtime, "verify_dynamic_runtime"), \
                          patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]), \
                          patch.object(build_upstream_runtime, "run", side_effect=RuntimeError("captured build")) as run:
                         with self.assertRaisesRegex(RuntimeError, "captured build"):
                             build_upstream_runtime.build_runtime(root, platform, arch, tag, "3")
+                    apply_state.assert_called_once_with(root, tag)
                     command = run.call_args.args[0]
                     self.assertEqual("--define=LITERT_LM_FST_CONSTRAINTS_DISABLED=1" in command, platform == "ios" and tag not in {"v0.15.0", "v0.16.0"})
                     dynamic = platform in {"linux", "windows"} and tag not in {"v0.15.0", "v0.19.0", "v0.19.1"}
