@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import tempfile
@@ -11,6 +12,7 @@ from unittest.mock import DEFAULT, patch
 
 import build_upstream_runtime
 import package_upstream_prebuilts
+from bazel_repository_provenance import HTTP_ARCHIVE, UPSTREAM_REGISTRY
 from litert_cpu_options_identifier_patch import (
     LITERT_ARCHIVE_SHA256 as CPU_OPTIONS_SHA256,
     LITERT_REF as CPU_OPTIONS_REF,
@@ -25,6 +27,7 @@ from test_runtime_dependency_utils import write_elf_with_exports
 from xnnpack_pf32_sme2_patch import (
     TENSORFLOW_ARCHIVE,
     V019_TENSORFLOW_REF,
+    V019_XNNPACK_COMMIT,
     V019_XNNPACK_SHA256,
     declare_patched_xnnpack,
 )
@@ -179,6 +182,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                          patch.object(build_upstream_runtime, "patch_huggingface_token_bytes"), \
                          patch.object(build_upstream_runtime, "patch_step_zero_state") as apply_state, \
                          patch.object(build_upstream_runtime, "verify_carried_dependency_pins"), \
+                         patch.object(build_upstream_runtime, "fetch_audited_archives"), \
                          patch.object(build_upstream_runtime, "apply_android_gpu_safety"), \
                          patch.object(build_upstream_runtime, "verify_dynamic_runtime"), \
                          patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]), \
@@ -194,6 +198,8 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     self.assertEqual("--define=litert_lm_in_process_litert=true" in command,
                                      tag in {"v0.19.0", "v0.19.1"})
                     self.assertIn("--define=resolve_symbols_in_exec=false", command)
+                    self.assertIn("--nohome_rc", command)
+                    self.assertIn("--nosystem_rc", command)
                     self.assertEqual("--noenable_bzlmod" in command,
                                      tag in {"v0.18.1", "v0.19.0", "v0.19.1"})
                     self.assertEqual("--define=litert_lm_android_webgpu_sampler=true" in command,
@@ -363,6 +369,122 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                             root, patch_stage_spatial_tensors=True,
                         )
                     self.assertEqual(workspace.read_text(encoding="utf-8"), drift)
+
+    def test_source_root_verifies_resolved_archives_before_compilation(self) -> None:
+        workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(
+            f'TENSORFLOW_REF = "{V019_TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
+        )
+
+        def resolved_archive(name: str, digest: str, prefix: str) -> dict:
+            return {
+                "original_rule_class": HTTP_ARCHIVE,
+                "original_attributes": {"name": name},
+                "repositories": [{
+                    "rule_class": HTTP_ARCHIVE,
+                    "output_tree_hash": "f" * 64,
+                    "attributes": {"name": name, "sha256": digest, "strip_prefix": prefix},
+                }],
+            }
+
+        litert = resolved_archive("litert", LITERT_ARCHIVE_SHA256, f"LiteRT-{LITERT_REF}")
+        xnnpack = resolved_archive("XNNPACK", V019_XNNPACK_SHA256, f"XNNPACK-{V019_XNNPACK_COMMIT}")
+        wrong = resolved_archive("litert", "0" * 64, f"LiteRT-{LITERT_REF}")
+        local = {**litert, "original_rule_class": "local_repository"}
+        for label, records, message in (
+            ("pinned", [litert, xnnpack], "compilation reached"),
+            ("override", [xnnpack], "Bazel did not resolve @litert from its pinned archive"),
+            ("digest mismatch", [wrong, xnnpack], "Bazel resolved @litert from an unexpected archive"),
+            ("wrong rule", [local, xnnpack], "Bazel resolved @litert from an unexpected archive"),
+            ("missing XNNPACK", [litert], "Bazel did not resolve @XNNPACK from its pinned archive"),
+        ):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp, patch.multiple(
+                build_upstream_runtime,
+                patch_asr_untimed_overlap=DEFAULT,
+                patch_stream_finish_reason=DEFAULT,
+                patch_huggingface_token_bytes=DEFAULT,
+                patch_step_zero_state=DEFAULT,
+                apply_android_gpu_safety=DEFAULT,
+                materialize_git_lfs_libraries=DEFAULT,
+                run=DEFAULT,
+            ) as calls:
+                root = Path(temp)
+                (root / "WORKSPACE").write_text(workspace, encoding="utf-8")
+                (root / ".bazelrc").write_text(
+                    f"common {UPSTREAM_REGISTRY}\n"
+                    "try-import %workspace%/.bazelrc.user\n"
+                    "build:macos --cxxopt=-std=c++20\n"
+                    "build --repo_env=HERMETIC_PYTHON_VERSION=3.13\n",
+                    encoding="utf-8",
+                )
+                (root / ".bazelrc.user").write_text(
+                    "common --override_repository=litert=alternate_repo\n", encoding="utf-8",
+                )
+                calls["materialize_git_lfs_libraries"].return_value = 0
+
+                def run(command, cwd):
+                    self.assertEqual(cwd, root.resolve())
+                    self.assertIn("--nohome_rc", command)
+                    self.assertIn("--nosystem_rc", command)
+                    self.assertIn("--noworkspace_rc", command)
+                    self.assertIn("--noenable_bzlmod", command)
+                    cfg = next(arg.split("=", 1)[1] for arg in command if arg.startswith("--bazelrc="))
+                    rc = Path(cfg).read_text(encoding="utf-8")
+                    self.assertIn("build:macos --cxxopt=-std=c++20", rc)
+                    self.assertIn("sync --repo_env=HERMETIC_PYTHON_VERSION=3.13", rc)
+                    self.assertNotIn("--registry", rc)
+                    self.assertNotIn(".bazelrc.user", rc)
+                    if "build" in command:
+                        raise RuntimeError("compilation reached")
+                    self.assertIn("sync", command)
+                    self.assertIn("--only=litert", command)
+                    self.assertIn("--only=XNNPACK", command)
+                    resolved = next(
+                        arg.split("=", 1)[1] for arg in command
+                        if arg.startswith("--experimental_repository_resolved_file=")
+                    )
+                    report = json.dumps(records, indent=5)
+                    # Bazel emits internal Starlark objects for unrelated rules.
+                    report = report[:-2] + ',\n     {"unrelated": <unknown object>}\n]'
+                    Path(resolved).write_text("resolved = " + report + "\n", encoding="utf-8")
+
+                calls["run"].side_effect = run
+                args = ["build_upstream_runtime.py", "--source-root", str(root),
+                        "--upstream-tag", "v0.19.1", "--platform", "macos", "--arch", "arm64"]
+                with patch("sys.argv", args), self.assertRaisesRegex(RuntimeError, message):
+                    build_upstream_runtime.main()
+                self.assertEqual(calls["run"].call_count, 2 if label == "pinned" else 1)
+
+    def test_source_root_rejects_workspace_rc_repository_overrides_before_bazel(self) -> None:
+        workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(
+            f'TENSORFLOW_REF = "{V019_TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
+        )
+        fixtures = (
+            ("build --override_repository=litert=alternate_repo", "override_repository"),
+            ("build:macos --override_repository XNNPACK=alternate_repo", "override_repository"),
+            ("common --registry=https://example.invalid/registry", "registry"),
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "WORKSPACE").write_text(workspace, encoding="utf-8")
+            args = ["build_upstream_runtime.py", "--source-root", str(root),
+                    "--upstream-tag", "v0.19.1", "--platform", "macos", "--arch", "arm64"]
+            for fixture, option in fixtures:
+                with self.subTest(fixture=fixture), patch("sys.argv", args), patch.multiple(
+                    build_upstream_runtime,
+                    patch_asr_untimed_overlap=DEFAULT,
+                    patch_stream_finish_reason=DEFAULT,
+                    patch_huggingface_token_bytes=DEFAULT,
+                    patch_step_zero_state=DEFAULT,
+                    apply_android_gpu_safety=DEFAULT,
+                    materialize_git_lfs_libraries=DEFAULT,
+                    run=DEFAULT,
+                ) as calls:
+                    calls["materialize_git_lfs_libraries"].return_value = 0
+                    calls["run"].side_effect = RuntimeError("Bazel reached")
+                    (root / ".bazelrc").write_text(fixture + "\n", encoding="utf-8")
+                    with self.assertRaisesRegex(RuntimeError, rf"Unexpected Bazel rc option --{option}"):
+                        build_upstream_runtime.main()
+                    calls["run"].assert_not_called()
 
     def test_build_routes_reject_identical_workspace_files_before_patching(self) -> None:
         workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(

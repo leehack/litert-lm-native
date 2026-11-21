@@ -15,6 +15,7 @@ from android_protobuf_policy import validate_android_protobuf_isolation
 from android_gpu_safety_patch import apply as apply_android_gpu_safety
 from asr_litertlm_container_patch import SOURCES as CONTAINER_PATCH_SOURCES, require_container_patch_decision
 from asr_overlap_patch import AUDITED_OVERLAP_TAGS, V019_OVERLAP_TAGS, merger_source, overlap_identity, source_sha256, require_asr_patch_decision
+from bazel_repository_provenance import release_workspace_rc, verify_resolved_archives
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
@@ -71,6 +72,8 @@ from workspace_build_patch import (
     require_workspace_build_patch_decision,
 )
 from xnnpack_pf32_sme2_patch import (
+    archive_sha256_for as xnnpack_archive_sha256,
+    commit_for as xnnpack_commit,
     declare_patched_xnnpack,
     require_xnnpack_pf32_patch_decision,
     sources_for as xnnpack_pf32_sources,
@@ -338,7 +341,7 @@ def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> Non
     printable = " ".join(command)
     print(f"+ {printable}", flush=True)
     if os.name == "nt":
-        subprocess.run(printable, cwd=cwd, env=env, check=True, shell=True)
+        subprocess.run(subprocess.list2cmdline(command), cwd=cwd, env=env, check=True, shell=True)
     else:
         subprocess.run(command, cwd=cwd, env=env, check=True)
 
@@ -601,6 +604,19 @@ def prepare_bridge_package(source_root: Path) -> list[str]:
     return []
 
 
+def fetch_audited_archives(
+    startup: list[str], source_root: Path, bridge_options: list[str],
+    resolved: Path, pins: dict[str, tuple[str, str]],
+) -> None:
+    # A targeted sync emits the resolved rule even with a warm repository cache.
+    run([
+        *startup, "sync", "--noenable_bzlmod", *bridge_options,
+        *(f"--only={name}" for name in pins),
+        f"--experimental_repository_resolved_file={bazel_path(resolved)}",
+    ], source_root)
+    verify_resolved_archives(resolved, pins)
+
+
 def build_runtime(
     source_root: Path,
     platform: str,
@@ -649,16 +665,16 @@ def build_runtime(
         for config in target.get("bazel_configs", [target.get("bazel_config")])
         if config
     ]
-    command = bazel_command()
+    startup = [*bazel_command(), "--nohome_rc", "--nosystem_rc"]
     output_user_root = os.environ.get("BAZEL_OUTPUT_USER_ROOT")
     if output_user_root:
         if not os.path.isabs(output_user_root):
             output_user_root = bazel_path(REPO_ROOT / output_user_root)
         elif os.name == "nt":
             output_user_root = Path(output_user_root).resolve().as_posix()
-        command.append(f"--output_user_root={output_user_root}")
+        startup.append(f"--output_user_root={output_user_root}")
     bridge_options = prepare_bridge_package(source_root)
-    command += [
+    command = [
         "build",
         *bridge_options,
         *configs,
@@ -694,10 +710,30 @@ def build_runtime(
         command.append("--ios_minimum_os=13.0")
     if jobs:
         command.append(f"--jobs={jobs}")
-    if patch_stage_spatial_tensors or patch_cpu_options_identifier or patch_xnnpack:
-        # An rc option in a prepared source tree must not activate MODULE.bazel.
-        command.append("--noenable_bzlmod")
-    run(command, source_root)
+    pins = {}
+    if patch_stage_spatial_tensors:
+        pins["litert"] = (
+            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256,
+            f"LiteRT-{STAGE_SPATIAL_TENSORS_LITERT_REF}",
+        )
+    if patch_cpu_options_identifier:
+        pins["litert"] = (CPU_OPTIONS_LITERT_ARCHIVE_SHA256, f"LiteRT-{CPU_OPTIONS_LITERT_REF}")
+    if patch_xnnpack:
+        pins["XNNPACK"] = (xnnpack_archive_sha256(upstream_tag), f"XNNPACK-{xnnpack_commit(upstream_tag)}")
+
+    if pins:
+        workspace_rc = source_root / ".bazelrc"
+        rc_text = workspace_rc.read_text(encoding="utf-8") if workspace_rc.is_file() else ""
+        with tempfile.TemporaryDirectory(prefix="litert-bazel-") as temp:
+            config = Path(temp) / "release.bazelrc"
+            config.write_text(release_workspace_rc(rc_text), encoding="utf-8")
+            startup.extend(("--noworkspace_rc", f"--bazelrc={bazel_path(config)}"))
+            # Keep both commands in the WORKSPACE mode used by the pin verifier.
+            command.append("--noenable_bzlmod")
+            fetch_audited_archives(startup, source_root, bridge_options, Path(temp) / "resolved.bzl", pins)
+            run([*startup, *command], source_root)
+    else:
+        run([*startup, *command], source_root)
     if patch_xnnpack:
         verify_xnnpack_postimages(source_root, upstream_tag)
     if patch_cpu_options_identifier:

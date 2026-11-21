@@ -76,6 +76,7 @@ class StreamFinishReasonPatchTest(unittest.TestCase):
                 root = Path(temp)
                 with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
                      patch.object(build_upstream_runtime, "verify_carried_dependency_pins"), \
+                     patch.object(build_upstream_runtime, "fetch_audited_archives"), \
                      patch.object(build_upstream_runtime, "patch_asr_untimed_overlap"), \
                      patch.object(build_upstream_runtime, "patch_asr_litertlm_container"), \
                      patch.object(build_upstream_runtime, "patch_upstream_ios_sampler_path"), \

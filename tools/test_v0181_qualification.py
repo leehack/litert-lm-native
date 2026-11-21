@@ -42,6 +42,7 @@ class V0181QualificationTest(unittest.TestCase):
             with (patch.object(build, "materialize_git_lfs_libraries", return_value=0),
                   patch.object(build, "patch_stream_finish_reason") as finish_reason,
                   patch.object(build, "bazel_command", return_value=["bazel"]),
+                  patch.object(build, "fetch_audited_archives"),
                   patch.object(build, "run", side_effect=RuntimeError("reached Bazel")) as run):
                 with self.assertRaisesRegex(RuntimeError, "reached Bazel"):
                     build.build_runtime(root, "macos", "arm64", "v0.18.1", "2")

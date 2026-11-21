@@ -94,6 +94,10 @@ def commit_for(compatibility_tag: str) -> str:
     return V019_XNNPACK_COMMIT if compatibility_tag in V019_TAGS else XNNPACK_COMMIT
 
 
+def archive_sha256_for(compatibility_tag: str) -> str:
+    return V019_XNNPACK_SHA256 if compatibility_tag in V019_TAGS else XNNPACK_SHA256
+
+
 def require_xnnpack_pf32_patch_decision(compatibility_tag: str) -> bool:
     """Returns whether the rollback applies; newer sources need a decision."""
     if compatibility_tag in AUDITED_TAGS:
