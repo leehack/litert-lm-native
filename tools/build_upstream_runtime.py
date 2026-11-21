@@ -21,6 +21,8 @@ from git_lfs_utils import materialize_git_lfs_libraries
 from gpu_environment_teardown import find_ndk_llvm_objdump, validate_library
 from huggingface_token_bytes_patch import apply as patch_huggingface_token_bytes
 from litert_cpu_options_identifier_patch import (
+    LITERT_ARCHIVE_SHA256 as CPU_OPTIONS_LITERT_ARCHIVE_SHA256,
+    LITERT_REF as CPU_OPTIONS_LITERT_REF,
     SOURCES as CPU_OPTIONS_IDENTIFIER_SOURCES,
     require_cpu_options_identifier_patch_decision,
     verify_dynamic_runtime,
@@ -36,6 +38,13 @@ from litert_lm_symbols import (
     required_bridge_symbols,
     required_c_api_symbols,
     uses_stream_chunk_api,
+)
+from litert_stage_spatial_tensors_patch import (
+    LITERT_ARCHIVE_SHA256 as STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256,
+    LITERT_REF as STAGE_SPATIAL_TENSORS_LITERT_REF,
+    PATCH_PATH as STAGE_SPATIAL_TENSORS_PATCH_PATH,
+    SOURCES as STAGE_SPATIAL_TENSORS_SOURCES,
+    require_stage_spatial_tensors_patch_decision,
 )
 from macos_runtime_identity import normalize_macos_runtime_identity
 from macos_runtime_policy import UNSUPPORTED_MACOS_ARCH_REASON
@@ -65,6 +74,7 @@ from xnnpack_pf32_sme2_patch import (
     declare_patched_xnnpack,
     require_xnnpack_pf32_patch_decision,
     sources_for as xnnpack_pf32_sources,
+    verify_patched_xnnpack_archive,
 )
 from xnnpack_pqs8_qc4w_sme2_patch import sources_for as xnnpack_qc4w_sources
 from upstream_archive import github_source_archive_url
@@ -309,6 +319,16 @@ def verify_cpu_options_identifier_postimage(source_root: Path) -> None:
     print("Verified LiteRT CPU options identifier postimage", flush=True)
 
 
+def verify_stage_spatial_tensors_postimages(source_root: Path) -> None:
+    """Fails unless Bazel used the audited LiteRT WebGPU and Vulkan sources."""
+    repository = (source_root / "bazel-out").resolve().parents[2] / "external" / "litert"
+    for name, (_, postimage) in STAGE_SPATIAL_TENSORS_SOURCES.items():
+        source = repository / name
+        if not source.is_file() or source_sha256(source.read_bytes()) != postimage:
+            raise RuntimeError(f"LiteRT spatial tensor staging postimage mismatch for {name}; requalify")
+    print("Verified LiteRT spatial tensor staging postimages", flush=True)
+
+
 def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
     ref_digest = hashlib.sha256(upstream_ref.encode("utf-8")).hexdigest()
     return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
@@ -356,6 +376,9 @@ def download_upstream(
         patch_cpu_options_identifier=require_cpu_options_identifier_patch_decision(
             compatibility_tag
         ),
+        patch_stage_spatial_tensors=require_stage_spatial_tensors_patch_decision(
+            compatibility_tag
+        ),
     )
     return source_root
 
@@ -377,6 +400,52 @@ def needs_gpu_environment_teardown_patch(
     return matches[-1] in LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING
 
 
+def verify_litert_archive_pin(workspace: str, ref: str, sha256: str, carry: str) -> None:
+    archive = list(re.finditer(
+        r'^http_archive\(\n    name = "litert",\n(.*?)^\)$',
+        workspace, re.MULTILINE | re.DOTALL,
+    ))
+    if len(archive) != 1:
+        raise RuntimeError(f"Expected one LiteRT archive in WORKSPACE for {carry}; requalify")
+    for name, expected in (("LITERT_REF", ref), ("LITERT_SHA256", sha256)):
+        assignments = list(re.finditer(rf'^{name}[ \t]*=[ \t]*(.*)$', workspace, re.MULTILINE))
+        if (len(assignments) != 1 or assignments[0].group(1) != f'"{expected}"'
+                or assignments[0].start() >= archive[0].start()):
+            raise RuntimeError(f"Unexpected {name} for {carry}; requalify")
+
+    # Bazel checks the downloaded bytes against this digest before applying patches.
+    attributes = {
+        "sha256": "LITERT_SHA256,",
+        "strip_prefix": '"LiteRT-" + LITERT_REF,',
+        "url": '"https://github.com/google-ai-edge/LiteRT/archive/" + LITERT_REF + ".tar.gz",',
+    }
+    for name, expected in attributes.items():
+        values = re.findall(rf'^    {name}[ \t]*=[ \t]*(.*)$', archive[0].group(1), re.MULTILINE)
+        if values != [expected]:
+            raise RuntimeError(f"Unexpected LiteRT archive {name} for {carry}; requalify")
+
+
+def verify_carried_dependency_pins(
+    source_root: Path, compatibility_tag: str, *,
+    spatial_staging: bool, cpu_options: bool, xnnpack: bool,
+) -> None:
+    if not (spatial_staging or cpu_options or xnnpack):
+        return
+    workspace = (source_root / "WORKSPACE").read_text(encoding="utf-8")
+    if spatial_staging:
+        verify_litert_archive_pin(
+            workspace, STAGE_SPATIAL_TENSORS_LITERT_REF,
+            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256, "LiteRT spatial tensor staging",
+        )
+    if cpu_options:
+        verify_litert_archive_pin(
+            workspace, CPU_OPTIONS_LITERT_REF, CPU_OPTIONS_LITERT_ARCHIVE_SHA256,
+            "LiteRT CPU options identifier rollback",
+        )
+    if xnnpack:
+        verify_patched_xnnpack_archive(workspace, compatibility_tag)
+
+
 def patch_upstream_workspace(
     source_root: Path,
     *,
@@ -385,6 +454,7 @@ def patch_upstream_workspace(
     patch_gpu_environment_teardown: bool = False,
     patch_xnnpack_pf32_sme2: bool = False,
     patch_cpu_options_identifier: bool = False,
+    patch_stage_spatial_tensors: bool = False,
 ) -> None:
     workspace = source_root / "WORKSPACE"
     text = workspace.read_text(encoding="utf-8")
@@ -410,6 +480,12 @@ def patch_upstream_workspace(
         litert_patches.append("litert_gpu_environment_destroy_callback.patch")
     if patch_cpu_options_identifier:
         litert_patches.append("litert_cpu_options_identifier.patch")
+    if patch_stage_spatial_tensors:
+        verify_litert_archive_pin(
+            text, STAGE_SPATIAL_TENSORS_LITERT_REF,
+            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256, "LiteRT spatial tensor staging",
+        )
+        litert_patches.append(Path(STAGE_SPATIAL_TENSORS_PATCH_PATH).name)
     litert_archive = 'http_archive(\n    name = "litert",\n'
     litert_archive_with_patch = (
         litert_archive
@@ -524,6 +600,13 @@ def build_runtime(
     jobs: str | None,
     upstream_ref: str | None = None,
 ) -> Path:
+    patch_stage_spatial_tensors = require_stage_spatial_tensors_patch_decision(upstream_tag)
+    patch_cpu_options_identifier = require_cpu_options_identifier_patch_decision(upstream_tag)
+    patch_xnnpack = require_xnnpack_pf32_patch_decision(upstream_tag)
+    verify_carried_dependency_pins(
+        source_root, upstream_tag, spatial_staging=patch_stage_spatial_tensors,
+        cpu_options=patch_cpu_options_identifier, xnnpack=patch_xnnpack,
+    )
     patch_asr_untimed_overlap(source_root, upstream_tag)
     patch_asr_litertlm_container(source_root, upstream_tag)
     patch_stream_finish_reason(source_root, upstream_tag)
@@ -549,7 +632,6 @@ def build_runtime(
                 f"{platform}/{arch}",
                 flush=True,
             )
-    patch_cpu_options_identifier = require_cpu_options_identifier_patch_decision(upstream_tag)
     if patch_cpu_options_identifier:
         verify_dynamic_runtime(source_root / "prebuilt", platform, arch)
     target = RUNTIME_TARGETS[(platform, arch)]
@@ -604,10 +686,12 @@ def build_runtime(
     if jobs:
         command.append(f"--jobs={jobs}")
     run(command, source_root)
-    if require_xnnpack_pf32_patch_decision(upstream_tag):
+    if patch_xnnpack:
         verify_xnnpack_postimages(source_root, upstream_tag)
     if patch_cpu_options_identifier:
         verify_cpu_options_identifier_postimage(source_root)
+    if patch_stage_spatial_tensors:
+        verify_stage_spatial_tensors_postimages(source_root)
 
     if "output" in target:
         output = source_root / target["output"]

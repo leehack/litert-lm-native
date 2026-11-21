@@ -108,6 +108,16 @@ def require_xnnpack_pf32_patch_decision(compatibility_tag: str) -> bool:
         "tools/xnnpack_pf32_sme2_patch.py and docs/upstream_patch_audit.md")
 
 
+TENSORFLOW_ARCHIVE = '# TensorFlow\nhttp_archive(\n    name = "org_tensorflow",\n'
+
+
+def verify_patched_xnnpack_archive(workspace: str, compatibility_tag: str) -> None:
+    tensorflow_ref = V019_TENSORFLOW_REF if compatibility_tag in V019_TAGS else TENSORFLOW_REF
+    if (workspace.count(ARCHIVES[tensorflow_ref] + TENSORFLOW_ARCHIVE) != 1
+            or len(re.findall(r'^\s*name = "XNNPACK",$', workspace, re.MULTILINE)) != 1):
+        raise RuntimeError("Unexpected XNNPACK archive in WORKSPACE; requalify the XNNPACK patches")
+
+
 def declare_patched_xnnpack(workspace_text: str) -> str:
     """Inserts the patched XNNPACK archive before the TensorFlow archive."""
     refs = re.findall(r'^TENSORFLOW_REF = "([0-9a-f]{40})"$', workspace_text, re.MULTILINE)
@@ -119,10 +129,9 @@ def declare_patched_xnnpack(workspace_text: str) -> str:
         return workspace_text
     if re.search(r'^\s*name = "XNNPACK",$', workspace_text, re.MULTILINE):
         raise RuntimeError("Unexpected XNNPACK archive in WORKSPACE; requalify the XNNPACK patches")
-    anchor = '# TensorFlow\nhttp_archive(\n    name = "org_tensorflow",\n'
-    if workspace_text.count(anchor) != 1:
+    if workspace_text.count(TENSORFLOW_ARCHIVE) != 1:
         raise RuntimeError("Expected one TensorFlow archive in WORKSPACE")
-    return workspace_text.replace(anchor, pinned_archive + anchor, 1)
+    return workspace_text.replace(TENSORFLOW_ARCHIVE, pinned_archive + TENSORFLOW_ARCHIVE, 1)
 
 
 def xnnpack_pf32_patch_manifest(compatibility_tag: str) -> list[dict]:

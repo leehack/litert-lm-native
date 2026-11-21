@@ -95,9 +95,9 @@ class Runtime:
             yield thinking
 
     @contextmanager
-    def conversation(self, engine: int, max_tokens: int):
+    def conversation(self, engine: int, max_tokens: int, *, top_p: float = 1.0):
         with (self.owned("session_config", self.api.session_config_create()) as session,
-              self.owned("sampler_params", self.api.sampler_params_create(2, top_k=1, top_p=1.0, temperature=0.0, seed=1)) as sampler,
+              self.owned("sampler_params", self.api.sampler_params_create(2, top_k=1, top_p=top_p, temperature=0.0, seed=1)) as sampler,
               self.owned("conversation_config", self.api.conversation_config_create()) as config,
               self.thinking_disabled() as thinking):
             self.call("session_config_set_max_output_tokens", session, max_tokens)

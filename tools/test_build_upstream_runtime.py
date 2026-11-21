@@ -7,12 +7,40 @@ import unittest
 from contextlib import ExitStack
 from types import SimpleNamespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import DEFAULT, patch
 
 import build_upstream_runtime
 import package_upstream_prebuilts
+from litert_cpu_options_identifier_patch import (
+    LITERT_ARCHIVE_SHA256 as CPU_OPTIONS_SHA256,
+    LITERT_REF as CPU_OPTIONS_REF,
+)
 from litert_lm_symbols import ANDROID_OPENCL_SAMPLER_SYMBOLS, ANDROID_WEBGPU_SAMPLER_SYMBOLS
+from litert_stage_spatial_tensors_patch import (
+    LITERT_ARCHIVE_SHA256,
+    LITERT_REF,
+    PATCH_PATH as STAGING_PATCH,
+)
 from test_runtime_dependency_utils import write_elf_with_exports
+from xnnpack_pf32_sme2_patch import (
+    TENSORFLOW_ARCHIVE,
+    V019_TENSORFLOW_REF,
+    V019_XNNPACK_SHA256,
+    declare_patched_xnnpack,
+)
+
+
+def litert_workspace(ref: str, digest: str) -> str:
+    return (
+        f'LITERT_REF = "{ref}"\n'
+        f'LITERT_SHA256 = "{digest}"\n'
+        'http_archive(\n'
+        '    name = "litert",\n'
+        '    sha256 = LITERT_SHA256,\n'
+        '    strip_prefix = "LiteRT-" + LITERT_REF,\n'
+        '    url = "https://github.com/google-ai-edge/LiteRT/archive/" + LITERT_REF + ".tar.gz",\n'
+        ')\n'
+    )
 
 
 class BuildUpstreamRuntimeTest(unittest.TestCase):
@@ -150,6 +178,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                          patch.object(build_upstream_runtime, "patch_stream_finish_reason"), \
                          patch.object(build_upstream_runtime, "patch_huggingface_token_bytes"), \
                          patch.object(build_upstream_runtime, "patch_step_zero_state") as apply_state, \
+                         patch.object(build_upstream_runtime, "verify_carried_dependency_pins"), \
                          patch.object(build_upstream_runtime, "apply_android_gpu_safety"), \
                          patch.object(build_upstream_runtime, "verify_dynamic_runtime"), \
                          patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]), \
@@ -308,6 +337,111 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             self.assertNotIn("refs", archive.name)
             self.assertNotIn("..", archive.name)
             self.assertRegex(archive.name, r"^LiteRT-LM-[0-9a-f]{64}\.tar\.gz$")
+
+    def test_workspace_applies_spatial_staging_only_to_the_audited_pin(self) -> None:
+        original = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + (
+            f'http_archive(\n    name = "minizip",\n    url = "{build_upstream_runtime.ZLIB_URL}",\n)\n'
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "WORKSPACE"
+            workspace.write_text(original, encoding="utf-8")
+            build_upstream_runtime.patch_upstream_workspace(root, patch_stage_spatial_tensors=True)
+            build_upstream_runtime.patch_upstream_workspace(root, patch_stage_spatial_tensors=True)
+            marker = f'"@//bridge:{Path(STAGING_PATCH).name}"'
+            self.assertEqual(workspace.read_text(encoding="utf-8").count(marker), 1)
+
+            for pin, digest in (("LITERT_REF", LITERT_REF),
+                                ("LITERT_SHA256", LITERT_ARCHIVE_SHA256)):
+                with self.subTest(pin=pin):
+                    drift = original.replace(digest, "0" * len(digest))
+                    workspace.write_text(drift, encoding="utf-8")
+                    with self.assertRaisesRegex(RuntimeError, f"Unexpected {pin}"):
+                        build_upstream_runtime.patch_upstream_workspace(
+                            root, patch_stage_spatial_tensors=True,
+                        )
+                    self.assertEqual(workspace.read_text(encoding="utf-8"), drift)
+
+    def test_source_root_rejects_dependency_archive_drift_before_bazel(self) -> None:
+        parent_ref = "d0ef0ad58bd87565a92000feef5be758505af84f"
+        parent_sha = "778916714cd43383f2204bc2f5114e18a25035b3f84b157776898e788bb2d49f"
+        litert = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256).replace(
+            '    name = "litert",\n',
+            f'    name = "litert",\n    patches = ["@//bridge:{Path(STAGING_PATCH).name}"],\n',
+        )
+        xnnpack = declare_patched_xnnpack(
+            f'TENSORFLOW_REF = "{V019_TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
+        )
+        cases = (
+            ("alternate LiteRT archive", "v0.19.1", litert.replace(LITERT_REF, parent_ref)
+             .replace(LITERT_ARCHIVE_SHA256, parent_sha) + xnnpack, "Unexpected LITERT_REF"),
+            ("changed LiteRT digest", "v0.19.1",
+             litert.replace(LITERT_ARCHIVE_SHA256, parent_sha) + xnnpack, "Unexpected LITERT_SHA256"),
+            ("archive overrides digest", "v0.19.1",
+             litert.replace("sha256 = LITERT_SHA256,", f'sha256 = "{parent_sha}",') + xnnpack,
+             "Unexpected LiteRT archive sha256"),
+            ("shadowed LiteRT revision", "v0.19.1",
+             f'LITERT_REF="{parent_ref}"\n' + litert + xnnpack, "Unexpected LITERT_REF"),
+            ("CPU options LiteRT pin drift", "v0.18.1",
+             litert_workspace(CPU_OPTIONS_REF, CPU_OPTIONS_SHA256).replace(CPU_OPTIONS_REF, LITERT_REF),
+             "Unexpected LITERT_REF for LiteRT CPU options"),
+            ("XNNPACK digest drift", "v0.19.1",
+             litert + xnnpack.replace(V019_XNNPACK_SHA256, "0" * 64), "Unexpected XNNPACK archive"),
+            ("XNNPACK archive missing", "v0.19.0", litert, "Unexpected XNNPACK archive"),
+        )
+        for label, tag, workspace, message in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temp, patch.multiple(
+                build_upstream_runtime,
+                patch_asr_untimed_overlap=DEFAULT,
+                patch_asr_litertlm_container=DEFAULT,
+                patch_stream_finish_reason=DEFAULT,
+                patch_huggingface_token_bytes=DEFAULT,
+                patch_step_zero_state=DEFAULT,
+                apply_android_gpu_safety=DEFAULT,
+                materialize_git_lfs_libraries=DEFAULT,
+                run=DEFAULT,
+            ) as calls:
+                root = Path(temp)
+                args = ["build_upstream_runtime.py", "--source-root", str(root),
+                        "--upstream-tag", tag, "--platform", "macos", "--arch", "arm64"]
+                calls["materialize_git_lfs_libraries"].return_value = 0
+                calls["run"].side_effect = RuntimeError("Bazel reached")
+                (root / "WORKSPACE").write_text(workspace, encoding="utf-8")
+                with patch("sys.argv", args), self.assertRaisesRegex(RuntimeError, message):
+                    build_upstream_runtime.main()
+                calls["run"].assert_not_called()
+                calls["patch_step_zero_state"].assert_not_called()
+
+    def test_spatial_staging_postimages_fail_on_drift_or_missing_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            output_base = Path(temp) / "output_base"
+            source_root = Path(temp) / "source"
+            exec_root = output_base / "execroot" / "litert_lm"
+            (exec_root / "bazel-out").mkdir(parents=True)
+            source_root.mkdir()
+            (source_root / "bazel-out").symlink_to(exec_root / "bazel-out", target_is_directory=True)
+            sources = {}
+            files = []
+            for name in build_upstream_runtime.STAGE_SPATIAL_TENSORS_SOURCES:
+                postimage = name.encode() + b"\n"
+                sources[name] = ("", build_upstream_runtime.source_sha256(postimage))
+                file = output_base / "external" / "litert" / name
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_bytes(postimage.replace(b"\n", b"\r\n"))
+                files.append(file)
+
+            with patch.object(build_upstream_runtime, "STAGE_SPATIAL_TENSORS_SOURCES", sources):
+                build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
+                for file in files:
+                    with self.subTest(file=file.name):
+                        original = file.read_bytes()
+                        file.write_bytes(b"wrong postimage")
+                        with self.assertRaisesRegex(RuntimeError, f"postimage mismatch for .*{file.name}"):
+                            build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
+                        file.unlink()
+                        with self.assertRaisesRegex(RuntimeError, f"postimage mismatch for .*{file.name}"):
+                            build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
+                        file.write_bytes(original)
 
     def test_workspace_adds_litert_apple_framework_patch(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
