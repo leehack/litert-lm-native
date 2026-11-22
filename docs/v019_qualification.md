@@ -196,8 +196,10 @@ The build pins the LiteRT archive at
 `dcb657e8a537b2dc944e53e14c7eb43bcd9ededa`. Both entry points reject competing
 `WORKSPACE` and `WORKSPACE.bazel` files and verify the declared revision and
 digest. Before compile, a targeted Bazel sync reports the effective archive
-rule, revision and SHA-256 used to fetch LiteRT and XNNPACK. A missing archive
-record or unexpected identity stops the build.
+rule, revision and SHA-256 used to fetch LiteRT and XNNPACK. The build also
+recomputes Bazel's directory hash from each fetched repository and compares it
+with the sync report. A missing archive record, unexpected identity or tree
+hash mismatch stops the build.
 
 Fetch and compile use the same release rc. It keeps the upstream platform
 configuration, drops optional local imports and the unused Bzlmod registry

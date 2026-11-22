@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import errno
+import hashlib
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -8,7 +11,7 @@ import unittest
 from contextlib import ExitStack
 from types import SimpleNamespace
 from pathlib import Path
-from unittest.mock import DEFAULT, patch
+from unittest.mock import DEFAULT, MagicMock, patch
 
 import build_upstream_runtime
 import package_upstream_prebuilts
@@ -375,13 +378,20 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             f'TENSORFLOW_REF = "{V019_TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
         )
 
-        def resolved_archive(name: str, digest: str, prefix: str) -> dict:
+        tree_hash = (
+            "c9120d92534177495742ddadfe47ad41e013b170cf24f283cbc37993caed5dcc"
+            if os.name == "nt" else
+            "3489273db3277fb16b56b64c093c6bebb8344a98838149fe93b71ebc41caccb9"
+        )
+
+        def resolved_archive(name: str, digest: str, prefix: str,
+                             reported_tree_hash: str = tree_hash) -> dict:
             return {
                 "original_rule_class": HTTP_ARCHIVE,
                 "original_attributes": {"name": name},
                 "repositories": [{
                     "rule_class": HTTP_ARCHIVE,
-                    "output_tree_hash": "f" * 64,
+                    "output_tree_hash": reported_tree_hash,
                     "attributes": {"name": name, "sha256": digest, "strip_prefix": prefix},
                 }],
             }
@@ -389,14 +399,28 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
         litert = resolved_archive("litert", LITERT_ARCHIVE_SHA256, f"LiteRT-{LITERT_REF}")
         xnnpack = resolved_archive("XNNPACK", V019_XNNPACK_SHA256, f"XNNPACK-{V019_XNNPACK_COMMIT}")
         wrong = resolved_archive("litert", "0" * 64, f"LiteRT-{LITERT_REF}")
+        wrong_tree = resolved_archive("litert", LITERT_ARCHIVE_SHA256, f"LiteRT-{LITERT_REF}", "f" * 64)
         local = {**litert, "original_rule_class": "local_repository"}
-        for label, records, message in (
+        archive_cases = (
             ("pinned", [litert, xnnpack], "compilation reached"),
             ("override", [xnnpack], "Bazel did not resolve @litert from its pinned archive"),
             ("digest mismatch", [wrong, xnnpack], "Bazel resolved @litert from an unexpected archive"),
+            ("tree hash mismatch", [wrong_tree, xnnpack], "Bazel output tree hash mismatch for @litert"),
+            ("changed tree", [litert, xnnpack], "Bazel output tree hash mismatch for @XNNPACK"),
+            ("missing tree", [litert, xnnpack], "Could not hash Bazel output tree for @XNNPACK"),
             ("wrong rule", [local, xnnpack], "Bazel resolved @litert from an unexpected archive"),
             ("missing XNNPACK", [litert], "Bazel did not resolve @XNNPACK from its pinned archive"),
-        ):
+        )
+        link_cases = {
+            "dangling absolute link": None,
+            "absolute link stat failure": ("stat", errno.EIO),
+            "absolute link open failure": ("open", errno.EACCES),
+            "absolute link disappeared after stat": ("open", errno.ENOENT),
+            "absolute link read failure": ("read", errno.EIO),
+            "Windows absolute link loop": ("stat", errno.EINVAL, 1921),
+        }
+        link_archive_cases = [(label, [], "compilation reached") for label in link_cases]
+        for label, records, message in (*archive_cases, *link_archive_cases):
             with self.subTest(label=label), tempfile.TemporaryDirectory() as temp, patch.multiple(
                 build_upstream_runtime,
                 patch_asr_untimed_overlap=DEFAULT,
@@ -406,8 +430,63 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 apply_android_gpu_safety=DEFAULT,
                 materialize_git_lfs_libraries=DEFAULT,
                 run=DEFAULT,
-            ) as calls:
+            ) as calls, ExitStack() as faults:
                 root = Path(temp)
+                output_base = root / "bazel output"
+                target = root / "referent"
+                fault = link_cases.get(label)
+                if label in link_cases:
+                    if fault:
+                        target.write_bytes(b"referent contents\n")
+                    target_text = target.as_posix() if os.name == "nt" else os.fsencode(target).decode("latin-1")
+                    # A link-only report would let an incorrectly suppressed fault reach compilation.
+                    child_hash = hashlib.sha256(f"source.txtl{target_text}".encode("utf-16-le")).hexdigest()
+                    link_hash = hashlib.sha256(f"coded{child_hash}".encode("utf-16-le")).hexdigest()
+                    records = [
+                        resolved_archive("litert", LITERT_ARCHIVE_SHA256, f"LiteRT-{LITERT_REF}", link_hash),
+                        xnnpack,
+                    ]
+                for name in ("litert", "XNNPACK"):
+                    if label == "missing tree" and name == "XNNPACK":
+                        continue
+                    directory = output_base / "external" / name / "code"
+                    directory.mkdir(parents=True)
+                    source = directory / "source.txt"
+                    if label in link_cases and name == "litert":
+                        source.symlink_to(target)
+                        continue
+                    contents = b"changed\n" if label == "changed tree" and name == "XNNPACK" else b"archive contents\n"
+                    source.write_bytes(contents)
+                    source.chmod(0o644)
+                if fault:
+                    operation, error_number, *windows_error = fault
+                    if not windows_error:
+                        message = rf"Could not hash Bazel output tree for @litert: \[Errno {error_number}\]"
+                    real_stat, real_open = Path.stat, Path.open
+
+                    def stat_path(path, *args, **kwargs):
+                        if path == target:
+                            error = OSError(error_number, os.strerror(error_number), str(path))
+                            if windows_error:
+                                error.winerror = windows_error[0]
+                            raise error
+                        return real_stat(path, *args, **kwargs)
+
+                    def open_path(path, *args, **kwargs):
+                        if path != target:
+                            return real_open(path, *args, **kwargs)
+                        if operation == "open":
+                            raise OSError(error_number, os.strerror(error_number), str(path))
+                        stream = MagicMock()
+                        stream.__enter__.return_value.read.side_effect = OSError(
+                            error_number, os.strerror(error_number),
+                        )
+                        return stream
+
+                    if operation == "stat":
+                        faults.enter_context(patch.object(Path, "stat", autospec=True, side_effect=stat_path))
+                    else:
+                        faults.enter_context(patch.object(Path, "open", autospec=True, side_effect=open_path))
                 (root / "WORKSPACE").write_text(workspace, encoding="utf-8")
                 (root / ".bazelrc").write_text(
                     f"common {UPSTREAM_REGISTRY}\n"
@@ -421,7 +500,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 )
                 calls["materialize_git_lfs_libraries"].return_value = 0
 
-                def run(command, cwd):
+                def run(command, cwd, *, capture_output=False):
                     self.assertEqual(cwd, root.resolve())
                     self.assertIn("--nohome_rc", command)
                     self.assertIn("--nosystem_rc", command)
@@ -435,6 +514,10 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     self.assertNotIn(".bazelrc.user", rc)
                     if "build" in command:
                         raise RuntimeError("compilation reached")
+                    if "info" in command:
+                        self.assertTrue(capture_output)
+                        self.assertEqual(command[-1], "output_base")
+                        return subprocess.CompletedProcess(command, 0, stdout=f"{output_base}\n")
                     self.assertIn("sync", command)
                     self.assertIn("--only=litert", command)
                     self.assertIn("--only=XNNPACK", command)
@@ -450,9 +533,16 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 calls["run"].side_effect = run
                 args = ["build_upstream_runtime.py", "--source-root", str(root),
                         "--upstream-tag", "v0.19.1", "--platform", "macos", "--arch", "arm64"]
-                with patch("sys.argv", args), self.assertRaisesRegex(RuntimeError, message):
+                with patch("sys.argv", args), self.assertRaisesRegex(RuntimeError, message) as failure:
                     build_upstream_runtime.main()
-                self.assertEqual(calls["run"].call_count, 2 if label == "pinned" else 1)
+                compilations = [call for call in calls["run"].call_args_list if "build" in call.args[0]]
+                self.assertEqual(len(compilations), int(message == "compilation reached"))
+                if fault and not windows_error:
+                    self.assertIn(repr(str(target)), str(failure.exception))
+                    cause = failure.exception.__cause__
+                    self.assertIsInstance(cause, OSError)
+                    self.assertEqual(cause.errno, error_number)
+                    self.assertEqual(cause.filename, str(target))
 
     def test_source_root_rejects_workspace_rc_repository_overrides_before_bazel(self) -> None:
         workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(
