@@ -1,6 +1,7 @@
 """Validate Bazel 7.6.1's effective archives and preserve release build configs."""
 
 import ast
+import errno
 import hashlib
 import os
 import re
@@ -58,9 +59,14 @@ def bazel_file_digest(path: Path, mode: int) -> bytes:
     # The Windows filesystem reports regular files as executable.
     kind = "x" if os.name == "nt" or mode & stat.S_IXUSR else "-"
     digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
+    try:
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as error:
+        if error.filename is None:
+            raise OSError(error.errno, error.strerror, os.fspath(path)) from error
+        raise
     return kind.encode("utf-16-le") + digest.digest()
 
 
@@ -85,14 +91,17 @@ def bazel_tree_hash(directory: Path) -> str:
                     target = target.removeprefix("\\\\?\\")
             target = os.path.normpath(target)
             if os.path.isabs(target):
+                target_path = Path(target)
                 try:
-                    target_path = Path(target)
                     target_mode = target_path.stat().st_mode
+                except OSError as error:
+                    # Bazel hashes the link text when its target cannot be resolved.
+                    if error.errno not in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP):
+                        raise
+                else:
                     if stat.S_ISREG(target_mode):
                         digest.update(bazel_file_digest(target_path, target_mode))
                         continue
-                except OSError:
-                    pass  # Bazel hashes the link itself when its target is unavailable.
             target = target.replace("\\", "/") if os.name == "nt" else re.sub(r"^//", "/", target)
             link = "" if target == "." else bazel_path_chars(target)
             digest.update(("l" + link).encode("utf-16-le", "surrogatepass"))
@@ -140,7 +149,7 @@ def verify_resolved_archives(
         try:
             actual_tree_hash = bazel_tree_hash(external_dir / name)
         except OSError as error:
-            raise RuntimeError(f"Could not hash Bazel output tree for @{name}") from error
+            raise RuntimeError(f"Could not hash Bazel output tree for @{name}: {error}") from error
         if tree_hash != actual_tree_hash:
             raise RuntimeError(
                 f"Bazel output tree hash mismatch for @{name}: reported {tree_hash}, "
