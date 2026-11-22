@@ -1,8 +1,11 @@
 """Validate Bazel 7.6.1's effective archives and preserve release build configs."""
 
 import ast
+import hashlib
+import os
 import re
 import shlex
+import stat
 from pathlib import Path
 
 UPSTREAM_REGISTRY = "--registry=https://raw.githubusercontent.com/bazelbuild/bazel-central-registry/main/"
@@ -46,8 +49,66 @@ def release_workspace_rc(text: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def verify_resolved_archives(resolved_file: Path, pins: dict[str, tuple[str, str]]) -> None:
-    """Verify the effective http_archive rule, digest, and revision for each pin."""
+def bazel_path_chars(text: str) -> str:
+    # Bazel's native Unix filesystem stores each path byte in a Java char.
+    return text if os.name == "nt" else os.fsencode(text).decode("latin-1")
+
+
+def bazel_file_digest(path: Path, mode: int) -> bytes:
+    # The Windows filesystem reports regular files as executable.
+    kind = "x" if os.name == "nt" or mode & stat.S_IXUSR else "-"
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return kind.encode("utf-16-le") + digest.digest()
+
+
+def bazel_tree_hash(directory: Path) -> str:
+    # Match Bazel 7.6.1 Path.getDirectoryDigest, including Guava's little-endian chars.
+    digest = hashlib.sha256()
+    entries = sorted(
+        directory.iterdir(),
+        key=lambda path: bazel_path_chars(path.name).encode("utf-16-be", "surrogatepass"),
+    )
+    for path in entries:
+        digest.update(bazel_path_chars(path.name).encode("utf-16-le", "surrogatepass"))
+        info = path.lstat()
+        mode = info.st_mode
+        if stat.S_ISLNK(mode) or (os.name == "nt" and
+                info.st_reparse_tag == stat.IO_REPARSE_TAG_MOUNT_POINT):
+            target = os.readlink(path)
+            if os.name == "nt":
+                if target.startswith("\\\\?\\UNC\\"):
+                    target = "\\\\" + target[8:]
+                else:
+                    target = target.removeprefix("\\\\?\\")
+            target = os.path.normpath(target)
+            if os.path.isabs(target):
+                try:
+                    target_path = Path(target)
+                    target_mode = target_path.stat().st_mode
+                    if stat.S_ISREG(target_mode):
+                        digest.update(bazel_file_digest(target_path, target_mode))
+                        continue
+                except OSError:
+                    pass  # Bazel hashes the link itself when its target is unavailable.
+            target = target.replace("\\", "/") if os.name == "nt" else re.sub(r"^//", "/", target)
+            link = "" if target == "." else bazel_path_chars(target)
+            digest.update(("l" + link).encode("utf-16-le", "surrogatepass"))
+        elif stat.S_ISDIR(mode):
+            digest.update(("d" + bazel_tree_hash(path)).encode("utf-16-le"))
+        elif stat.S_ISREG(mode):
+            digest.update(bazel_file_digest(path, mode))
+        else:
+            raise OSError(f"Unsupported Bazel repository tree entry: {path.name}")
+    return digest.hexdigest()
+
+
+def verify_resolved_archives(
+    resolved_file: Path, pins: dict[str, tuple[str, str]], external_dir: Path,
+) -> None:
+    """Verify each archive's resolved rule, pinned identity, and fetched tree hash."""
     if not resolved_file.is_file():
         raise RuntimeError("Bazel did not report the resolved repositories")
     report = resolved_file.read_text(encoding="utf-8")
@@ -76,4 +137,13 @@ def verify_resolved_archives(resolved_file: Path, pins: dict[str, tuple[str, str
         if (original_rule != HTTP_ARCHIVE or identity != (HTTP_ARCHIVE, name, digest, prefix)
                 or not isinstance(tree_hash, str) or re.fullmatch(r"[0-9a-f]{64}", tree_hash) is None):
             raise RuntimeError(f"Bazel resolved @{name} from an unexpected archive")
+        try:
+            actual_tree_hash = bazel_tree_hash(external_dir / name)
+        except OSError as error:
+            raise RuntimeError(f"Could not hash Bazel output tree for @{name}") from error
+        if tree_hash != actual_tree_hash:
+            raise RuntimeError(
+                f"Bazel output tree hash mismatch for @{name}: reported {tree_hash}, "
+                f"computed {actual_tree_hash}"
+            )
         print(f"Verified Bazel resolved archive @{name} SHA-256 {digest}", flush=True)

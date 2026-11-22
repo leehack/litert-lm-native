@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -375,13 +376,20 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             f'TENSORFLOW_REF = "{V019_TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
         )
 
-        def resolved_archive(name: str, digest: str, prefix: str) -> dict:
+        tree_hash = (
+            "c9120d92534177495742ddadfe47ad41e013b170cf24f283cbc37993caed5dcc"
+            if os.name == "nt" else
+            "3489273db3277fb16b56b64c093c6bebb8344a98838149fe93b71ebc41caccb9"
+        )
+
+        def resolved_archive(name: str, digest: str, prefix: str,
+                             reported_tree_hash: str = tree_hash) -> dict:
             return {
                 "original_rule_class": HTTP_ARCHIVE,
                 "original_attributes": {"name": name},
                 "repositories": [{
                     "rule_class": HTTP_ARCHIVE,
-                    "output_tree_hash": "f" * 64,
+                    "output_tree_hash": reported_tree_hash,
                     "attributes": {"name": name, "sha256": digest, "strip_prefix": prefix},
                 }],
             }
@@ -389,11 +397,15 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
         litert = resolved_archive("litert", LITERT_ARCHIVE_SHA256, f"LiteRT-{LITERT_REF}")
         xnnpack = resolved_archive("XNNPACK", V019_XNNPACK_SHA256, f"XNNPACK-{V019_XNNPACK_COMMIT}")
         wrong = resolved_archive("litert", "0" * 64, f"LiteRT-{LITERT_REF}")
+        wrong_tree = resolved_archive("litert", LITERT_ARCHIVE_SHA256, f"LiteRT-{LITERT_REF}", "f" * 64)
         local = {**litert, "original_rule_class": "local_repository"}
         for label, records, message in (
             ("pinned", [litert, xnnpack], "compilation reached"),
             ("override", [xnnpack], "Bazel did not resolve @litert from its pinned archive"),
             ("digest mismatch", [wrong, xnnpack], "Bazel resolved @litert from an unexpected archive"),
+            ("tree hash mismatch", [wrong_tree, xnnpack], "Bazel output tree hash mismatch for @litert"),
+            ("changed tree", [litert, xnnpack], "Bazel output tree hash mismatch for @XNNPACK"),
+            ("missing tree", [litert, xnnpack], "Could not hash Bazel output tree for @XNNPACK"),
             ("wrong rule", [local, xnnpack], "Bazel resolved @litert from an unexpected archive"),
             ("missing XNNPACK", [litert], "Bazel did not resolve @XNNPACK from its pinned archive"),
         ):
@@ -408,6 +420,16 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 run=DEFAULT,
             ) as calls:
                 root = Path(temp)
+                output_base = root / "bazel output"
+                for name in ("litert", "XNNPACK"):
+                    if label == "missing tree" and name == "XNNPACK":
+                        continue
+                    directory = output_base / "external" / name / "code"
+                    directory.mkdir(parents=True)
+                    source = directory / "source.txt"
+                    contents = b"changed\n" if label == "changed tree" and name == "XNNPACK" else b"archive contents\n"
+                    source.write_bytes(contents)
+                    source.chmod(0o644)
                 (root / "WORKSPACE").write_text(workspace, encoding="utf-8")
                 (root / ".bazelrc").write_text(
                     f"common {UPSTREAM_REGISTRY}\n"
@@ -421,7 +443,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 )
                 calls["materialize_git_lfs_libraries"].return_value = 0
 
-                def run(command, cwd):
+                def run(command, cwd, *, capture_output=False):
                     self.assertEqual(cwd, root.resolve())
                     self.assertIn("--nohome_rc", command)
                     self.assertIn("--nosystem_rc", command)
@@ -435,6 +457,10 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     self.assertNotIn(".bazelrc.user", rc)
                     if "build" in command:
                         raise RuntimeError("compilation reached")
+                    if "info" in command:
+                        self.assertTrue(capture_output)
+                        self.assertEqual(command[-1], "output_base")
+                        return subprocess.CompletedProcess(command, 0, stdout=f"{output_base}\n")
                     self.assertIn("sync", command)
                     self.assertIn("--only=litert", command)
                     self.assertIn("--only=XNNPACK", command)
@@ -452,7 +478,8 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                         "--upstream-tag", "v0.19.1", "--platform", "macos", "--arch", "arm64"]
                 with patch("sys.argv", args), self.assertRaisesRegex(RuntimeError, message):
                     build_upstream_runtime.main()
-                self.assertEqual(calls["run"].call_count, 2 if label == "pinned" else 1)
+                compilations = [call for call in calls["run"].call_args_list if "build" in call.args[0]]
+                self.assertEqual(len(compilations), 1 if label == "pinned" else 0)
 
     def test_source_root_rejects_workspace_rc_repository_overrides_before_bazel(self) -> None:
         workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(

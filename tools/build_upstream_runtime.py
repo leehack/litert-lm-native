@@ -337,13 +337,17 @@ def source_archive_path(work_dir: Path, upstream_ref: str) -> Path:
     return work_dir / f"LiteRT-LM-{ref_digest}.tar.gz"
 
 
-def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
+def run(
+    command: list[str], cwd: Path, env: dict[str, str] | None = None, *, capture_output: bool = False,
+) -> subprocess.CompletedProcess[str]:
     printable = " ".join(command)
     print(f"+ {printable}", flush=True)
-    if os.name == "nt":
-        subprocess.run(subprocess.list2cmdline(command), cwd=cwd, env=env, check=True, shell=True)
-    else:
-        subprocess.run(command, cwd=cwd, env=env, check=True)
+    windows = os.name == "nt"
+    return subprocess.run(
+        subprocess.list2cmdline(command) if windows else command,
+        cwd=cwd, env=env, check=True, shell=windows, text=True,
+        stdout=subprocess.PIPE if capture_output else None,
+    )
 
 
 def reject_ambiguous_workspace(source_root: Path) -> None:
@@ -614,7 +618,11 @@ def fetch_audited_archives(
         *(f"--only={name}" for name in pins),
         f"--experimental_repository_resolved_file={bazel_path(resolved)}",
     ], source_root)
-    verify_resolved_archives(resolved, pins)
+    result = run([*startup, "info", "--noenable_bzlmod", "output_base"], source_root, capture_output=True)
+    output_base = Path(result.stdout.rstrip("\r\n"))
+    if not output_base.is_absolute():
+        raise RuntimeError("Bazel did not report an absolute output base")
+    verify_resolved_archives(resolved, pins, output_base / "external")
 
 
 def build_runtime(
