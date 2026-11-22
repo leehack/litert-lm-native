@@ -96,7 +96,9 @@ def bazel_tree_hash(directory: Path) -> str:
                     target_mode = target_path.stat().st_mode
                 except OSError as error:
                     # Bazel hashes the link text when its target cannot be resolved.
-                    if error.errno not in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP):
+                    # Windows reports a link loop as ERROR_CANT_RESOLVE_FILENAME (1921) with EINVAL.
+                    if (error.errno not in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP)
+                            and getattr(error, "winerror", None) != 1921):
                         raise
                 else:
                     if stat.S_ISREG(target_mode):
