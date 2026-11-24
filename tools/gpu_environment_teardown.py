@@ -26,12 +26,13 @@ RECORD_OPTIONS_SYMBOL = (
     "_ZN6litert8internal27CreateGpuEnvironmentOptions"
     "ERK25LiteRtEnvironmentOptionsT"
 )
-# LiteRT 9c8ae4e0fc moved the OpenCL setup, and with it the LoadOpenCL call,
-# into GpuEnvironment::InitializeOpenCl.
+# LiteRT first moved LoadOpenCL into InitializeOpenCl and then renamed that
+# entry point to InitializeOpenClLocked when setup became lazy.
 OPENCL_SETUP_SYMBOLS = frozenset(
     {
         "_ZN6tflite3gpu2cl10LoadOpenCLEv",
         "_ZN6litert8internal14GpuEnvironment16InitializeOpenClEv",
+        "_ZN6litert8internal14GpuEnvironment22InitializeOpenClLockedEv",
     }
 )
 
