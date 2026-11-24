@@ -508,6 +508,17 @@ jobs:
           python3 tools/litert_lm_chat_smoke.py \
             --library "bin/${{ matrix.platform }}/${{ matrix.arch }}/$library" \
             --model qwen-smoke-assets/Qwen3-0.6B.litertlm
+      - name: Verify text LoRA capability and session refusal
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            linux) library=libLiteRtLm.so ;;
+            windows) library=LiteRtLm.dll ;;
+            macos) library=libLiteRtLm.dylib ;;
+          esac
+          python3 tools/litert_lm_text_lora_smoke.py \
+            --library "bin/${{ matrix.platform }}/${{ matrix.arch }}/$library" \
+            --model qwen-smoke-assets/Qwen3-0.6B.litertlm
       - name: Require the CPU backend to honour num_threads
         shell: bash
         run: |

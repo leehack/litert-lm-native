@@ -49,6 +49,8 @@ BRIDGE_SYMBOLS = [
     b"stream_proxy_allocation_failure_abi_version",
     b"stream_proxy_has_allocation_failure",
     b"litert_lm_native_in_process_litert_abi_version",
+    b"litert_lm_native_text_lora_abi_version",
+    b"litert_lm_native_supports_text_lora",
 ]
 
 V0_16_ASR_BRIDGE_SYMBOLS = [

@@ -253,6 +253,18 @@ LITERT_LM_BRIDGE_EXPORT int32_t litert_lm_native_in_process_litert_abi_version(v
 #endif
 }
 
+LITERT_LM_BRIDGE_EXPORT int32_t litert_lm_native_text_lora_abi_version(void) {
+  return 1;
+}
+
+LITERT_LM_BRIDGE_EXPORT int32_t litert_lm_native_supports_text_lora(void) {
+#if defined(LITERT_LM_TEXT_LORA_SUPPORTED) && LITERT_LM_TEXT_LORA_SUPPORTED == 1
+  return 1;
+#else
+  return 0;
+#endif
+}
+
 LITERT_LM_BRIDGE_EXPORT void stream_proxy_delete(void *callback_data) {
   free(callback_data);
 }

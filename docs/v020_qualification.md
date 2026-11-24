@@ -68,3 +68,19 @@ The full PR qualification matrix builds all eight runtimes and checks packaged
 CPU ASR, Qwen inference and C ABI on Linux x64, Windows x64 and macOS arm64.
 Android device behavior, iOS device execution and Metal inference require
 separate qualification.
+
+## Text LoRA
+
+The owner probe is ABI 1 and reports support as 0. The pinned Qwen3-0.6B
+CPU smoke first creates an ordinary session, then sets a readable temporary
+adapter path. The setter returns 0. Session creation returns
+`INVALID_ARGUMENT: Lora is not supported.` from the advanced engine's
+[resource manager](https://github.com/google-ai-edge/LiteRT-LM/blob/95df4c2a932b4917ace66fcfef6c154e8d2a6699/runtime/framework/resource_management/resource_manager.cc#L616-L635).
+This scenario checks executor refusal, independently of audio LoRA support.
+
+PRs run the smoke on the packaged Linux x64, Windows x64, and macOS arm64
+runtimes. Release preparation requires it on the same three targets before
+packaging. Promoting a prepared candidate requires a successful release
+workflow from the same native commit and verifies the candidate digest.
+The probe is included in the required bridge exports. The schema-2 manifest
+capability keys are unchanged.

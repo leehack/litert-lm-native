@@ -411,6 +411,24 @@ jobs:
             --arch "${{ matrix.arch }}" \
             --jobs "${{ matrix.jobs }}"
 
+      - name: Verify text LoRA capability and session refusal
+        if: >-
+          (matrix.platform == 'linux' && matrix.arch == 'x64') ||
+          (matrix.platform == 'windows' && matrix.arch == 'x64') ||
+          (matrix.platform == 'macos' && matrix.arch == 'arm64')
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            linux) library=libLiteRtLm.so ;;
+            windows) library=LiteRtLm.dll ;;
+            macos) library=libLiteRtLm.dylib ;;
+          esac
+          mkdir -p qwen-smoke-assets
+          python3 -c 'import sys; sys.path.insert(0, "tools"); from pathlib import Path; from qualify_sentencepiece_bpe_null import verified_download, MODEL_URL, MODEL_SHA; verified_download(MODEL_URL, Path("qwen-smoke-assets/Qwen3-0.6B.litertlm"), MODEL_SHA)'
+          python3 tools/litert_lm_text_lora_smoke.py \
+            --library "bin/${{ matrix.platform }}/${{ matrix.arch }}/$library" \
+            --model qwen-smoke-assets/Qwen3-0.6B.litertlm
+
       - name: Fetch pinned ASR smoke assets
         if: >-
           inputs.run_asr_smoke &&

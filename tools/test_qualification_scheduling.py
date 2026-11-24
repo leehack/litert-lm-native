@@ -13,9 +13,9 @@ WORKFLOW_PATH = Path(__file__).resolve().parents[1] / '.github/workflows/pr_rele
 WORKFLOW = WORKFLOW_PATH.read_text()
 
 
-def job(name: str) -> str:
+def job(name: str, workflow: str = WORKFLOW) -> str:
     return re.search(rf'^  {name}:\n(.*?)(?=^  [\w-]+:|\Z)',
-                     WORKFLOW, re.M | re.S).group(1)
+                     workflow, re.M | re.S).group(1)
 
 
 class QualificationSchedulingTest(unittest.TestCase):
@@ -56,6 +56,31 @@ class QualificationSchedulingTest(unittest.TestCase):
         self.assertIn('--source-root asr-upstream --work-dir asr-qualification', asr)
         self.assertIn('--upstream-tag "$QUALIFICATION_UPSTREAM_TAG" --mutations', asr)
         self.assertNotIn('continue-on-error:', asr)
+
+    def test_text_lora_smoke_is_required_for_qualification(self) -> None:
+        release = WORKFLOW_PATH.with_name('native_release.yml').read_text()
+        step_name = '      - name: Verify text LoRA capability and session refusal\n'
+        for workflow, job_name in ((WORKFLOW, 'qwen-inference'),
+                                   (release, 'build-upstream-runtime')):
+            with self.subTest(job=job_name):
+                lane = job(job_name, workflow)
+                self.assertNotIn('continue-on-error:', lane.split('    steps:', 1)[0])
+                step = lane.split(step_name, 1)[1].split('      - ', 1)[0]
+                self.assertIn('tools/litert_lm_text_lora_smoke.py', step)
+                self.assertIn('--model qwen-smoke-assets/Qwen3-0.6B.litertlm', step)
+                self.assertNotIn('continue-on-error:', step)
+                self.assertNotIn('run_asr_smoke', step)
+                if workflow == release:
+                    for platform, arch in (('linux', 'x64'), ('windows', 'x64'),
+                                           ('macos', 'arm64')):
+                        self.assertIn(
+                            f"(matrix.platform == '{platform}' && matrix.arch == '{arch}')",
+                            step)
+        package = job('package', release).split('    steps:', 1)[0]
+        self.assertIn('needs: [preflight, build-upstream-runtime]', package)
+        self.assertNotIn('always()', package)
+        self.assertIn("needs.package.result == 'success'", job('publish', release))
+        self.assertIn("needs.reuse-candidate.result == 'success'", job('publish', release))
 
     def test_candidate_check_reports_every_unsuccessful_prerequisite(self) -> None:
         verify = job('verify')

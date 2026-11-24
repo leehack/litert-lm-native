@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "litert_lm_bridge.h"
+
 typedef void (*stream_proxy_dart_callback_t)(
     void *callback_data,
     char *chunk,
@@ -54,7 +56,6 @@ void stream_proxy_free_string(char *value);
 int32_t stream_proxy_callback_abi_version(void);
 int32_t stream_proxy_finish_reason_abi_version(void);
 int32_t stream_proxy_get_finish_reason(const void *callback_data);
-int32_t litert_lm_native_in_process_litert_abi_version(void);
 
 typedef struct callback_result {
   char *chunk;
@@ -208,6 +209,18 @@ static int check_finish_reasons(void) {
 }
 
 int main(void) {
+  if (litert_lm_native_text_lora_abi_version() != 1) {
+    return 24;
+  }
+#if defined(LITERT_LM_TEXT_LORA_SUPPORTED) && LITERT_LM_TEXT_LORA_SUPPORTED == 1
+  if (litert_lm_native_supports_text_lora() != 1) {
+    return 25;
+  }
+#else
+  if (litert_lm_native_supports_text_lora() != 0) {
+    return 25;
+  }
+#endif
 #if defined(LITERT_LM_IN_PROCESS_LITERT)
   if (litert_lm_native_in_process_litert_abi_version() != 1) {
     return 8;
