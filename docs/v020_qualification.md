@@ -13,15 +13,26 @@ archive identities, Bazel repository tree hashes and patched postimages.
 | Carry | v0.20.0 decision |
 | --- | --- |
 | ASR overlap | Keep the v0.19 patch and pin the new preimage and postimage. The merger's text-utils include moved to `omni/utils`. |
-| Stream finish reasons | Rebase onto the shared C API callback helper and the new multi-token decode loop. Keep the finish-reason wire values and bridge ABI. |
-| Hugging Face grammar | Rebase on the thread-safe tokenizer and LLGuidance v2. Keep exact ByteLevel bytes, the JSON whitespace bound and depth guard. Preserve upstream SentencePiece byte conversion and multiple EOS IDs. |
-| Android Qwen3 preflight | Rebase onto the refactored engine factory. The refusal still runs before factory entry. |
-| Step-zero reset and macOS lookahead | Upstream [e1f86b05](https://github.com/google-ai-edge/LiteRT-LM/commit/e1f86b05bf8a731331622a2622440e9f93d9a9f5) supplies state clearing on reset, rewind and a new context. The v0.20 carry contains only the macOS WebGPU linear-attention guard. |
+| Stream finish reasons | Keep. The upstream C API callback helper still has no cause field. Stop-token, output-budget and context exhaustion still need to reach the bridge separately. |
+| Hugging Face grammar | Keep. Upstream adds SentencePiece byte conversion and multiple EOS IDs. The HF path still reads raw vocabulary spellings without ByteLevel inversion and does not provide the JSON whitespace bound or depth guard. |
+| Android Qwen3 preflight | Keep. The refactored upstream C API still enters the engine factory directly, without this model and device refusal. |
+| Step-zero reset and macOS lookahead | Retire both. Upstream [e1f86b05](https://github.com/google-ai-edge/LiteRT-LM/commit/e1f86b05bf8a731331622a2622440e9f93d9a9f5) clears state on reset, rewind and a new context. On Apple M4 Max, the pinned Qwen3.5-0.8B and Qwen3-0.6B control both passed the packaged step-zero oracle on CPU and Metal with and without the guard. The unguarded Metal run used sampler-managed inputs and matched the fresh reference in all five repeated Qwen3.5 requests. |
 | Spatial tensor staging | Rebase the LiteRT WebGPU and Vulkan carry. LiteRT `bf49eb62` predates [aa9e40cd](https://github.com/google-ai-edge/LiteRT/commit/aa9e40cd5e2d892b3a5d8579a7ec6faa696e321e). Retain the pinned LiteRT's per-environment context tracking when staging bindings. |
-| XNNPACK PF32 and PQS8/QC4W | Both patches apply in their existing order to the new pin. Update the `gemm-config.c` hashes. |
-| iOS Metal framework path | Rebase the legacy path carry. The default build links the accelerator statically. Retiring the path carry still requires packaged iOS evidence. |
+| XNNPACK PF32 and PQS8/QC4W | Keep both in order. The pinned XNNPACK archive matches all four PF32 preimages, and its PF32-patched `gemm-config.c` matches the QC4W preimage. The original multi-threaded SME2 triggers remain unqualified without the carries. |
+| iOS Metal framework path | Retire the dynamic lookup patch for v0.20.0. The upstream registry tries a statically registered GPU accelerator before dynamic lookup. Both iOS arm64 slices from run [45360694287](https://github.com/leehack/litert-lm-native/actions/runs/45360694287) contain `LiteRtStaticLinkedAcceleratorGpuDef` and `GpuMetalAccelerator::CreateDelegate`, link system Metal, and ship no separate accelerator binary. This verifies the linked path and bundle layout. |
 | Android Dawn | Keep both checksum-pinned rollback binaries pending Pixel Mali qualification. The validator compares the linked Android runtime's Dawn imports with the final packaged Dawn exports. |
 | Earlier retired carries | ASR container routing, the v0.18.1 Bazel repair and CPU options identifier rollback stay inactive. The tag retains the upstream SentencePiece patch and initializes GPU environment options before OpenCL. |
+
+
+### macOS lookahead retirement evidence
+
+The four runs used Qwen3.5-0.8B `684d4d34…`, the Qwen3-0.6B attention-only
+control `c5f39b41…`, and the maintained fresh-process, reload and cancellation
+oracle. Guarded dylib `8949b6bfa927e9530ab6a08b9b07ee13b6e282e378c85b78f565f7d9b06d6597`;
+unguarded dylib `13eb2161ef4d6dbf5aee6c78b5a6bcd3e649c298b8954161153c7de183ec6341`.
+The Metal logs showed executor-managed inputs with the guard and
+sampler-managed inputs without it. The attention-only arithmetic control
+passed on both builds and backends.
 
 ## Runtime and consumer contract
 

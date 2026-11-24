@@ -37,7 +37,6 @@ exports_files([
     "litert_cpu_options_identifier.patch",
     "litert_gpu_environment_destroy_callback.patch",
     "litert_ios_framework_paths.patch",
-    "litert_ios_framework_paths_v020.patch",
     "litert_stage_spatial_tensors.patch",
     "litert_stage_spatial_tensors_v020.patch",
     "rules_android_tensorflow_v020.patch",

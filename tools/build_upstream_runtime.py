@@ -494,10 +494,8 @@ def patch_upstream_workspace(
     else:
         text = text.replace(needle, replacement)
     litert_patches = []
-    if patch_ios_framework_paths:
-        litert_patches.append("litert_ios_framework_paths_v020.patch"
-                              if compatibility_tag == "v0.20.0"
-                              else "litert_ios_framework_paths.patch")
+    if patch_ios_framework_paths and not is_at_least(compatibility_tag, (0, 20, 0)):
+        litert_patches.append("litert_ios_framework_paths.patch")
     if patch_gpu_environment_teardown:
         litert_patches.append("litert_gpu_environment_destroy_callback.patch")
     if patch_cpu_options_identifier:
