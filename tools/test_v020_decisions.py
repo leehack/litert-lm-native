@@ -54,14 +54,14 @@ class V020DecisionsTest(unittest.TestCase):
             "asr-untimed-overlap", "stream-finish-reason", "android-qwen3-gpu-safety",
             "windows-engine-fd", "xnnpack-pf32-sme2", "xnnpack-pqs8-qc4w-sme2",
             "huggingface-token-bytes", "litert-stage-spatial-tensors",
-            "android-automatic-gpu",
+            "android-automatic-gpu", "litert-xnnpack-fresh-cache",
         })
         self.assertEqual(len({(r["id"], r["source"]) for r in records}), len(records))
         by_id = {r["id"]: r for r in records}
         for patch_id in (
             "android-qwen3-gpu-safety", "huggingface-token-bytes",
             "stream-finish-reason", "litert-stage-spatial-tensors", "windows-engine-fd",
-            "android-automatic-gpu",
+            "android-automatic-gpu", "litert-xnnpack-fresh-cache",
         ):
             self.assertTrue(by_id[patch_id]["path"].endswith("_v020.patch"))
         self.assertEqual(

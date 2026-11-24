@@ -14,6 +14,10 @@ from litert_stage_spatial_tensors_patch import (
     UPSTREAM_FIX,
     stage_spatial_tensors_patch_manifest,
 )
+from litert_xnnpack_fresh_cache_patch import (
+    PATCH_PATH as FRESH_CACHE_PATCH_PATH,
+    SOURCES as FRESH_CACHE_SOURCES,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -25,13 +29,17 @@ class StageSpatialTensorsPatchTest(unittest.TestCase):
         stock = Path(os.environ["LITERT_STAGE_SPATIAL_TENSORS_SOURCE"])
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for path, (preimage, _) in SOURCES.items():
+            sources = SOURCES | FRESH_CACHE_SOURCES
+            for path, (preimage, _) in sources.items():
                 data = (stock / path).read_bytes()
                 self.assertEqual(source_sha256(data), preimage, path)
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 (root / path).write_bytes(data)
-            subprocess.run(["git", "apply", str(REPO / PATCH_PATH)], cwd=root, check=True)
-            for path, (_, postimage) in SOURCES.items():
+            subprocess.run(
+                ["git", "apply", str(REPO / PATCH_PATH), str(REPO / FRESH_CACHE_PATCH_PATH)],
+                cwd=root, check=True,
+            )
+            for path, (_, postimage) in sources.items():
                 self.assertEqual(source_sha256((root / path).read_bytes()), postimage, path)
 
     def test_manifest_attributes_exactly_the_four_patched_sources(self) -> None:
