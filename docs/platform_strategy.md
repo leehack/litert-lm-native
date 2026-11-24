@@ -52,12 +52,12 @@ reaches LiteRT:
 | 0 | Not established. Builds before v0.19 report 0; their Linux and Windows runtimes for v0.16 to v0.18 load upstream's prebuilt `libLiteRt` (#111). |
 | missing | The runtime predates the marker; treat it as 0. |
 
-The marker covers only the LiteRT-LM to LiteRT weight handoff. It is not GPU
-qualification: the `gpu_registry.cc` fallback to the prebuilt accelerator still
-resolves LiteRT symbols from the host, which is the
-[#47](https://github.com/leehack/litert-lm-native/issues/47) crash class. On
-Linux, a consumer that preloads a separate `libLiteRt` with `RTLD_GLOBAL`
-recreates the #111 state while the marker still reads 1.
+The marker covers the LiteRT-LM to LiteRT weight handoff. On earlier bundles with
+a prebuilt accelerator, the `gpu_registry.cc` fallback can resolve LiteRT symbols
+from the host, which is the
+[#47](https://github.com/leehack/litert-lm-native/issues/47) crash class. On Linux,
+preloading an external `libLiteRt` with `RTLD_GLOBAL` can recreate the #111 state
+while the marker still reads 1.
 
 Every source build from LiteRT-LM v0.19 reports 1 on every platform. The
 export is additive and carries no other ABI change. It is a bridge export
@@ -208,12 +208,19 @@ the weights and Windows crashed, which broke every bundle with external-weight
 sections, such as EmbeddingGemma-2. The build fails if a v0.19+ host on any
 platform still imports `libLiteRt`, and those hosts report
 `litert_lm_native_in_process_litert_abi_version()` 1, so consumers can refuse
-external-weight bundles on older desktop runtimes. Bundles keep shipping the
-upstream `libLiteRt` and `libLiteRtWebGpuAccelerator` files on Linux, Windows
-and Android, but the host loads neither. Apple bundles after `v0.19.1-3` omit
-the macOS `libLiteRt` and `libLiteRtWebGpuAccelerator` and the iOS loose
-`libLiteRt` (`has_prebuilt_apple_litert_companions`), and so publish no
-`LiteRt` or `LiteRtWebGpuAccelerator` XCFramework.
+external-weight bundles on older desktop runtimes. Linux and Windows v0.19
+bundles included upstream `libLiteRt` and `libLiteRtWebGpuAccelerator` files.
+Apple bundles omit those companions after `v0.19.1-3`. LiteRT-LM v0.20.0
+removed the prebuilts upstream. The package validator rejects either separate
+library in a v0.20+ desktop bundle. The source-built accelerator uses the
+packaged Dawn library.
+
+For desktop GPU qualification, record the archive SHA-256, SHA-256 of every
+file in the loaded runtime directory, model SHA-256, selected GPU backend, and
+driver version alongside the candidate and comparison run logs. The
+[v0.19.1-2 L4 receipt](https://github.com/leehack/llamadart/pull/1830#issuecomment-6731113939)
+binds the Linux Vulkan and Windows D3D12 results to that release's bundle and
+loaded runtime digests.
 
 The rest of this section covers v0.16 to v0.18.
 
