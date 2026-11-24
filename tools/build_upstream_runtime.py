@@ -54,6 +54,7 @@ from runtime_dependency_utils import (
     is_elf,
     is_system_needed,
 )
+from source_patch_utils import apply_source_patch
 from step_zero_state_patch import apply as patch_step_zero_state
 from stream_finish_reason_patch import (
     BAZEL_DEFINE as FINISH_REASON_DEFINE,
@@ -256,10 +257,7 @@ def patch_stream_finish_reason(source_root: Path, upstream_tag: str) -> None:
             "Decode or conversation source changed; requalify the stream "
             "finish-reason patch")
     patch_file = REPO_ROOT / finish_reason_patch_path(upstream_tag)
-    command = ["git", "apply", "--ignore-space-change", str(patch_file)]
-    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
-                   cwd=source_root)
-    subprocess.run(command, check=True, cwd=source_root)
+    apply_source_patch(source_root, patch_file, ignore_space_change=True)
     for name, (_, post) in sources.items():
         if source_sha256((source_root / name).read_bytes()) != post:
             raise RuntimeError(

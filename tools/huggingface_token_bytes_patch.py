@@ -1,9 +1,9 @@
 """Identity and fail-closed application of the HF ByteLevel grammar fix (#100)."""
 import hashlib
-import os
 import re
-import subprocess
 from pathlib import Path
+
+from source_patch_utils import apply_source_patch
 
 PATCH_PATH = "native/bridge/huggingface_token_bytes_v019.patch"
 AUDITED_TAGS = frozenset({"v0.19.0", "v0.19.1", "v0.20.0"})
@@ -98,11 +98,7 @@ def apply(source_root: Path, tag: str) -> None:
     if any(digests[name] != pre for name, (pre, _) in sources.items()):
         raise RuntimeError("Tokenizer or grammar source changed; requalify #100 token bytes patch")
     patch = Path(__file__).resolve().parents[1] / patch_path_for(tag)
-    command = ["git", "apply", "--ignore-space-change", str(patch)]
-    # In a nested source copy, the owner's Git root can silently filter out hunks.
-    env = {**os.environ, "GIT_CEILING_DIRECTORIES": str(source_root.resolve().parent)}
-    subprocess.run([*command[:2], "--check", *command[2:]], check=True, cwd=source_root, env=env)
-    subprocess.run(command, check=True, cwd=source_root, env=env)
+    apply_source_patch(source_root, patch, ignore_space_change=True)
     mismatches = [name for name, (_, post) in sources.items()
                   if _digest(source_root / name) != post]
     if mismatches:

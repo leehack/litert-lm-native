@@ -48,21 +48,21 @@ class HuggingFaceTokenBytesPatchTest(unittest.TestCase):
                        "two": (hashlib.sha256(b"pre").hexdigest(), hashlib.sha256(b"post").hexdigest())}
             for name in sources:
                 (root / name).write_bytes(b"post")
-            with patch.object(carry, "SOURCES", sources), patch.object(carry.subprocess, "run") as run:
+            with patch.object(carry, "SOURCES", sources), patch.object(carry, "apply_source_patch") as apply:
                 carry.apply(root, "v0.19.0")
-                run.assert_not_called()
+                apply.assert_not_called()
                 for contents in (b"pre", b"unrecognized"):
                     (root / "one").write_bytes(contents)
                     with self.assertRaisesRegex(RuntimeError, "source changed"):
                         carry.apply(root, "v0.19.0")
-                    run.assert_not_called()
+                    apply.assert_not_called()
 
     def test_successful_git_apply_must_match_every_postimage(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             (root / "one").write_bytes(b"pre")
             sources = {"one": (hashlib.sha256(b"pre").hexdigest(), hashlib.sha256(b"post").hexdigest())}
-            with patch.object(carry, "SOURCES", sources), patch.object(carry.subprocess, "run"):
+            with patch.object(carry, "SOURCES", sources), patch.object(carry, "apply_source_patch"):
                 with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
                     carry.apply(root, "v0.19.0")
 

@@ -1,8 +1,9 @@
 """Version-bound step-zero reset and macOS linear-attention sampler policy."""
 import hashlib
 import re
-import subprocess
 from pathlib import Path
+
+from source_patch_utils import apply_source_patch
 
 PATCH_PATH = "native/bridge/step_zero_state_v0191.patch"
 SOURCE = "runtime/executor/llm_litert_compiled_model_executor.cc"
@@ -44,9 +45,8 @@ def apply(source_root: Path, tag: str) -> None:
         return
     if digest != preimage:
         raise RuntimeError("Executor source changed; requalify the step-zero state patch")
-    args = ["--ignore-space-change", str(Path(__file__).resolve().parents[1] / patch_path)]
-    subprocess.run(["git", "apply", "--check", *args], check=True, cwd=source_root)
-    subprocess.run(["git", "apply", *args], check=True, cwd=source_root)
+    patch = Path(__file__).resolve().parents[1] / patch_path
+    apply_source_patch(source_root, patch, ignore_space_change=True)
     if _digest(path) != postimage:
         raise RuntimeError("Executor step-zero state postimage mismatch")
 

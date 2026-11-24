@@ -1,8 +1,9 @@
 """Audited C API preflight patch for the exact Android Qwen3 safety policy."""
 import hashlib
-from pathlib import Path
 import re
-import subprocess
+from pathlib import Path
+
+from source_patch_utils import apply_source_patch
 
 PATCH_PATH = "native/bridge/android_gpu_safety_v019.patch"
 # v0.19.1 leaves c/engine.cc and c/BUILD byte-identical to v0.19.0.
@@ -56,8 +57,7 @@ def apply(source_root: Path, tag: str) -> None:
     if any(observed[name] != pre for name, (pre, _) in sources_for(tag).items()):
         raise RuntimeError("C API safety source changed; requalify Android GPU preflight")
     patch = Path(__file__).resolve().parents[1] / patch_path_for(tag)
-    subprocess.run(["git", "apply", "--check", str(patch)], cwd=source_root, check=True)
-    subprocess.run(["git", "apply", str(patch)], cwd=source_root, check=True)
+    apply_source_patch(source_root, patch)
     if any(digest(source_root / name) != post for name, (_, post) in sources_for(tag).items()):
         raise RuntimeError("Android GPU preflight postimage mismatch")
 

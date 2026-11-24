@@ -1,13 +1,53 @@
 from __future__ import annotations
 
+import subprocess
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
-from asr_overlap_patch import source_patch_manifest
+import android_gpu_safety_patch
+import step_zero_state_patch
+import stream_finish_reason_patch
+from asr_overlap_patch import source_patch_manifest, source_sha256
+from build_upstream_runtime import patch_stream_finish_reason
 from prebuilt_overrides import prebuilt_overrides
 from xnnpack_pf32_sme2_patch import commit_for
 
 
 class V020DecisionsTest(unittest.TestCase):
+    def test_git_format_carries_apply_inside_owner_checkout(self) -> None:
+        before = b"context\nupstream\n"
+        after = b"context\npatched\n"
+        hashes = source_sha256(before), source_sha256(after)
+        names_and_appliers = (
+            (stream_finish_reason_patch, "c/c_api_internal.h", patch_stream_finish_reason,
+             {"V020_SOURCES": {"c/c_api_internal.h": hashes}}),
+            (step_zero_state_patch, step_zero_state_patch.SOURCE, step_zero_state_patch.apply,
+             {"V020_PREIMAGE": hashes[0], "V020_POSTIMAGE": hashes[1]}),
+            (android_gpu_safety_patch, "c/engine.cc", android_gpu_safety_patch.apply,
+             {"V020_SOURCES": {"c/engine.cc": hashes}}),
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            owner = Path(temp)
+            subprocess.run(["git", "init", "--quiet", str(owner)], check=True)
+            source_root = owner / ".tmp" / "litert-build" / "LiteRT-LM-v0.20.0"
+            patch_file = owner / "carry.patch"
+            for module, name, apply, identities in names_and_appliers:
+                with self.subTest(source=name):
+                    source = source_root / name
+                    source.parent.mkdir(parents=True, exist_ok=True)
+                    source.write_bytes(before)
+                    patch_file.write_bytes((
+                        f"diff --git a/{name} b/{name}\n"
+                        f"--- a/{name}\n+++ b/{name}\n"
+                        "@@ -1,2 +1,2 @@\n context\n-upstream\n+patched\n"
+                    ).encode())
+                    with patch.multiple(module, V020_PATCH_PATH=str(patch_file), **identities):
+                        apply(source_root, "v0.20.0")
+                    self.assertEqual(source.read_bytes(), after)
+                    self.assertFalse((owner / name).exists())
+
     def test_manifest_keeps_audited_carries_with_new_source_identities(self) -> None:
         previous = source_patch_manifest("v0.19.1")
         records = source_patch_manifest("v0.20.0")

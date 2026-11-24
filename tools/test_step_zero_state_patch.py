@@ -45,15 +45,15 @@ class StepZeroStatePatchTest(unittest.TestCase):
                 source.write_bytes(before)
                 carry.apply(root, "v0.19.1")
                 self.assertEqual(source.read_bytes(), after)
-                with patch.object(carry.subprocess, "run") as run:
+                with patch.object(carry, "apply_source_patch") as apply:
                     carry.apply(root, "v0.19.1")
                     source.write_bytes(b"unknown executor\n")
                     with self.assertRaisesRegex(RuntimeError, "source changed"):
                         carry.apply(root, "v0.19.1")
-                    run.assert_not_called()
+                    apply.assert_not_called()
 
     def test_application_requires_the_exact_postimage(self) -> None:
         with (patch.object(carry, "_digest", side_effect=[carry.PREIMAGE, "wrong"]),
-              patch.object(carry.subprocess, "run")):
+              patch.object(carry, "apply_source_patch")):
             with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
                 carry.apply(Path("."), "v0.19.1")
