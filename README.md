@@ -317,6 +317,12 @@ explicit backpressure, finish, reset, and between-window cancellation. See
 smoke. Apple packaging intentionally keeps the source-built runtime for these
 tags; an official C-binary wrapper cannot recover omitted ASR C++ objects.
 
+LiteRT-LM v0.20.0 exports `litert_lm_native_text_lora_abi_version()` (1)
+and `litert_lm_native_supports_text_lora()` (0). Refuse text adapters unless
+both exports are present, the ABI is 1, and support is 1. The upstream session
+setter can open an adapter file even though the executor rejects it. See
+[`docs/v020_qualification.md`](docs/v020_qualification.md) for the CPU gate.
+
 Apple SPM consumers should depend on the release's direct
 `litert-lm-native-apple-*-xcframework-<tag>.zip` assets. The `LiteRtLm`
 XCFramework contains the primary iOS runtime and macOS framework wrapper.

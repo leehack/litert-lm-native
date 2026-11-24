@@ -121,6 +121,11 @@ class CApi:
     def session_config_create(self) -> int:
         return self._create("litert_lm_session_config_create")
 
+    def session_config_set_lora_path(self, config: int, path: Path) -> None:
+        name = "litert_lm_session_config_set_lora_path"
+        self._bind(name, self._setter_restype, [_VOID_P, _STR])
+        self._check(getattr(self.library, name)(config, os.fsencode(path)), name)
+
     def engine_create_session(self, engine: int, config: int | None) -> int:
         return self._create("litert_lm_engine_create_session", engine, config)
 

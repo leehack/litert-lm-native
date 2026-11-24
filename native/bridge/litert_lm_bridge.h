@@ -33,6 +33,14 @@ LITERT_LM_BRIDGE_EXPORT int32_t stream_proxy_has_allocation_failure(
 // lacks this export predates the marker and must be treated as 0.
 LITERT_LM_BRIDGE_EXPORT int32_t litert_lm_native_in_process_litert_abi_version(void);
 
+// Version 1 defines a text-LoRA capability probe. Consumers must refuse text
+// LoRA if either export is absent, the ABI is unknown, or support is not 1.
+LITERT_LM_BRIDGE_EXPORT int32_t litert_lm_native_text_lora_abi_version(void);
+
+// Returns 1 only for builds with qualified executor support for text adapters.
+// A successful litert_lm_session_config_set_lora_path call only opens the file.
+LITERT_LM_BRIDGE_EXPORT int32_t litert_lm_native_supports_text_lora(void);
+
 #ifdef __cplusplus
 }
 #endif

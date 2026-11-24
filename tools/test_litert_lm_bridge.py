@@ -54,6 +54,8 @@ class LiteRtLmBridgeTest(unittest.TestCase):
                     "stream_proxy_has_allocation_failure",
                     "stream_proxy_delete", "stream_proxy_free_string",
                     "litert_lm_native_in_process_litert_abi_version",
+                    "litert_lm_native_text_lora_abi_version",
+                    "litert_lm_native_supports_text_lora",
                 )})
 
     def test_asr_session_adapter_preserves_both_upstream_apis(self) -> None:
@@ -120,6 +122,9 @@ class LiteRtLmBridgeTest(unittest.TestCase):
         self._compile_and_run(stream_chunk_api=True, finish_reason_api=True,
                               in_process_litert=True)
 
+    def test_text_lora_support_requires_qualified_build(self) -> None:
+        self._compile_and_run(stream_chunk_api=True, text_lora_supported=True)
+
     def test_finish_reason_requires_stream_chunk_api(self) -> None:
         compiler = shutil.which("cc") or shutil.which("clang")
         if compiler is None:
@@ -133,7 +138,7 @@ class LiteRtLmBridgeTest(unittest.TestCase):
 
     def _compile_and_run(
         self, *, stream_chunk_api: bool, finish_reason_api: bool = False,
-        in_process_litert: bool = False,
+        in_process_litert: bool = False, text_lora_supported: bool = False,
     ) -> None:
         compiler = shutil.which("cc") or shutil.which("clang")
         if compiler is None:
@@ -154,6 +159,8 @@ class LiteRtLmBridgeTest(unittest.TestCase):
                 command.append("-DLITERT_LM_FINISH_REASON_API=1")
             if in_process_litert:
                 command.append("-DLITERT_LM_IN_PROCESS_LITERT=1")
+            if text_lora_supported:
+                command.append("-DLITERT_LM_TEXT_LORA_SUPPORTED=1")
             command.extend(
                 [
                     str(BRIDGE_SOURCE),

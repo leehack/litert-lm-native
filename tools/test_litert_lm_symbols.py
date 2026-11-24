@@ -41,13 +41,15 @@ class LiteRtLmSymbolsTest(unittest.TestCase):
         self.assertFalse(has_asr_bridge("v0.15.0-native.3"))
         self.assertTrue(has_asr_bridge("v0.16.0"))
 
-    def test_every_stream_bridge_export_is_required_for_every_tag(self) -> None:
+    def test_every_bridge_export_is_required(self) -> None:
         bridge = (Path(__file__).resolve().parents[1]
                   / "native/bridge/litert_lm_bridge.c").read_text(encoding="utf-8")
         exports = set(re.findall(
             r"^LITERT_LM_BRIDGE_EXPORT [^(]*?\b(\w+)\(", bridge, re.MULTILINE))
         self.assertIn("stream_proxy_finish_reason_abi_version", exports)
         self.assertIn("stream_proxy_get_finish_reason", exports)
+        self.assertIn("litert_lm_native_text_lora_abi_version", exports)
+        self.assertIn("litert_lm_native_supports_text_lora", exports)
         self.assertEqual({symbol.decode() for symbol in BRIDGE_SYMBOLS}, exports)
         for tag in ("v0.15.0", "v0.17.1", "v0.18.0"):
             self.assertTrue(set(BRIDGE_SYMBOLS).issubset(required_bridge_symbols(tag)))
