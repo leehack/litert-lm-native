@@ -51,13 +51,13 @@ class V020DecisionsTest(unittest.TestCase):
     def test_manifest_keeps_audited_carries_with_new_source_identities(self) -> None:
         previous = source_patch_manifest("v0.19.1")
         records = source_patch_manifest("v0.20.0")
-        self.assertEqual({r["id"] for r in records}, {r["id"] for r in previous})
-        self.assertEqual(len(records), len(previous) + 1)
+        self.assertEqual({r["id"] for r in records}, {r["id"] for r in previous} | {"windows-engine-fd"})
+        self.assertEqual(len(records), len(previous) + 2)
         self.assertEqual(len({(r["id"], r["source"]) for r in records}), len(records))
         by_id = {r["id"]: r for r in records}
         for patch_id in (
             "android-qwen3-gpu-safety", "huggingface-token-bytes",
-            "stream-finish-reason", "step-zero-state", "litert-stage-spatial-tensors",
+            "stream-finish-reason", "step-zero-state", "litert-stage-spatial-tensors", "windows-engine-fd",
         ):
             self.assertTrue(by_id[patch_id]["path"].endswith("_v020.patch"))
         self.assertEqual(

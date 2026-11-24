@@ -10,6 +10,7 @@ from litert_cpu_options_identifier_patch import cpu_options_identifier_patch_man
 from litert_stage_spatial_tensors_patch import stage_spatial_tensors_patch_manifest
 from step_zero_state_patch import manifest as step_zero_state_manifest
 from stream_finish_reason_patch import finish_reason_patch_manifest
+from windows_engine_fd_patch import manifest as windows_engine_fd_manifest
 from workspace_build_patch import workspace_build_patch_manifest
 from xnnpack_pf32_sme2_patch import xnnpack_pf32_patch_manifest
 from xnnpack_pqs8_qc4w_sme2_patch import xnnpack_qc4w_patch_manifest
@@ -87,6 +88,7 @@ def source_patch_manifest(compatibility_tag: str) -> list[dict]:
     return [*overlap, *container_patch_manifest(compatibility_tag),
         *finish_reason_patch_manifest(compatibility_tag),
         *android_gpu_safety_manifest(compatibility_tag),
+        *windows_engine_fd_manifest(compatibility_tag),
         *workspace_build_patch_manifest(compatibility_tag),
         *xnnpack_pf32_patch_manifest(compatibility_tag),
         *xnnpack_qc4w_patch_manifest(compatibility_tag),

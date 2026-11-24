@@ -374,7 +374,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                         )
                     self.assertEqual(workspace.read_text(encoding="utf-8"), drift)
 
-    def test_windows_v020_uses_a_native_patch_for_tensorflows_android_rules(self) -> None:
+    def test_windows_v020_uses_the_android_rules_and_engine_fd_patches(self) -> None:
         call = "tf_workspace2()\n"
         original = (
             f'TENSORFLOW_REF = "{V020_TENSORFLOW_REF}"\n'
@@ -389,6 +389,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             patch_huggingface_token_bytes=DEFAULT,
             patch_step_zero_state=DEFAULT,
             apply_android_gpu_safety=DEFAULT,
+            patch_windows_engine_fd=DEFAULT,
             materialize_git_lfs_libraries=DEFAULT,
             bazel_command=DEFAULT,
             prepare_bridge_package=DEFAULT,
@@ -397,6 +398,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
         ) as calls:
             root = Path(temp)
             workspace = root / "WORKSPACE"
+            fd_patch = calls["patch_windows_engine_fd"]
             calls["bazel_command"].return_value = ["bazel"]
             calls["materialize_git_lfs_libraries"].return_value = 0
             calls["prepare_bridge_package"].return_value = []
@@ -405,11 +407,14 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                                   ("windows", "v0.19.1")):
                 with self.subTest(platform=platform, tag=tag):
                     workspace.write_text(original, encoding="utf-8")
+                    fd_patch.reset_mock()
                     for _ in range(2):
                         with self.assertRaisesRegex(RuntimeError, "Bazel reached"):
                             build_upstream_runtime.build_runtime(root, platform, "x64", tag, None)
                     text = workspace.read_text(encoding="utf-8")
                     if (platform, tag) == ("windows", "v0.20.0"):
+                        self.assertEqual([call.args for call in fd_patch.call_args_list],
+                                         [(root, tag), (root, tag)])
                         name = 'name = "build_bazel_rules_android"'
                         self.assertEqual(text.count(name), 1)
                         self.assertLess(text.index(name), text.index(call))
@@ -418,6 +423,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                         self.assertIn('sha256 = "af84b69ab3d16dd1a41056286e6511f147a94ccea995603e13e934c915c1631c"', text)
                         self.assertNotIn("patch_cmds", text)
                     else:
+                        fd_patch.assert_not_called()
                         self.assertEqual(text, original)
 
     def test_source_root_verifies_resolved_archives_before_compilation(self) -> None:

@@ -63,6 +63,10 @@ from stream_finish_reason_patch import (
     sources_for as finish_reason_patch_sources,
 )
 from windows_dxc import stage_windows_dxc
+from windows_engine_fd_patch import (
+    apply as patch_windows_engine_fd,
+    require_windows_engine_fd_patch_decision,
+)
 import windows_runtime
 from workspace_build_patch import (
     PATCH_PATH as WORKSPACE_BUILD_PATCH_PATH,
@@ -681,7 +685,10 @@ def build_runtime(
     patch_stream_finish_reason(source_root, upstream_tag)
     patch_huggingface_token_bytes(source_root, upstream_tag)
     patch_step_zero_state(source_root, upstream_tag)
-    apply_android_gpu_safety(source_root, upstream_tag)
+    if platform == "windows" and require_windows_engine_fd_patch_decision(upstream_tag):
+        patch_windows_engine_fd(source_root, upstream_tag)
+    else:
+        apply_android_gpu_safety(source_root, upstream_tag)
     # v0.19.0 removed the prebuilt TopK sampler this path points at.
     if (platform == "ios" and has_asr_bridge(upstream_tag)
             and not is_at_least(upstream_tag, (0, 19, 0))):
