@@ -67,10 +67,11 @@ class FinishReasonSmokeTest(unittest.TestCase):
         )
 
     def test_abi_only_expects_version_one_only_for_patched_tags(self) -> None:
-        self.assertEqual(smoke.expected_abi_version("v0.18.0"), 1)
-        self.assertEqual(smoke.expected_abi_version("v0.17.1"), 0)
+        self.assertEqual(smoke.expected_abi_version("v0.20.0"), 1)
+        with self.assertRaisesRegex(RuntimeError, "historical native release ref"):
+            smoke.expected_abi_version("v0.19.1")
         with self.assertRaisesRegex(RuntimeError, "no explicit decision"):
-            smoke.expected_abi_version("v0.19.2")
+            smoke.expected_abi_version("v0.20.1")
 
     def test_abi_only_requires_the_tag_in_process_litert_marker(self) -> None:
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
@@ -83,7 +84,7 @@ class FinishReasonSmokeTest(unittest.TestCase):
                     self.assertEqual(smoke.in_process_litert_matches(library, tag), expected)
 
     def test_abi_only_main_fails_when_the_in_process_marker_mismatches(self) -> None:
-        tag = "v0.19.1"
+        tag = "v0.20.0"
         for marker, expected_status in ((1, 0), (0, 1)):
             library = SimpleNamespace(
                 stream_proxy_finish_reason_abi_version=Mock(
@@ -94,7 +95,8 @@ class FinishReasonSmokeTest(unittest.TestCase):
                     "--upstream-tag", tag]
             with self.subTest(marker=marker), \
                     patch.object(sys, "argv", argv), \
-                    patch.object(smoke, "bind", return_value=SimpleNamespace(library=library)), \
+                    patch.object(smoke, "bind", return_value=SimpleNamespace(
+                        library=library, api_version=lambda: (1, 1, 0))), \
                     redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(smoke.main(), expected_status)
 

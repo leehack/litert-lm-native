@@ -1,5 +1,8 @@
 # LiteRT-LM v0.18.0 carried-fix audit
 
+This is a historical record. The pre-v0.20.0 patch files and build commands
+below belong to their native release refs.
+
 For later baselines, see [v0.19 qualification](v019_qualification.md) and
 [v0.20 qualification](v020_qualification.md).
 Android C API 1.0 also has an owner [protobuf link-isolation policy](android_protobuf_isolation.md);

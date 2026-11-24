@@ -6,18 +6,14 @@ import subprocess
 import tempfile
 import unittest
 
-from android_gpu_safety_patch import SOURCES, apply, applies, digest, manifest, sources_for
+from android_gpu_safety_patch import SOURCES, apply, digest, manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class AndroidGpuSafetyTest(unittest.TestCase):
     def test_version_decision_and_manifest(self):
-        self.assertFalse(applies("v0.18.1"))
-        self.assertTrue(applies("v0.19.0"))
-        with self.assertRaises(RuntimeError):
-            applies("v0.20.1")
-        records = manifest("v0.19.0")
+        records = manifest("v0.20.0")
         self.assertEqual({r["source"] for r in records}, set(SOURCES))
         self.assertEqual(manifest("v0.18.1"), [])
 
@@ -29,7 +25,7 @@ class AndroidGpuSafetyTest(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("changed upstream\n")
             with self.assertRaisesRegex(RuntimeError, "requalify"):
-                apply(root, "v0.19.0")
+                apply(root, "v0.20.0")
 
     def test_policy_and_identity_compile_against_crypto(self):
         compiler = shutil.which("clang++") or shutil.which("c++")
@@ -56,8 +52,8 @@ class AndroidGpuSafetyTest(unittest.TestCase):
                          "set exact upstream source root to audit patch application")
     def test_exact_source_patch_and_idempotence(self):
         source = Path(os.environ["LITERT_GPU_SAFETY_SOURCE"])
-        tag = os.environ.get("LITERT_GPU_SAFETY_TAG", "v0.19.0")
-        sources = sources_for(tag)
+        tag = os.environ.get("LITERT_GPU_SAFETY_TAG", "v0.20.0")
+        sources = SOURCES
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             for name in sources:

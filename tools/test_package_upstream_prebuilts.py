@@ -152,7 +152,7 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
             "apply_prebuilt_override",
         ) as apply_override:
             count = package_upstream_prebuilts.apply_prebuilt_overrides(
-                "v0.16.0",
+                "v0.20.0",
                 platform="android",
                 arch="arm64",
             )
@@ -163,13 +163,13 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
         self.assertEqual(selected.platform, "android")
         self.assertEqual(selected.arch, "arm64")
 
-    def test_v017_override_is_applied_only_to_requested_android_target(self) -> None:
+    def test_v020_override_is_applied_only_to_requested_android_target(self) -> None:
         for arch in ("arm64", "x64"):
             with self.subTest(arch=arch), patch.object(
                 package_upstream_prebuilts, "apply_prebuilt_override"
             ) as apply_override:
                 count = package_upstream_prebuilts.apply_prebuilt_overrides(
-                    "v0.17.0", platform="android", arch=arch
+                    "v0.20.0", platform="android", arch=arch
                 )
                 self.assertEqual(count, 1)
                 apply_override.assert_called_once()
@@ -178,12 +178,12 @@ class PackageUpstreamPrebuiltsTest(unittest.TestCase):
 
         with patch.object(package_upstream_prebuilts, "apply_prebuilt_override") as apply_override:
             self.assertEqual(package_upstream_prebuilts.apply_prebuilt_overrides(
-                "v0.17.0", platform="macos", arch="arm64"
+                "v0.20.0", platform="macos", arch="arm64"
             ), 0)
             apply_override.assert_not_called()
 
-    def test_v017_bad_override_checksum_preserves_existing_library(self) -> None:
-        override = package_upstream_prebuilts.prebuilt_overrides("v0.17.0")[0]
+    def test_v020_bad_override_checksum_preserves_existing_library(self) -> None:
+        override = package_upstream_prebuilts.prebuilt_overrides("v0.20.0")[0]
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp)
             target = output / override.platform / override.arch / override.filename

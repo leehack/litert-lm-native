@@ -1,5 +1,8 @@
 # Untimed ASR overlap qualification (#673)
 
+The current v0.20.0 builder uses the port below with v0.20.0 source hashes.
+The v0.18 and v0.19 rebuild instructions refer to their native release refs.
+
 ## v0.19.0 port
 
 v0.19.0 moved the merger to `omni/speech2text` and replaced the word-count

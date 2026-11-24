@@ -16,24 +16,15 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 class HuggingFaceTokenBytesPatchTest(unittest.TestCase):
-    def test_unknown_releases_need_a_new_byte_contract_decision(self) -> None:
-        for tag in ("v0.17.0", "v0.18.1"):
-            self.assertFalse(carry.require_token_bytes_patch_decision(tag))
-            self.assertEqual(carry.token_bytes_patch_manifest(tag), [])
-        self.assertTrue(carry.require_token_bytes_patch_decision("v0.19.0"))
-        for tag in ("v0.19.2", "v0.20.1", "main"):
-            with self.subTest(tag=tag), self.assertRaisesRegex(RuntimeError, "no explicit decision"):
-                carry.require_token_bytes_patch_decision(tag)
-
     def test_patch_targets_and_manifest_pin_the_same_exact_sources(self) -> None:
         text = (REPO / carry.PATCH_PATH).read_text()
         self.assertEqual(set(re.findall(r"^\+\+\+ b/(\S+)$", text, re.MULTILINE)), set(carry.SOURCES))
         self.assertNotIn("sentencepiece_tokenizer", text)
-        records = carry.token_bytes_patch_manifest("v0.19.0")
+        records = carry.token_bytes_patch_manifest("v0.20.0")
         self.assertEqual({entry["source"] for entry in records}, set(carry.SOURCES))
         self.assertTrue(all(entry["sha256"] == hashlib.sha256(
             (REPO / carry.PATCH_PATH).read_bytes()).hexdigest() for entry in records))
-        self.assertEqual([entry for entry in source_patch_manifest("v0.19.0")
+        self.assertEqual([entry for entry in source_patch_manifest("v0.20.0")
                           if entry["id"] == "huggingface-token-bytes"], records)
 
     def test_packaged_grammar_controls_reject_incomplete_identity_inputs(self) -> None:
@@ -49,12 +40,12 @@ class HuggingFaceTokenBytesPatchTest(unittest.TestCase):
             for name in sources:
                 (root / name).write_bytes(b"post")
             with patch.object(carry, "SOURCES", sources), patch.object(carry, "apply_source_patch") as apply:
-                carry.apply(root, "v0.19.0")
+                carry.apply(root, "v0.20.0")
                 apply.assert_not_called()
                 for contents in (b"pre", b"unrecognized"):
                     (root / "one").write_bytes(contents)
                     with self.assertRaisesRegex(RuntimeError, "source changed"):
-                        carry.apply(root, "v0.19.0")
+                        carry.apply(root, "v0.20.0")
                     apply.assert_not_called()
 
     def test_successful_git_apply_must_match_every_postimage(self) -> None:
@@ -64,7 +55,7 @@ class HuggingFaceTokenBytesPatchTest(unittest.TestCase):
             sources = {"one": (hashlib.sha256(b"pre").hexdigest(), hashlib.sha256(b"post").hexdigest())}
             with patch.object(carry, "SOURCES", sources), patch.object(carry, "apply_source_patch"):
                 with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
-                    carry.apply(root, "v0.19.0")
+                    carry.apply(root, "v0.20.0")
 
     def test_nested_v020_source_applies_and_rejects_a_drifted_postimage(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -84,8 +75,8 @@ class HuggingFaceTokenBytesPatchTest(unittest.TestCase):
                 b"--- a/tokenizer.h\n+++ b/tokenizer.h\n"
                 b"@@ -1,2 +1,2 @@\n context\n-raw spelling\n+exact bytes\n"
             )
-            with (patch.object(carry, "V020_SOURCES", sources),
-                  patch.object(carry, "V020_PATCH_PATH", str(patch_file))):
+            with (patch.object(carry, "SOURCES", sources),
+                  patch.object(carry, "PATCH_PATH", str(patch_file))):
                 source.write_bytes(preimage)
                 carry.apply(root, "v0.20.0")
                 self.assertEqual(source.read_bytes(), postimage)

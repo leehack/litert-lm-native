@@ -1,15 +1,9 @@
 """Identity of the carried XNNPACK SME2 PQS8/QC4W GEMM opt-out (#84)."""
 import hashlib
-import re
 from pathlib import Path
 
-from xnnpack_pf32_sme2_patch import (
-    AUDITED_TAGS,
-    SOURCES as PF32_SOURCES,
-    V019_SOURCES as PF32_V019_SOURCES,
-    V019_TAGS,
-    commit_for,
-)
+from source_patch_utils import active_source_carries
+from xnnpack_pf32_sme2_patch import XNNPACK_COMMIT, SOURCES as PF32_SOURCES
 
 PATCH_PATH = "native/bridge/xnnpack_pqs8_qc4w_sme2.patch"
 # XNNPACK 76fa737a0 routes int8-activation, int4-weight fully connected layers
@@ -23,47 +17,13 @@ DISABLED_COMMIT = "76fa737a0b70fa506226b23432633e3781c2a470"
 SOURCES = {
     "src/configs/gemm-config.c": (
         PF32_SOURCES["src/configs/gemm-config.c"][1],
-        "fb5075c9e04c562d5c6ed702f18a68117682dd85c3286c9b2e2495c6b44d3f26",
-    ),
-}
-V019_SOURCES = {
-    "src/configs/gemm-config.c": (
-        PF32_V019_SOURCES["src/configs/gemm-config.c"][1],
-        "0f843f1b2ad56193aee22382a56d279c9f904534c4b9e2942e5e77585016662f",
-    ),
-}
-
-V020_SOURCES = {
-    "src/configs/gemm-config.c": (
-        "0eff752814ec351176c48461832907ab8841c81d06c330483dae1cf45d233a9c",
         "3bad8691babc6044975b8720fd88be0e7e420322533330f108df2901ca15110d",
     ),
 }
 
 
-def sources_for(compatibility_tag: str) -> dict[str, tuple[str, str]]:
-    if compatibility_tag == "v0.20.0":
-        return V020_SOURCES
-    return V019_SOURCES if compatibility_tag in V019_TAGS else SOURCES
-
-
-def require_xnnpack_qc4w_patch_decision(compatibility_tag: str) -> bool:
-    """Returns whether the opt-out applies; newer sources need a decision."""
-    if compatibility_tag in AUDITED_TAGS:
-        return True
-    version = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", compatibility_tag)
-    if version and tuple(map(int, version.groups())) <= (0, 18, 0):
-        return False
-    raise RuntimeError(
-        f"XNNPACK PQS8/QC4W SME2 opt-out has no explicit decision for "
-        f"{compatibility_tag}; check the pinned XNNPACK against "
-        "google/XNNPACK#11793, then record the decision by adding the tag to "
-        "AUDITED_TAGS in tools/xnnpack_pf32_sme2_patch.py (shared with the "
-        "PF32 rollback, so audit both) and in docs/upstream_patch_audit.md")
-
-
 def xnnpack_qc4w_patch_manifest(compatibility_tag: str) -> list[dict]:
-    if not require_xnnpack_qc4w_patch_decision(compatibility_tag):
+    if not active_source_carries(compatibility_tag):
         return []
     patch_sha256 = hashlib.sha256(
         (Path(__file__).resolve().parents[1] / PATCH_PATH).read_bytes()
@@ -72,8 +32,8 @@ def xnnpack_qc4w_patch_manifest(compatibility_tag: str) -> list[dict]:
         "id": "xnnpack-pqs8-qc4w-sme2",
         "path": PATCH_PATH,
         "sha256": patch_sha256,
-        "source": f"XNNPACK@{commit_for(compatibility_tag)}/{source}",
+        "source": f"XNNPACK@{XNNPACK_COMMIT}/{source}",
         "preimageSha256Lf": preimage,
         "postimageSha256Lf": postimage,
         "scope": "source-built runtimes only; excludes official upstream prebuilts",
-    } for source, (preimage, postimage) in sources_for(compatibility_tag).items()]
+    } for source, (preimage, postimage) in SOURCES.items()]

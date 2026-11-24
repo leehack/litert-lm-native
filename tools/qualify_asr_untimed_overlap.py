@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from asr_overlap_patch import merger_source
+from asr_overlap_patch import MERGER_SOURCE
 from build_upstream_runtime import patch_asr_untimed_overlap
 
 REPO = Path(__file__).resolve().parents[1]
@@ -20,7 +20,7 @@ sys.path.insert(0, str(REPO / "tests/asr_overlap"))
 from sim import utter, windows  # noqa: E402
 
 
-QUALIFIED_TAG = "v0.19.0"
+QUALIFIED_TAG = "v0.20.0"
 ABSL_PACKAGES = (
     "absl_status", "absl_statusor", "absl_status_macros", "absl_strings",
     "absl_synchronization", "absl_log_internal_message", "absl_vlog_config_internal",
@@ -51,15 +51,14 @@ def compiler_command(source: Path, work: Path) -> list[str]:
 
 
 @lru_cache(maxsize=None)
-def compile_shared_objects(source: Path, work: Path, tag: str) -> tuple[Path, ...]:
+def compile_shared_objects(source: Path, work: Path) -> tuple[Path, ...]:
     # Reuse only within this process, never stale objects from a previous run.
     # Every mutant still compiles its own actual merger implementation.
     outputs = []
-    merger_dir = Path(merger_source(tag)).parent
-    text_utils = "omni/utils" if tag == "v0.20.0" else "omni/base"
+    merger_dir = Path(MERGER_SOURCE).parent
     for name, unit in (("driver", REPO / "native/bridge/litert_lm_asr_merger_test.cc"),
                        ("levenshtein", source / merger_dir / "levenshtein_align.cc"),
-                       ("text_utils", source / text_utils / "text_utils.cc")):
+                       ("text_utils", source / "omni/utils/text_utils.cc")):
         output = work / (name + ".o")
         subprocess.run([*compiler_command(source, work), "-c", str(unit),
                         "-o", str(output)], check=True)
@@ -67,8 +66,8 @@ def compile_shared_objects(source: Path, work: Path, tag: str) -> tuple[Path, ..
     return tuple(outputs)
 
 
-def compile_driver(source: Path, work: Path, merger: Path, output: Path, tag: str) -> None:
-    shared = compile_shared_objects(source, work, tag)
+def compile_driver(source: Path, work: Path, merger: Path, output: Path) -> None:
+    shared = compile_shared_objects(source, work)
     _, ldflags = abseil_flags()
     subprocess.run([*compiler_command(source, work), str(merger),
                     *map(str, shared), *ldflags, "-o", str(output)], check=True)
@@ -77,7 +76,7 @@ def compile_driver(source: Path, work: Path, merger: Path, output: Path, tag: st
 def compile_replays(source: Path, work: Path, tag: str) -> tuple[Path, Path]:
     work.mkdir(parents=True, exist_ok=True)
     patched = work / "patched"
-    merger = merger_source(tag)
+    merger = MERGER_SOURCE
     target = patched / merger
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source / merger, target)
@@ -91,7 +90,7 @@ def compile_replays(source: Path, work: Path, tag: str) -> tuple[Path, Path]:
     outputs = []
     for name, unit in (("upstream", source / merger), ("fixed", target)):
         output = work / name
-        compile_driver(source, work, unit, output, tag)
+        compile_driver(source, work, unit, output)
         outputs.append(output)
     subprocess.run([str(outputs[1])], check=True)
     return tuple(outputs)
@@ -231,7 +230,7 @@ def check_mutations(source: Path, work: Path, upstream: Path, fixed: Path,
                     clean_cache: dict, equivalence_count: int, tag: str) -> dict:
     # Extends audit mut/mut.py. Mutations change the real merger source, then
     # compile and run the same native tests and negative differential controls.
-    text = (work / "patched" / merger_source(tag)).read_text()
+    text = (work / "patched" / MERGER_SOURCE).read_text()
     mutations = {
         "M4_one_word": ("min_anchor_words = 2", "min_anchor_words = 1"),
         "M5_three_words": ("min_anchor_words = 2", "min_anchor_words = 3"),
@@ -265,7 +264,7 @@ def check_mutations(source: Path, work: Path, upstream: Path, fixed: Path,
         mutant = work / (name + ".cc")
         mutant.write_text(variant)
         binary = work / name
-        compile_driver(source, work, mutant, binary, tag)
+        compile_driver(source, work, mutant, binary)
         native = subprocess.run([str(binary)], capture_output=True, text=True)
         negative = False
         try:

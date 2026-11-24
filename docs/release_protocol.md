@@ -61,6 +61,12 @@ and immediate lower same-line predecessor, reuse or decrease of a rebuild number
 legacy output forms, partial publication matrices, and publication without the
 required real-model smoke evidence.
 
+Source builds at the current ref use the v0.20.0 compatibility baseline.
+For an older release, use the recorded native commit and its workflow ref
+for reproduction, including validation of historical source patch records.
+The released assets and the frozen legacy metadata fixtures retain their
+original provenance.
+
 Stable manual preflight applies the same consumability decision as upstream
 detection before any of the eight platform builds start. A metadata-only tag at
 an already packaged commit is rejected unless the requested native identity is

@@ -183,6 +183,10 @@ Development builds use `g<first-12-of-full-upstream-SHA>` and development
 rebuilds append the same compact `-N`. Historical `-native.N` releases remain
 immutable and consumable but are never emitted again.
 
+The current source builder qualifies LiteRT-LM v0.20.0. Reproduce an older
+release from its native tag and use the tooling at that ref. The released
+archives and metadata remain available for existing consumers.
+
 When moving to a new LiteRT-LM tag:
 
 1. Let `Detect Upstream Release` prepare exact inputs, or resolve the exact

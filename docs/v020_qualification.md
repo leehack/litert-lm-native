@@ -21,7 +21,9 @@ archive identities, Bazel repository tree hashes and patched postimages.
 | XNNPACK PF32 and PQS8/QC4W | Keep both in order. The pinned XNNPACK archive matches all four PF32 preimages, and its PF32-patched `gemm-config.c` matches the QC4W preimage. The original multi-threaded SME2 triggers remain unqualified without the carries. |
 | iOS Metal framework path | Retire the dynamic lookup patch for v0.20.0. The upstream registry tries a statically registered GPU accelerator before dynamic lookup. Both iOS arm64 slices from run [45360694287](https://github.com/leehack/litert-lm-native/actions/runs/45360694287) contain `LiteRtStaticLinkedAcceleratorGpuDef` and `GpuMetalAccelerator::CreateDelegate`, link system Metal, and ship no separate accelerator binary. This verifies the linked path and bundle layout. |
 | Android Dawn | Keep both checksum-pinned rollback binaries pending Pixel Mali qualification. The validator compares the linked Android runtime's Dawn imports with the final packaged Dawn exports. |
-| Earlier retired carries | ASR container routing, the v0.18.1 Bazel repair and CPU options identifier rollback stay inactive. The tag retains the upstream SentencePiece patch and initializes GPU environment options before OpenCL. |
+| Windows Android rules repository | Keep. TensorFlow still invokes Bash and `sed` for four repository edits. The native Bazel patch produces the same four files from the pinned archive. |
+| Windows C API file descriptor | Keep. The pinned `c/engine.cc` still has a directive inside a macro argument. The carry selects the platform handle before invoking the macro. |
+| Earlier retired carries | ASR container routing, the v0.18.1 Bazel repair and CPU options identifier rollback were removed from the current builder. The tag retains the upstream SentencePiece patch and initializes GPU environment options before OpenCL. Historical builds use their recorded native release refs. |
 
 
 ### macOS lookahead retirement evidence

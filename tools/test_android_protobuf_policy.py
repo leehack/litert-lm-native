@@ -208,9 +208,8 @@ namespace unrelated { int cpp_plugin_helper() { return 17; } }
             old = self.compile(root / 'old', 'arm64', private=False)
             private = self.compile(root / 'private', 'arm64')
             for source_root in (True, False):
-                for tag, output, rejected in (('v0.19.0', old, True),
-                                              ('v0.19.0', private, False),
-                                              ('v0.18.0', old, False)):
+                for tag, output, rejected in (('v0.20.0', old, True),
+                                              ('v0.20.0', private, False)):
                     with self.subTest(source_root=source_root, tag=tag, rejected=rejected):
                         args = ['build_upstream_runtime.py', '--upstream-tag', tag,
                                 '--platform', 'android', '--arch', 'arm64']

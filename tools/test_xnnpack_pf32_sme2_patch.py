@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import re
-import tarfile
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import build_upstream_runtime as build
 from asr_overlap_patch import source_patch_manifest
-from test_workspace_build_patch import FIXTURES, stage_v0181
 from xnnpack_pf32_sme2_patch import (
     ARCHIVE,
     PATCH_PATH,
@@ -20,7 +17,6 @@ from xnnpack_pf32_sme2_patch import (
     XNNPACK_COMMIT,
     XNNPACK_SHA256,
     declare_patched_xnnpack,
-    require_xnnpack_pf32_patch_decision,
     xnnpack_pf32_patch_manifest,
 )
 
@@ -29,26 +25,15 @@ PATCH = (REPO / PATCH_PATH).read_text(encoding="utf-8")
 TF_ARCHIVE = 'http_archive(\n    name = "org_tensorflow",\n'
 
 
-def repaired_v0181_workspace() -> str:
-    with tempfile.TemporaryDirectory() as temp:
-        root = Path(temp)
-        stage_v0181(root)
-        build.patch_workspace_build(root, "v0.18.1")
-        return (root / "WORKSPACE").read_text(encoding="utf-8")
+
+WORKSPACE = (
+    'load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")\n'
+    f'TENSORFLOW_REF = "{TENSORFLOW_REF}"\n'
+    '# TensorFlow\n' + TF_ARCHIVE + ')\ntf_workspace2()\n'
+)
 
 
 class XnnpackPf32Sme2PatchTest(unittest.TestCase):
-    def test_decision_applies_only_to_v0181(self) -> None:
-        for tag in ("v0.17.1", "v0.18.0"):
-            self.assertFalse(require_xnnpack_pf32_patch_decision(tag))
-            self.assertEqual(xnnpack_pf32_patch_manifest(tag), [])
-        self.assertTrue(require_xnnpack_pf32_patch_decision("v0.18.1"))
-        for tag in ("v0.18.2", "v0.19.2", "main"):
-            with self.subTest(tag=tag), self.assertRaisesRegex(
-                RuntimeError, "no explicit decision"
-            ):
-                require_xnnpack_pf32_patch_decision(tag)
-
     def test_patch_restores_only_the_previous_pf32_sme2_kernels(self) -> None:
         files = re.findall(r"^diff --git a/(\S+) b/\1$", PATCH, re.MULTILINE)
         self.assertEqual(files, list(SOURCES))
@@ -81,7 +66,7 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
         self.assertNotIn("Copyright", added + removed)
 
     def test_workspace_declares_the_tensorflow_pinned_xnnpack_before_tensorflow(self) -> None:
-        workspace = repaired_v0181_workspace()
+        workspace = WORKSPACE
         patched = declare_patched_xnnpack(workspace)
         self.assertEqual(declare_patched_xnnpack(patched), patched)
         self.assertEqual(patched.replace(ARCHIVE, "", 1), workspace)
@@ -99,7 +84,7 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
                       (REPO / "native/bridge/BUILD.bazel").read_text(encoding="utf-8"))
 
     def test_workspace_declaration_fails_closed(self) -> None:
-        workspace = repaired_v0181_workspace()
+        workspace = WORKSPACE
         moved = workspace.replace(TENSORFLOW_REF, "0" * 40)
         existing = workspace.replace(TF_ARCHIVE, 'http_archive(\n    name = "XNNPACK",\n)\n' + TF_ARCHIVE)
         missing = workspace.replace("# TensorFlow\n", "")
@@ -108,32 +93,6 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
                               (missing, "Expected one TensorFlow archive")):
             with self.subTest(message=message), self.assertRaisesRegex(RuntimeError, message):
                 declare_patched_xnnpack(text)
-
-    def test_download_declares_xnnpack_only_for_v0181(self) -> None:
-        def fake_download(_url, path, **_kwargs):
-            with tarfile.open(path, "w:gz") as archive:
-                for source, fixture in FIXTURES.items():
-                    data = (REPO / "tools/fixtures" / fixture).read_bytes()
-                    info = tarfile.TarInfo(f"LiteRT-LM-v0.18.1/{source}")
-                    info.size = len(data)
-                    archive.addfile(info, io.BytesIO(data))
-
-        with tempfile.TemporaryDirectory() as temp, \
-             patch.object(build, "download_to_path", side_effect=fake_download):
-            root = build.download_upstream("v0.18.1", "v0.18.1", Path(temp))
-            self.assertIn(ARCHIVE, (root / "WORKSPACE").read_text(encoding="utf-8"))
-        for tag, enabled in (("v0.18.0", False), ("v0.18.1", True)):
-            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
-                source = Path(temp) / "source"
-                source.mkdir()
-                (source / "WORKSPACE").write_text("", encoding="utf-8")
-                with patch.object(build, "download_to_path"), \
-                     patch.object(build.tarfile, "open"), \
-                     patch.object(build, "patch_workspace_build"), \
-                     patch.object(build, "needs_gpu_environment_teardown_patch", return_value=False), \
-                     patch.object(build, "patch_upstream_workspace") as apply:
-                    build.download_upstream(tag, tag, Path(temp))
-                self.assertEqual(apply.call_args.kwargs["patch_xnnpack_pf32_sme2"], enabled)
 
     def test_postimage_check_reads_every_source_in_the_bazel_external_repository(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -146,41 +105,19 @@ class XnnpackPf32Sme2PatchTest(unittest.TestCase):
             fake = {name: postimage for name, (_, postimage) in fake.items()}
             with patch.object(build, "xnnpack_postimages", return_value=fake):
                 with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
-                    build.verify_xnnpack_postimages(source_root, "v0.18.1")
+                    build.verify_xnnpack_postimages(source_root)
                 for name in fake:
                     (repository / name).parent.mkdir(parents=True, exist_ok=True)
                     (repository / name).write_bytes(b"patched\r\n")
-                build.verify_xnnpack_postimages(source_root, "v0.18.1")
+                build.verify_xnnpack_postimages(source_root)
                 (repository / "b/c.c").write_bytes(b"unpatched\n")
                 with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
-                    build.verify_xnnpack_postimages(source_root, "v0.18.1")
-
-    def test_build_checks_the_postimage_after_bazel_only_for_v0181(self) -> None:
-        for tag, checked in (("v0.18.0", False), ("v0.18.1", True)):
-            calls = MagicMock()
-            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp, \
-                 patch.object(build, "verify_carried_dependency_pins"), \
-                 patch.object(build, "fetch_audited_archives"), \
-                 patch.object(build, "patch_asr_untimed_overlap"), \
-                 patch.object(build, "patch_asr_litertlm_container"), \
-                 patch.object(build, "patch_stream_finish_reason"), \
-                 patch.object(build, "materialize_git_lfs_libraries", return_value=0), \
-                 patch.object(build, "bazel_command", return_value=["bazel"]), \
-                 patch.object(build, "run", calls.run), \
-                 patch.object(build, "verify_xnnpack_postimages", calls.verify), \
-                 patch.object(build, "verify_cpu_options_identifier_postimage"):
-                root = Path(temp)
-                with self.assertRaisesRegex(RuntimeError, "Expected build output missing"):
-                    build.build_runtime(root, "macos", "arm64", tag, "2")
-                names = [name for name, _, _ in calls.mock_calls]
-                self.assertEqual(names, ["run", "verify"] if checked else ["run"])
-                if checked:
-                    calls.verify.assert_called_once_with(root, tag)
+                    build.verify_xnnpack_postimages(source_root)
 
     def test_manifest_records_each_xnnpack_source_before_the_qc4w_opt_out(self) -> None:
-        records = [r for r in source_patch_manifest("v0.18.1")
-                   if r["id"] not in {"xnnpack-pqs8-qc4w-sme2", "litert-cpu-options-identifier"}]
-        self.assertEqual(records[-len(SOURCES):], xnnpack_pf32_patch_manifest("v0.18.1"))
+        records = [r for r in source_patch_manifest("v0.20.0")
+                   if r["id"] == "xnnpack-pf32-sme2"]
+        self.assertEqual(records[-len(SOURCES):], xnnpack_pf32_patch_manifest("v0.20.0"))
         patch_sha256 = hashlib.sha256((REPO / PATCH_PATH).read_bytes()).hexdigest()
         for record, (source, hashes) in zip(records[-len(SOURCES):], SOURCES.items()):
             self.assertEqual(record["id"], "xnnpack-pf32-sme2")

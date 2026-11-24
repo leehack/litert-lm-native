@@ -12,8 +12,6 @@ from stream_finish_reason_patch import (
     BAZEL_DEFINE,
     PATCH_PATH,
     SOURCES,
-    finish_reason_patch_manifest,
-    require_finish_reason_patch_decision,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -23,24 +21,11 @@ BRIDGE_BUILD = (REPO_ROOT / "native/bridge/BUILD.bazel").read_text(encoding="utf
 
 
 class StreamFinishReasonPatchTest(unittest.TestCase):
-    def test_decision_applies_only_to_audited_v018(self) -> None:
-        for tag in ("v0.15.0", "v0.16.1", "v0.17.1"):
-            self.assertFalse(require_finish_reason_patch_decision(tag))
-            self.assertEqual(finish_reason_patch_manifest(tag), [])
-        for tag in ("v0.18.0", "v0.18.1"):
-            self.assertTrue(require_finish_reason_patch_decision(tag))
-        for tag in ("v0.18.2", "v0.19.2", "main"):
-            with self.subTest(tag=tag), self.assertRaisesRegex(
-                RuntimeError, "no explicit decision"
-            ):
-                require_finish_reason_patch_decision(tag)
-
-    def test_patch_is_plain_and_touches_exactly_the_pinned_sources(self) -> None:
+    def test_patch_touches_exactly_the_pinned_sources(self) -> None:
         targets = re.findall(r"^\+\+\+ b/(\S+)$", PATCH, re.MULTILINE)
         sources = re.findall(r"^--- a/(\S+)$", PATCH, re.MULTILINE)
         self.assertEqual(sorted(targets), sorted(SOURCES))
         self.assertEqual(sources, targets)
-        self.assertNotRegex(PATCH, r"(?m)^(diff --git|index )")
 
     def test_runtime_and_bridge_share_finish_reason_wire_values(self) -> None:
         runtime = {
@@ -68,18 +53,18 @@ class StreamFinishReasonPatchTest(unittest.TestCase):
         self.assertIn(f'define_values = {{"{key}": "{value}"}}', BRIDGE_BUILD)
         self.assertIn('":finish_reason_api": ["LITERT_LM_FINISH_REASON_API=1"]',
                       BRIDGE_BUILD)
-        self.assertIn('"stream_finish_reason.patch"', BRIDGE_BUILD)
+        self.assertIn('name = "finish_reason_api"', BRIDGE_BUILD)
 
-    def test_build_applies_patch_and_define_only_for_v018(self) -> None:
-        for tag, expected in (("v0.17.1", False), ("v0.18.0", True), ("v0.18.1", True)):
+    def test_build_applies_patch_and_enables_finish_reason(self) -> None:
+        for tag, expected in (("v0.20.0", True),):
             with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
                      patch.object(build_upstream_runtime, "verify_carried_dependency_pins"), \
                      patch.object(build_upstream_runtime, "fetch_audited_archives"), \
+                     patch.object(build_upstream_runtime, "patch_huggingface_token_bytes"), \
+                     patch.object(build_upstream_runtime, "apply_android_gpu_safety"), \
                      patch.object(build_upstream_runtime, "patch_asr_untimed_overlap"), \
-                     patch.object(build_upstream_runtime, "patch_asr_litertlm_container"), \
-                     patch.object(build_upstream_runtime, "patch_upstream_ios_sampler_path"), \
                      patch.object(build_upstream_runtime, "patch_stream_finish_reason") as apply, \
                      patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]), \
                      patch.object(build_upstream_runtime, "run", side_effect=RuntimeError("captured build")) as run:
@@ -94,9 +79,9 @@ class StreamFinishReasonPatchTest(unittest.TestCase):
             for name in SOURCES:
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("// not the audited v0.18.0 source\n")
+                path.write_text("// not the audited v0.20.0 source\n")
             with self.assertRaisesRegex(RuntimeError, "requalify the stream finish-reason patch"):
-                build_upstream_runtime.patch_stream_finish_reason(root, "v0.18.0")
+                build_upstream_runtime.patch_stream_finish_reason(root, "v0.20.0")
             build_upstream_runtime.patch_stream_finish_reason(root, "v0.17.1")
 
     def _fake_sources(self, root: Path) -> dict[str, tuple[str, str]]:
@@ -118,9 +103,9 @@ class StreamFinishReasonPatchTest(unittest.TestCase):
                 for name in sources:
                     (root / name).write_text(f"{git_apply_writes} {name}\n")
 
-        with patch.object(build_upstream_runtime, "finish_reason_patch_sources", return_value=sources), \
+        with patch.object(build_upstream_runtime, "FINISH_REASON_SOURCES", sources), \
              patch.object(build_upstream_runtime.subprocess, "run", side_effect=git_apply) as run:
-            build_upstream_runtime.patch_stream_finish_reason(root, "v0.18.0")
+            build_upstream_runtime.patch_stream_finish_reason(root, "v0.20.0")
         return run
 
     def test_patch_applies_to_preimage_and_checks_postimage(self) -> None:

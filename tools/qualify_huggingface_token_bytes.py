@@ -11,7 +11,7 @@ import shlex
 import shutil
 import subprocess
 
-from huggingface_token_bytes_patch import apply as apply_token_bytes_patch, sources_for
+from huggingface_token_bytes_patch import apply as apply_token_bytes_patch, SOURCES
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -80,7 +80,7 @@ def mutation_controls(compiler: str, cflags: list[str], work_dir: Path) -> list[
 
 def qualify(work_dir: Path, tokenizer_json: Path | None = None,
             source_root: Path | None = None, mutations: bool = False, *,
-            upstream_tag: str = "v0.19.0", runtime_library: Path | None = None,
+            upstream_tag: str = "v0.20.0", runtime_library: Path | None = None,
             llguidance_include: Path | None = None,
             schema_json: Path | None = None,
             observed_output: Path | None = None) -> dict:
@@ -129,7 +129,7 @@ def qualify(work_dir: Path, tokenizer_json: Path | None = None,
         patched = work_dir / "patched"
         headers = ["runtime/components/constrained_decoding/" + name for name in
                    ("llg_constraint_provider.h", "llg_constraint_config.h", "constraint_provider.h")]
-        for name in [*sources_for(upstream_tag), *headers]:
+        for name in [*SOURCES, *headers]:
             target = patched / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source_root / name, target)
@@ -264,7 +264,7 @@ def main() -> None:
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--tokenizer-json", type=Path)
     parser.add_argument("--source-root", type=Path)
-    parser.add_argument("--upstream-tag", default="v0.19.0")
+    parser.add_argument("--upstream-tag", default="v0.20.0")
     parser.add_argument("--mutations", action="store_true")
     parser.add_argument("--runtime-library", type=Path)
     parser.add_argument("--llguidance-include", type=Path)
