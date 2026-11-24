@@ -49,6 +49,7 @@ class PackageReleaseTest(unittest.TestCase):
                              + ["android-qwen3-gpu-safety"] * 2 + ["android-automatic-gpu"] * 2 + ["windows-engine-fd"]
                              + ["xnnpack-pf32-sme2"] * 4 + ["xnnpack-pqs8-qc4w-sme2"]
                              + ["huggingface-token-bytes"] * 6
+                             + ["litert-xnnpack-fresh-cache"] * 2
                              + ["litert-stage-spatial-tensors"] * 4)
             finish_records = [r for r in records if r["id"] == "stream-finish-reason"]
             finish_reason_sha256 = hashlib.sha256(

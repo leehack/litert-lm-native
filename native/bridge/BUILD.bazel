@@ -33,6 +33,7 @@ cc_library(
 exports_files([
     "asr_untimed_overlap_v019.patch",
     "litert_stage_spatial_tensors_v020.patch",
+    "litert_xnnpack_fresh_cache_v020.patch",
     "rules_android_tensorflow_v020.patch",
     "xnnpack_pf32_sme2.patch",
     "xnnpack_pqs8_qc4w_sme2.patch",

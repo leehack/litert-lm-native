@@ -6,6 +6,7 @@ from android_automatic_gpu_patch import manifest as android_automatic_gpu_manife
 from android_gpu_safety_patch import manifest as android_gpu_safety_manifest
 from huggingface_token_bytes_patch import token_bytes_patch_manifest
 from litert_stage_spatial_tensors_patch import stage_spatial_tensors_patch_manifest
+from litert_xnnpack_fresh_cache_patch import fresh_cache_patch_manifest
 from source_patch_utils import active_source_carries
 from stream_finish_reason_patch import finish_reason_patch_manifest
 from windows_engine_fd_patch import manifest as windows_engine_fd_manifest
@@ -43,4 +44,5 @@ def source_patch_manifest(compatibility_tag: str) -> list[dict]:
         *xnnpack_pf32_patch_manifest(compatibility_tag),
         *xnnpack_qc4w_patch_manifest(compatibility_tag),
         *token_bytes_patch_manifest(compatibility_tag),
+        *fresh_cache_patch_manifest(compatibility_tag),
         *stage_spatial_tensors_patch_manifest(compatibility_tag)]

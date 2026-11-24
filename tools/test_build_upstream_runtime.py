@@ -22,6 +22,7 @@ from litert_stage_spatial_tensors_patch import (
     LITERT_REF,
     PATCH_PATH as STAGING_PATCH,
 )
+from litert_xnnpack_fresh_cache_patch import PATCH_PATH as FRESH_CACHE_PATCH
 from test_runtime_dependency_utils import write_elf_with_exports
 from xnnpack_pf32_sme2_patch import (
     TENSORFLOW_ARCHIVE,
@@ -216,7 +217,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             self.assertNotIn("..", archive.name)
             self.assertRegex(archive.name, r"^LiteRT-LM-[0-9a-f]{64}\.tar\.gz$")
 
-    def test_workspace_applies_spatial_staging_only_to_the_audited_pin(self) -> None:
+    def test_workspace_applies_litert_carries_only_to_the_audited_pin(self) -> None:
         original = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + (
             f'http_archive(\n    name = "minizip",\n    url = "{build_upstream_runtime.ZLIB_URL}",\n)\n'
         )
@@ -224,10 +225,11 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             root = Path(temp)
             workspace = root / "WORKSPACE"
             workspace.write_text(original, encoding="utf-8")
-            build_upstream_runtime.patch_upstream_workspace(root, patch_stage_spatial_tensors=True)
-            build_upstream_runtime.patch_upstream_workspace(root, patch_stage_spatial_tensors=True)
-            marker = f'"@//bridge:{Path(STAGING_PATCH).name}"'
-            self.assertEqual(workspace.read_text(encoding="utf-8").count(marker), 1)
+            build_upstream_runtime.patch_upstream_workspace(root, patch_litert_carries=True)
+            build_upstream_runtime.patch_upstream_workspace(root, patch_litert_carries=True)
+            for path in (STAGING_PATCH, FRESH_CACHE_PATCH):
+                marker = f'"@//bridge:{Path(path).name}"'
+                self.assertEqual(workspace.read_text(encoding="utf-8").count(marker), 1)
 
             for pin, digest in (("LITERT_REF", LITERT_REF),
                                 ("LITERT_SHA256", LITERT_ARCHIVE_SHA256)):
@@ -236,7 +238,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     workspace.write_text(drift, encoding="utf-8")
                     with self.assertRaisesRegex(RuntimeError, f"Unexpected {pin}"):
                         build_upstream_runtime.patch_upstream_workspace(
-                            root, patch_stage_spatial_tensors=True,
+                            root, patch_litert_carries=True,
                         )
                     self.assertEqual(workspace.read_text(encoding="utf-8"), drift)
 
@@ -590,7 +592,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     build_upstream_runtime.main()
                 calls["run"].assert_not_called()
 
-    def test_spatial_staging_postimages_fail_on_drift_or_missing_files(self) -> None:
+    def test_litert_carry_postimages_fail_on_drift_or_missing_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             output_base = Path(temp) / "output_base"
             source_root = Path(temp) / "source"
@@ -600,7 +602,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             (source_root / "bazel-out").symlink_to(exec_root / "bazel-out", target_is_directory=True)
             sources = {}
             files = []
-            for name in build_upstream_runtime.STAGING_SOURCES:
+            for name in build_upstream_runtime.STAGING_SOURCES | build_upstream_runtime.FRESH_CACHE_SOURCES:
                 postimage = name.encode() + b"\n"
                 sources[name] = ("", build_upstream_runtime.source_sha256(postimage))
                 file = output_base / "external" / "litert" / name
@@ -608,17 +610,21 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 file.write_bytes(postimage.replace(b"\n", b"\r\n"))
                 files.append(file)
 
-            with patch.object(build_upstream_runtime, "STAGING_SOURCES", sources):
-                build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
+            with patch.multiple(
+                build_upstream_runtime,
+                STAGING_SOURCES={name: sources[name] for name in build_upstream_runtime.STAGING_SOURCES},
+                FRESH_CACHE_SOURCES={name: sources[name] for name in build_upstream_runtime.FRESH_CACHE_SOURCES},
+            ):
+                build_upstream_runtime.verify_litert_carry_postimages(source_root)
                 for file in files:
                     with self.subTest(file=file.name):
                         original = file.read_bytes()
                         file.write_bytes(b"wrong postimage")
                         with self.assertRaisesRegex(RuntimeError, f"postimage mismatch for .*{file.name}"):
-                            build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
+                            build_upstream_runtime.verify_litert_carry_postimages(source_root)
                         file.unlink()
                         with self.assertRaisesRegex(RuntimeError, f"postimage mismatch for .*{file.name}"):
-                            build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
+                            build_upstream_runtime.verify_litert_carry_postimages(source_root)
                         file.write_bytes(original)
 
     def test_windows_stages_materialized_runtime_dlls_only(self) -> None:

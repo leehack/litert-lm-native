@@ -1,0 +1,77 @@
+diff --git a/tflite/delegates/xnnpack/weight_cache.cc b/tflite/delegates/xnnpack/weight_cache.cc
+index 9ae15c2..0a96eb6 100644
+--- a/tflite/delegates/xnnpack/weight_cache.cc
++++ b/tflite/delegates/xnnpack/weight_cache.cc
+@@ -131,6 +131,11 @@ WeightCacheBuilder& WeightCacheBuilder::operator=(WeightCacheBuilder&& other) {
+ }
+ 
+ bool WeightCacheBuilder::Start(const char* path, const FileDescriptor& fd) {
++  return Start(path, fd, /*needs_truncate=*/true);
++}
++
++bool WeightCacheBuilder::Start(const char* path, const FileDescriptor& fd,
++                               bool needs_truncate) {
+   XNNPACK_RETURN_CHECK(!IsStarted());
+   file_path_ = Sanitize(path);
+ 
+@@ -144,7 +149,9 @@ bool WeightCacheBuilder::Start(const char* path, const FileDescriptor& fd) {
+   XNNPackCacheHeader header{XNNPackCacheHeader::kInvalidHeader};
+   header.buffer_list_offset = sizeof(header);
+ 
+-  XNNPACK_RETURN_CHECK(fd_.Truncate(0), "could not truncate weight cache.");
++  if (needs_truncate) {
++    XNNPACK_RETURN_CHECK(fd_.Truncate(0), "could not truncate weight cache.");
++  }
+   XNNPACK_RETURN_CHECK(fd_.SetPos(0) == 0, "couldn't move to file start.");
+   XNNPACK_RETURN_CHECK(fd_.Write(&header, sizeof(header)),
+                        "could not write initial cache header in %s: %s.",
+@@ -475,18 +482,32 @@ bool MMapWeightCacheProvider::StartBuild(const char* path, FileDescriptor fd) {
+   const char* const safe_path = Sanitize(path);
+   SetFilePath(safe_path);
+ 
++  bool created_empty = false;
+   if (!fd.IsValid()) {
+     if (IsInMemoryCachePath(file_path_)) {
+       fd = CreateInMemoryFileDescriptor("XNNPack in-memory weight cache");
+     } else {
+-      fd = FileDescriptor::Open(file_path_.c_str(), O_CREAT | O_TRUNC | O_RDWR,
++#if defined(__linux__) && !defined(__ANDROID__)
++      // An explicit zero-length truncate makes ext4 flush the file on its
++      // final release, including when the cache was just created.
++      fd = FileDescriptor::Open(file_path_.c_str(), O_CREAT | O_EXCL | O_RDWR,
+                                 0644);
++      created_empty = fd.IsValid();
++      if (!created_empty) {
++        XNNPACK_RETURN_CHECK(errno == EEXIST, "could not open file ('%s'): %s.",
++                             file_path_.c_str(), strerror(errno));
++      }
++#endif
++      if (!created_empty) {
++        fd = FileDescriptor::Open(file_path_.c_str(), O_CREAT | O_TRUNC | O_RDWR,
++                                  0644);
++      }
+     }
+   }
+   XNNPACK_RETURN_CHECK(fd.IsValid(), "could not open file ('%s'): %s.",
+                        file_path_.c_str(), strerror(errno));
+   file_descriptor_ = std::move(fd);
+-  return builder_.Start(safe_path, file_descriptor_);
++  return builder_.Start(safe_path, file_descriptor_, !created_empty);
+ }
+ 
+ bool MMapWeightCacheProvider::Load(const std::string& path, FileDescriptor fd) {
+diff --git a/tflite/delegates/xnnpack/weight_cache.h b/tflite/delegates/xnnpack/weight_cache.h
+index 8b861a6..382a8ee 100644
+--- a/tflite/delegates/xnnpack/weight_cache.h
++++ b/tflite/delegates/xnnpack/weight_cache.h
+@@ -207,6 +207,10 @@ class WeightCacheBuilder {
+   uint8_t* data() const { return data_.get(); }
+ 
+  private:
++  friend class MMapWeightCacheProvider;
++
++  bool Start(const char* path, const FileDescriptor& fd, bool needs_truncate);
++
+   std::unique_ptr<uint8_t[]> data_ = nullptr;
+   cache::schema::BufferListT schema_;
+   size_t capacity_ = 0;
