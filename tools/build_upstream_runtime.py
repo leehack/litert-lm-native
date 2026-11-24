@@ -70,6 +70,7 @@ from workspace_build_patch import (
     require_workspace_build_patch_decision,
 )
 from xnnpack_pf32_sme2_patch import (
+    V020_TENSORFLOW_REF,
     archive_sha256_for as xnnpack_archive_sha256,
     commit_for as xnnpack_commit,
     declare_patched_xnnpack,
@@ -528,6 +529,38 @@ def patch_upstream_workspace(
     )
 
 
+def patch_windows_rules_android(source_root: Path) -> None:
+    workspace = source_root / "WORKSPACE"
+    text = workspace.read_text(encoding="utf-8")
+    refs = re.findall(r'^TENSORFLOW_REF[ \t]*=[ \t]*"([0-9a-f]{40})"$', text, re.MULTILINE)
+    if refs != [V020_TENSORFLOW_REF]:
+        raise RuntimeError("TensorFlow pin changed; requalify the Windows rules_android patch")
+
+    # TensorFlow skips repos declared before tf_workspace2(). Use its archive
+    # and all four source edits without its Bash/sed repository commands.
+    url = "https://github.com/bazelbuild/rules_android/releases/download/v0.6.0/rules_android-v0.6.0.tar.gz"
+    archive = f'''http_archive(
+    name = "build_bazel_rules_android",
+    patch_args = ["-p1"],
+    patches = ["@//bridge:rules_android_tensorflow_v020.patch"],
+    sha256 = "af84b69ab3d16dd1a41056286e6511f147a94ccea995603e13e934c915c1631c",
+    strip_prefix = "rules_android-0.6.0",
+    urls = [
+        "https://storage.googleapis.com/mirror.tensorflow.org/{url[8:]}",
+        "{url}",
+    ],
+)
+
+'''
+    hook = '\nload("@org_tensorflow//tensorflow:workspace2.bzl", "tf_workspace2")\n'
+    declarations = re.findall(r'^\s*name\s*=\s*"build_bazel_rules_android"\s*,', text, re.MULTILINE)
+    if text.count("\n" + archive + hook) == 1 and len(declarations) == 1:
+        return
+    if declarations or text.count(hook) != 1:
+        raise RuntimeError("Unexpected Windows rules_android declaration point in WORKSPACE; requalify")
+    workspace.write_text(text.replace(hook, "\n" + archive + hook, 1), encoding="utf-8")
+
+
 def patch_sentencepiece_bpe_null(text: str) -> str:
     """Preserve legacy BPE NUL IDs only against the audited SentencePiece archive."""
     pattern = r'http_archive\(\n    name = "sentencepiece",\n.*?\n\)'
@@ -641,6 +674,8 @@ def build_runtime(
         source_root, upstream_tag, spatial_staging=patch_stage_spatial_tensors,
         cpu_options=patch_cpu_options_identifier, xnnpack=patch_xnnpack,
     )
+    if platform == "windows" and upstream_tag == "v0.20.0":
+        patch_windows_rules_android(source_root)
     patch_asr_untimed_overlap(source_root, upstream_tag)
     patch_asr_litertlm_container(source_root, upstream_tag)
     patch_stream_finish_reason(source_root, upstream_tag)

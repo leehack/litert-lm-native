@@ -40,6 +40,7 @@ exports_files([
     "litert_ios_framework_paths_v020.patch",
     "litert_stage_spatial_tensors.patch",
     "litert_stage_spatial_tensors_v020.patch",
+    "rules_android_tensorflow_v020.patch",
     "sentencepiece_bpe_null.patch",
     "stream_finish_reason.patch",
     "stream_finish_reason_v019.patch",

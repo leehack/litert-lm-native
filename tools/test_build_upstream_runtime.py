@@ -32,6 +32,7 @@ from xnnpack_pf32_sme2_patch import (
     V019_TENSORFLOW_REF,
     V019_XNNPACK_COMMIT,
     V019_XNNPACK_SHA256,
+    V020_TENSORFLOW_REF,
     declare_patched_xnnpack,
 )
 
@@ -372,6 +373,52 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                             root, patch_stage_spatial_tensors=True,
                         )
                     self.assertEqual(workspace.read_text(encoding="utf-8"), drift)
+
+    def test_windows_v020_uses_a_native_patch_for_tensorflows_android_rules(self) -> None:
+        call = "tf_workspace2()\n"
+        original = (
+            f'TENSORFLOW_REF = "{V020_TENSORFLOW_REF}"\n'
+            'load("@org_tensorflow//tensorflow:workspace2.bzl", "tf_workspace2")\n\n'
+            + call
+        )
+        with tempfile.TemporaryDirectory() as temp, patch.multiple(
+            build_upstream_runtime,
+            verify_carried_dependency_pins=DEFAULT,
+            patch_asr_untimed_overlap=DEFAULT,
+            patch_stream_finish_reason=DEFAULT,
+            patch_huggingface_token_bytes=DEFAULT,
+            patch_step_zero_state=DEFAULT,
+            apply_android_gpu_safety=DEFAULT,
+            materialize_git_lfs_libraries=DEFAULT,
+            bazel_command=DEFAULT,
+            prepare_bridge_package=DEFAULT,
+            fetch_audited_archives=DEFAULT,
+            run=DEFAULT,
+        ) as calls:
+            root = Path(temp)
+            workspace = root / "WORKSPACE"
+            calls["bazel_command"].return_value = ["bazel"]
+            calls["materialize_git_lfs_libraries"].return_value = 0
+            calls["prepare_bridge_package"].return_value = []
+            calls["run"].side_effect = RuntimeError("Bazel reached")
+            for platform, tag in (("windows", "v0.20.0"), ("linux", "v0.20.0"),
+                                  ("windows", "v0.19.1")):
+                with self.subTest(platform=platform, tag=tag):
+                    workspace.write_text(original, encoding="utf-8")
+                    for _ in range(2):
+                        with self.assertRaisesRegex(RuntimeError, "Bazel reached"):
+                            build_upstream_runtime.build_runtime(root, platform, "x64", tag, None)
+                    text = workspace.read_text(encoding="utf-8")
+                    if (platform, tag) == ("windows", "v0.20.0"):
+                        name = 'name = "build_bazel_rules_android"'
+                        self.assertEqual(text.count(name), 1)
+                        self.assertLess(text.index(name), text.index(call))
+                        self.assertIn('patch_args = ["-p1"]', text)
+                        self.assertIn('patches = ["@//bridge:rules_android_tensorflow_v020.patch"]', text)
+                        self.assertIn('sha256 = "af84b69ab3d16dd1a41056286e6511f147a94ccea995603e13e934c915c1631c"', text)
+                        self.assertNotIn("patch_cmds", text)
+                    else:
+                        self.assertEqual(text, original)
 
     def test_source_root_verifies_resolved_archives_before_compilation(self) -> None:
         workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(
