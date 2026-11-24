@@ -50,19 +50,42 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "historical native release ref"):
             build_upstream_runtime.build_runtime(Path("missing"), "macos", "arm64", "v0.19.1", None)
 
-    def test_android_build_links_the_opencl_sampler_with_combined_gpu(self) -> None:
-        bazel = (build_upstream_runtime.REPO_ROOT / "native/bridge/BUILD.bazel").read_text()
-        setting = re.search(
-            r'name = "android_opencl_sampler",\s*constraint_values = \["@platforms//os:android"\],'
-            r'\s*define_values = \{"([^"]+)": "true"\}', bazel)
-        self.assertIsNotNone(setting)
-        script = Path(build_upstream_runtime.__file__).read_text()
-        self.assertIn(f'"--define={setting.group(1)}=true"', script)
-        self.assertIn('"--//runtime/executor:gpu_accelerator=webgpu"', script)
-        self.assertIn(
-            '":android_opencl_sampler": ["//runtime/components:top_k_opencl_sampler_static"]',
-            bazel,
-        )
+    def test_android_build_checks_executor_actions_before_compiling(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.multiple(
+            build_upstream_runtime,
+            verify_carried_dependency_pins=DEFAULT,
+            patch_android_automatic_gpu=DEFAULT,
+            patch_asr_untimed_overlap=DEFAULT,
+            patch_stream_finish_reason=DEFAULT,
+            patch_huggingface_token_bytes=DEFAULT,
+            apply_android_gpu_safety=DEFAULT,
+            materialize_git_lfs_libraries=DEFAULT,
+            bazel_command=DEFAULT,
+            prepare_bridge_package=DEFAULT,
+            fetch_audited_archives=DEFAULT,
+            verify_executor_compile_actions=DEFAULT,
+            run=DEFAULT,
+        ) as calls:
+            root = Path(temp)
+            calls["bazel_command"].return_value = ["bazel"]
+            calls["materialize_git_lfs_libraries"].return_value = 0
+            calls["prepare_bridge_package"].return_value = []
+            calls["run"].side_effect = [SimpleNamespace(stdout="graph"), RuntimeError("Bazel build reached")]
+            with self.assertRaisesRegex(RuntimeError, "Bazel build reached"):
+                build_upstream_runtime.build_runtime(root, "android", "arm64", "v0.20.0", "8")
+            calls["patch_android_automatic_gpu"].assert_called_once_with(root, "v0.20.0")
+            calls["verify_executor_compile_actions"].assert_called_once_with("graph")
+            query, build = (call.args[0] for call in calls["run"].call_args_list)
+            self.assertIn("aquery", query)
+            self.assertIn("build", build)
+            self.assertEqual(query[query.index("aquery") + 1:-4], build[build.index("build") + 1:-1])
+            self.assertNotIn("--//runtime/executor:gpu_accelerator=webgpu", build)
+
+            calls["run"].reset_mock(side_effect=True)
+            calls["verify_executor_compile_actions"].side_effect = RuntimeError("unexpected GPU backend")
+            with self.assertRaisesRegex(RuntimeError, "unexpected GPU backend"):
+                build_upstream_runtime.build_runtime(root, "android", "x64", "v0.20.0", "8")
+            self.assertEqual(calls["run"].call_count, 1)
 
     def test_android_v019_build_rejects_a_runtime_without_both_gpu_samplers(self) -> None:
         both = ANDROID_OPENCL_SAMPLER_SYMBOLS + ANDROID_WEBGPU_SAMPLER_SYMBOLS
@@ -266,6 +289,20 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     else:
                         fd_patch.assert_not_called()
                         self.assertEqual(text, original)
+
+    def test_windows_android_rules_patch_rejects_a_different_tensorflow_ref(self) -> None:
+        original = (
+            f'TENSORFLOW_REF = "{"0" * 40}"\n'
+            'load("@org_tensorflow//tensorflow:workspace2.bzl", "tf_workspace2")\n\n'
+            'tf_workspace2()\n'
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "WORKSPACE"
+            workspace.write_text(original, encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "TensorFlow pin changed"):
+                build_upstream_runtime.patch_windows_rules_android(root)
+            self.assertEqual(workspace.read_text(encoding="utf-8"), original)
 
     def test_source_root_verifies_resolved_archives_before_compilation(self) -> None:
         workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(

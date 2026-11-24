@@ -2,6 +2,7 @@
 import hashlib
 from pathlib import Path
 
+from android_automatic_gpu_patch import manifest as android_automatic_gpu_manifest
 from android_gpu_safety_patch import manifest as android_gpu_safety_manifest
 from huggingface_token_bytes_patch import token_bytes_patch_manifest
 from litert_stage_spatial_tensors_patch import stage_spatial_tensors_patch_manifest
@@ -37,6 +38,7 @@ def source_patch_manifest(compatibility_tag: str) -> list[dict]:
     return [*overlap,
         *finish_reason_patch_manifest(compatibility_tag),
         *android_gpu_safety_manifest(compatibility_tag),
+        *android_automatic_gpu_manifest(compatibility_tag),
         *windows_engine_fd_manifest(compatibility_tag),
         *xnnpack_pf32_patch_manifest(compatibility_tag),
         *xnnpack_qc4w_patch_manifest(compatibility_tag),

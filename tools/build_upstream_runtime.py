@@ -11,6 +11,11 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from android_automatic_gpu_patch import (
+    apply as patch_android_automatic_gpu,
+    executor_compile_query,
+    verify_executor_compile_actions,
+)
 from android_protobuf_policy import validate_android_protobuf_isolation
 from android_gpu_safety_patch import apply as apply_android_gpu_safety
 from asr_overlap_patch import (
@@ -165,12 +170,7 @@ def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
     if digest != ASR_PREIMAGE:
         raise RuntimeError("ASR merger source changed; requalify untimed overlap patch")
     patch_file = BRIDGE_PACKAGE_ROOT / "bridge" / Path(ASR_PATCH_PATH).name
-    command = ["git", "apply", "--ignore-space-change", str(patch_file)]
-    # Apply from the extracted root, including roots nested in a worktree.
-    # The preimage hash and git apply's check precede any source mutation.
-    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
-                   cwd=source_root)
-    subprocess.run(command, check=True, cwd=source_root)
+    apply_source_patch(source_root, patch_file, ignore_space_change=True)
     if source_sha256(source.read_bytes()) != ASR_POSTIMAGE:
         raise RuntimeError("ASR merger postimage mismatch; requalify untimed overlap patch")
     print("Applied audited untimed ASR overlap patch", flush=True)
@@ -469,6 +469,8 @@ def build_runtime(
     verify_carried_dependency_pins(source_root, upstream_tag)
     if platform == "windows":
         patch_windows_rules_android(source_root)
+    if platform == "android":
+        patch_android_automatic_gpu(source_root, upstream_tag)
     patch_asr_untimed_overlap(source_root, upstream_tag)
     patch_stream_finish_reason(source_root, upstream_tag)
     patch_huggingface_token_bytes(source_root, upstream_tag)
@@ -506,12 +508,10 @@ def build_runtime(
             output_user_root = Path(output_user_root).resolve().as_posix()
         startup.append(f"--output_user_root={output_user_root}")
     bridge_options = prepare_bridge_package(source_root)
-    command = [
-        "build",
+    options = [
         *bridge_options,
         *configs,
         *target.get("bazel_options", []),
-        target["bazel_target"],
         "--define=litert_link_capi_so=true",
         "--define=resolve_symbols_in_exec=false",
         "--define=litert_lm_stream_chunk_api=true",
@@ -521,19 +521,16 @@ def build_runtime(
         "--define=litert_lm_c_api_v1=true",
         "--define=litert_lm_in_process_litert=true",
     ]
-    if platform == "android":
-        command.extend(("--//runtime/executor:gpu_accelerator=webgpu",
-                        "--define=litert_lm_android_opencl_sampler=true"))
-    command.append(FINISH_REASON_DEFINE)
+    options.append(FINISH_REASON_DEFINE)
     if platform == "macos":
-        command.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
+        options.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
     if platform == "ios":
         if provider_free_ios(upstream_tag):
             verify_upstream_fst_gate(source_root)
-            command.append(FST_DEFINE)
-        command.append("--ios_minimum_os=13.0")
+            options.append(FST_DEFINE)
+        options.append("--ios_minimum_os=13.0")
     if jobs:
-        command.append(f"--jobs={jobs}")
+        options.append(f"--jobs={jobs}")
     pins = {
         "litert": (STAGING_LITERT_SHA256, f"LiteRT-{STAGING_LITERT_REF}"),
         "XNNPACK": (XNNPACK_SHA256, f"XNNPACK-{XNNPACK_COMMIT}"),
@@ -545,9 +542,16 @@ def build_runtime(
         config.write_text(release_workspace_rc(rc_text), encoding="utf-8")
         startup.extend(("--noworkspace_rc", f"--bazelrc={bazel_path(config)}"))
         # Keep both commands in the WORKSPACE mode used by the pin verifier.
-        command.append("--noenable_bzlmod")
+        options.append("--noenable_bzlmod")
         fetch_audited_archives(startup, source_root, bridge_options, Path(temp) / "resolved.bzl", pins)
-        run([*startup, *command], source_root)
+        bazel_target = target["bazel_target"]
+        if platform == "android":
+            result = run([
+                *startup, "aquery", *options, "--output=jsonproto", "--include_param_files",
+                "--noinclude_artifacts", executor_compile_query(bazel_target),
+            ], source_root, capture_output=True)
+            verify_executor_compile_actions(result.stdout)
+        run([*startup, "build", *options, bazel_target], source_root)
     verify_xnnpack_postimages(source_root)
     verify_stage_spatial_tensors_postimages(source_root)
 

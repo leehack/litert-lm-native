@@ -70,6 +70,12 @@ class PrebuiltOverridesTest(unittest.TestCase):
         self.assertEqual(prebuilt_overrides("v0.17.0"), ())
         self.assertEqual(prebuilt_overrides("v0.17.2"), ())
 
+    def test_v0191_manifest_preserves_both_dawn_rollbacks(self) -> None:
+        historical = prebuilt_override_manifest("v0.19.1")
+        self.assertEqual(len(historical), 2)
+        self.assertEqual(historical, prebuilt_override_manifest("v0.20.0"))
+        self.assertEqual(prebuilt_overrides("v0.19.1"), ())
+
     def test_other_versions_have_no_override(self) -> None:
         self.assertEqual(prebuilt_overrides("v0.14.0"), ())
         self.assertEqual(prebuilt_override_manifest("v0.14.0"), [])
