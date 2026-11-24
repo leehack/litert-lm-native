@@ -312,6 +312,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             "absolute link disappeared after stat": ("open", errno.ENOENT),
             "absolute link read failure": ("read", errno.EIO),
             "Windows absolute link loop": ("stat", errno.EINVAL, 1921),
+            "Windows invalid parameter": ("stat", errno.EINVAL, 87),
         }
         link_archive_cases = [(label, [], "compilation reached") for label in link_cases]
         for label, records, message in (*archive_cases, *link_archive_cases):
@@ -353,8 +354,8 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     source.chmod(0o644)
                 if fault:
                     operation, error_number, *windows_error = fault
-                    if not windows_error:
-                        message = rf"Could not hash Bazel output tree for @litert: \[Errno {error_number}\]"
+                    if windows_error != [1921]:
+                        message = r"Could not hash Bazel output tree for @litert: "
                     real_stat, real_open = Path.stat, Path.open
 
                     def stat_path(path, *args, **kwargs):
@@ -430,12 +431,14 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     build_upstream_runtime.main()
                 compilations = [call for call in calls["run"].call_args_list if "build" in call.args[0]]
                 self.assertEqual(len(compilations), int(message == "compilation reached"))
-                if fault and not windows_error:
+                if fault and message != "compilation reached":
                     self.assertIn(repr(str(target)), str(failure.exception))
                     cause = failure.exception.__cause__
                     self.assertIsInstance(cause, OSError)
                     self.assertEqual(cause.errno, error_number)
                     self.assertEqual(cause.filename, str(target))
+                    if windows_error:
+                        self.assertEqual(cause.winerror, windows_error[0])
 
     def test_source_root_rejects_workspace_rc_repository_overrides_before_bazel(self) -> None:
         workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(
