@@ -127,8 +127,16 @@ class AsrUntimedOverlapTest(unittest.TestCase):
             source.parent.mkdir(parents=True)
             original = (REPO / "tools/fixtures/timestamp_text_merger_v020.cc").read_bytes()
             source.write_bytes(original)
-            build.patch_asr_untimed_overlap(upstream, "v0.20.0")
-            self.assertNotEqual(source.read_bytes(), original)
+            with patch.object(subprocess, "run", wraps=subprocess.run) as git:
+                build.patch_asr_untimed_overlap(upstream, "v0.20.0")
+            self.assertEqual(build.source_sha256(original), build.ASR_PREIMAGE)
+            self.assertEqual(build.source_sha256(source.read_bytes()), build.ASR_POSTIMAGE)
+            self.assertEqual(git.call_count, 2)
+            for call in git.call_args_list:
+                self.assertEqual(
+                    call.kwargs["env"]["GIT_CEILING_DIRECTORIES"],
+                    upstream.resolve().parent.as_posix(),
+                )
             self.assertFalse((root / "omni").exists())
 
     @unittest.skipUnless(os.environ.get("LITERT_LM_ASR_SOURCE"),
