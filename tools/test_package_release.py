@@ -46,7 +46,7 @@ class PackageReleaseTest(unittest.TestCase):
             records = manifest["upstream"]["sourcePatches"]
             self.assertEqual([record["id"] for record in records],
                              ["asr-untimed-overlap"] + ["stream-finish-reason"] * len(FINISH_REASON_SOURCES)
-                             + ["android-qwen3-gpu-safety"] * 2 + ["windows-engine-fd"]
+                             + ["android-qwen3-gpu-safety"] * 2 + ["android-automatic-gpu"] * 2 + ["windows-engine-fd"]
                              + ["xnnpack-pf32-sme2"] * 4 + ["xnnpack-pqs8-qc4w-sme2"]
                              + ["huggingface-token-bytes"] * 6
                              + ["litert-stage-spatial-tensors"] * 4)

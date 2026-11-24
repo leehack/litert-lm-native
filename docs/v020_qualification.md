@@ -16,6 +16,7 @@ archive identities, Bazel repository tree hashes and patched postimages.
 | Stream finish reasons | Keep. The upstream C API callback helper still has no cause field. Stop-token, output-budget and context exhaustion still need to reach the bridge separately. |
 | Hugging Face grammar | Keep. Upstream adds SentencePiece byte conversion and multiple EOS IDs. The HF path still reads raw vocabulary spellings without ByteLevel inversion and does not provide the JSON whitespace bound or depth guard. |
 | Android Qwen3 preflight | Keep. The refactored upstream C API still enters the engine factory directly, without this model and device refusal. |
+| Android automatic GPU backend | Select the combined static accelerator and both static samplers independently of the forced-WebGPU flag. Bazel compile actions verify that the LLM, vision and audio executors retain automatic backend selection. |
 | Step-zero reset and macOS lookahead | Retire both. Upstream [e1f86b05](https://github.com/google-ai-edge/LiteRT-LM/commit/e1f86b05bf8a731331622a2622440e9f93d9a9f5) clears state on reset, rewind and a new context. On Apple M4 Max, the pinned Qwen3.5-0.8B and Qwen3-0.6B control both passed the packaged step-zero oracle on CPU and Metal with and without the guard. The unguarded Metal run used sampler-managed inputs and matched the fresh reference in all five repeated Qwen3.5 requests. |
 | Spatial tensor staging | Rebase the LiteRT WebGPU and Vulkan carry. LiteRT `bf49eb62` predates [aa9e40cd](https://github.com/google-ai-edge/LiteRT/commit/aa9e40cd5e2d892b3a5d8579a7ec6faa696e321e). Retain the pinned LiteRT's per-environment context tracking when staging bindings. |
 | XNNPACK PF32 and PQS8/QC4W | Keep both in order. The pinned XNNPACK archive matches all four PF32 preimages, and its PF32-patched `gemm-config.c` matches the QC4W preimage. The original multi-threaded SME2 triggers remain unqualified without the carries. |
@@ -42,7 +43,12 @@ Source builds still link LiteRT in-process. Upstream removed separate LiteRT
 and GPU accelerator prebuilts. The desktop and Android packages stage Dawn,
 with Windows using `webgpu_dawn.dll`. The Android build selects the combined
 GPU accelerator and links both the OpenCL and WebGPU samplers, preserving the
-fallback when OpenCL is unavailable.
+OpenCL probe and the WebGPU fallback when OpenCL is unavailable. The Android
+build checks the executor compile actions for a forced WebGPU define and
+validates both sampler exports in the resulting library.
+The [Android BUILD patch](../native/bridge/android_automatic_gpu_v020.patch)
+pins both upstream BUILD files and records their identities in the source
+patch inventory.
 
 The C API version is `1.1.0`. The existing stable status/out-parameter signatures
 are preserved. New APIs include selected signatures, tool choice and ModelSync.

@@ -157,7 +157,7 @@ class StreamProxyCallbackAbiTest(unittest.TestCase):
             for tag, expected in (("v0.20.0", 2),):
                 with self.subTest(platform=platform, arch=arch, tag=tag), tempfile.TemporaryDirectory() as temp, ExitStack() as mocks:
                     for name in (
-                        "patch_asr_untimed_overlap",
+                        "patch_asr_untimed_overlap", "patch_android_automatic_gpu",
                         "patch_stream_finish_reason", "patch_huggingface_token_bytes",
                         "apply_android_gpu_safety", "patch_windows_engine_fd", "patch_windows_rules_android",
                         "verify_upstream_fst_gate", "verify_carried_dependency_pins",
