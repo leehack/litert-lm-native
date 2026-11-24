@@ -44,6 +44,24 @@ def fail(message: str) -> None:
     raise SystemExit(message)
 
 
+def validate_desktop_litert_bundle(root: Path, upstream_tag: str) -> None:
+    if not is_at_least(upstream_tag, (0, 20, 0)):
+        return
+    companions = re.compile(
+        r"(?:lib)?litert(?:webgpuaccelerator)?\.(?:so(?:\.\d+)*|dylib|dll)",
+        re.IGNORECASE,
+    )
+    found = sorted(
+        path.relative_to(root).as_posix()
+        for platform in ("linux", "macos", "windows")
+        for path in (root / "bin" / platform).glob("*/*")
+        if companions.fullmatch(path.name) and (path.is_file() or path.is_symlink())
+    )
+    if found:
+        fail("v0.20+ desktop runtimes must not bundle separate LiteRT or WebGPU "
+             "accelerator libraries:\n" + "\n".join(f"- {path}" for path in found))
+
+
 def iter_elf_libraries(root: Path) -> list[Path]:
     bin_dir = root / "bin"
     if not bin_dir.exists():
@@ -358,6 +376,7 @@ def main() -> int:
     args = parser.parse_args()
 
     root = args.root.resolve()
+    validate_desktop_litert_bundle(root, args.upstream_tag)
     if provider_free_ios(args.upstream_tag):
         validate_ios_directory(root / "bin" / "ios")
         validate_ios_archives(args.archive_root or root / "dist" / "spm")
