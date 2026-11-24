@@ -53,7 +53,8 @@ class QualificationSchedulingTest(unittest.TestCase):
         self.assertIn('python3 -m unittest discover -s tools -p test_android_gpu_safety.py', asr)
         self.assertIn('pkg-config --exists openssl', asr)
         self.assertIn('tools/qualify_asr_untimed_overlap.py', asr)
-        self.assertIn('--source-root asr-upstream --work-dir asr-qualification --mutations', asr)
+        self.assertIn('--source-root asr-upstream --work-dir asr-qualification', asr)
+        self.assertIn('--upstream-tag "$QUALIFICATION_UPSTREAM_TAG" --mutations', asr)
         self.assertNotIn('continue-on-error:', asr)
 
     def test_candidate_check_reports_every_unsuccessful_prerequisite(self) -> None:

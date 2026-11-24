@@ -11,9 +11,9 @@ permissions:
   contents: read
 
 env:
-  QUALIFICATION_RELEASE_TAG: v0.19.1
-  QUALIFICATION_UPSTREAM_TAG: v0.19.1
-  QUALIFICATION_UPSTREAM_COMMIT: 7a03724cece417f1724c923b3d527b4319730841
+  QUALIFICATION_RELEASE_TAG: v0.20.0
+  QUALIFICATION_UPSTREAM_TAG: v0.20.0
+  QUALIFICATION_UPSTREAM_COMMIT: 95df4c2a932b4917ace66fcfef6c154e8d2a6699
 
 jobs:
   preflight:
@@ -104,15 +104,18 @@ jobs:
       - name: Qualify Android GPU preflight policy and C API refusal ordering
         env:
           LITERT_GPU_SAFETY_SOURCE: asr-upstream
+          LITERT_GPU_SAFETY_TAG: ${{ env.QUALIFICATION_UPSTREAM_TAG }}
         run: |
-          export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          openssl_prefix="$(brew --prefix openssl@3)"
+          export PKG_CONFIG_PATH="$openssl_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
           pkg-config --exists openssl
           command -v clang++
           python3 -m unittest discover -s tools -p test_android_gpu_safety.py
       - name: Qualify HF grammar bytes against exact tokenizer and provider sources
         run: |
           python3 tools/qualify_huggingface_token_bytes.py \
-            --source-root asr-upstream --work-dir token-byte-qualification --mutations
+            --source-root asr-upstream --work-dir token-byte-qualification \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" --mutations
       - name: Qualify v0.19 push-source cancellation, reset and backpressure
         run: |
           python3 tools/qualify_asr_omni_input.py \
@@ -120,7 +123,8 @@ jobs:
       - name: Qualify real merger behaviour and kill regression mutations
         run: |
           python3 tools/qualify_asr_untimed_overlap.py \
-            --source-root asr-upstream --work-dir asr-qualification --mutations
+            --source-root asr-upstream --work-dir asr-qualification \
+            --upstream-tag "$QUALIFICATION_UPSTREAM_TAG" --mutations
       - uses: actions/upload-artifact@v4
         if: always()
         with:

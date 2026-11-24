@@ -51,15 +51,15 @@ def compiler_command(source: Path, work: Path) -> list[str]:
 
 
 @lru_cache(maxsize=None)
-def compile_shared_objects(source: Path, work: Path) -> tuple[Path, Path]:
+def compile_shared_objects(source: Path, work: Path, tag: str) -> tuple[Path, ...]:
     # Reuse only within this process, never stale objects from a previous run.
     # Every mutant still compiles its own actual merger implementation.
     outputs = []
-    merger_dir = Path(merger_source(QUALIFIED_TAG)).parent
+    merger_dir = Path(merger_source(tag)).parent
+    text_utils = "omni/utils" if tag == "v0.20.0" else "omni/base"
     for name, unit in (("driver", REPO / "native/bridge/litert_lm_asr_merger_test.cc"),
                        ("levenshtein", source / merger_dir / "levenshtein_align.cc"),
-                       *([("text_utils", source / "omni/base/text_utils.cc")]
-                         if (source / "omni/base/text_utils.cc").is_file() else [])):
+                       ("text_utils", source / text_utils / "text_utils.cc")):
         output = work / (name + ".o")
         subprocess.run([*compiler_command(source, work), "-c", str(unit),
                         "-o", str(output)], check=True)
@@ -67,21 +67,21 @@ def compile_shared_objects(source: Path, work: Path) -> tuple[Path, Path]:
     return tuple(outputs)
 
 
-def compile_driver(source: Path, work: Path, merger: Path, output: Path) -> None:
-    shared = compile_shared_objects(source, work)
+def compile_driver(source: Path, work: Path, merger: Path, output: Path, tag: str) -> None:
+    shared = compile_shared_objects(source, work, tag)
     _, ldflags = abseil_flags()
     subprocess.run([*compiler_command(source, work), str(merger),
                     *map(str, shared), *ldflags, "-o", str(output)], check=True)
 
 
-def compile_replays(source: Path, work: Path) -> tuple[Path, Path]:
+def compile_replays(source: Path, work: Path, tag: str) -> tuple[Path, Path]:
     work.mkdir(parents=True, exist_ok=True)
     patched = work / "patched"
-    merger = merger_source(QUALIFIED_TAG)
+    merger = merger_source(tag)
     target = patched / merger
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source / merger, target)
-    patch_asr_untimed_overlap(patched, QUALIFIED_TAG)
+    patch_asr_untimed_overlap(patched, tag)
     # The merger uses only LiteRT's status macro. This alias avoids fetching
     # the full LiteRT dependency closure and preserves the same status behavior.
     shim = work / "litert/cc/litert_macros.h"
@@ -91,7 +91,7 @@ def compile_replays(source: Path, work: Path) -> tuple[Path, Path]:
     outputs = []
     for name, unit in (("upstream", source / merger), ("fixed", target)):
         output = work / name
-        compile_driver(source, work, unit, output)
+        compile_driver(source, work, unit, output, tag)
         outputs.append(output)
     subprocess.run([str(outputs[1])], check=True)
     return tuple(outputs)
@@ -228,10 +228,10 @@ def check_clean_boundaries(upstream: Path, fixed: Path, cache: dict | None = Non
 
 
 def check_mutations(source: Path, work: Path, upstream: Path, fixed: Path,
-                    clean_cache: dict, equivalence_count: int = 40) -> dict:
+                    clean_cache: dict, equivalence_count: int, tag: str) -> dict:
     # Extends audit mut/mut.py. Mutations change the real merger source, then
     # compile and run the same native tests and negative differential controls.
-    text = (work / "patched" / merger_source(QUALIFIED_TAG)).read_text()
+    text = (work / "patched" / merger_source(tag)).read_text()
     mutations = {
         "M4_one_word": ("min_anchor_words = 2", "min_anchor_words = 1"),
         "M5_three_words": ("min_anchor_words = 2", "min_anchor_words = 3"),
@@ -265,7 +265,7 @@ def check_mutations(source: Path, work: Path, upstream: Path, fixed: Path,
         mutant = work / (name + ".cc")
         mutant.write_text(variant)
         binary = work / name
-        compile_driver(source, work, mutant, binary)
+        compile_driver(source, work, mutant, binary, tag)
         native = subprocess.run([str(binary)], capture_output=True, text=True)
         negative = False
         try:
@@ -307,13 +307,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--work-dir", type=Path, required=True)
+    parser.add_argument("--upstream-tag", default=QUALIFIED_TAG)
     parser.add_argument("--mutations", action="store_true")
     parser.add_argument("--equivalence-count", type=int, default=40,
                         help="Cases/seed for the equivalent tie mutation (400 for the full audit)")
     args = parser.parse_args()
     if args.equivalence_count < 1:
         parser.error("--equivalence-count must be positive")
-    upstream, fixed = compile_replays(args.source_root.resolve(), args.work_dir.resolve())
+    upstream, fixed = compile_replays(args.source_root.resolve(), args.work_dir.resolve(),
+                                     args.upstream_tag)
     clean_cache = {}
     result = dict(abseil_pkg_versions=dict(zip(ABSL_PACKAGES, subprocess.check_output(
                       ["pkg-config", "--modversion", *ABSL_PACKAGES], text=True).splitlines())),
@@ -326,7 +328,7 @@ def main() -> None:
     if args.mutations:
         result["mutations"] = check_mutations(args.source_root.resolve(), args.work_dir.resolve(),
                                                upstream, fixed, clean_cache,
-                                               args.equivalence_count)
+                                               args.equivalence_count, args.upstream_tag)
     (args.work_dir / "results.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, indent=2))
 

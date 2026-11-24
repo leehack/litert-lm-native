@@ -1,6 +1,6 @@
 """ctypes access to the LiteRT-LM C API across its two calling conventions.
 
-C API 1.0 (LiteRT-LM v0.19) returns a status code and writes results through
+C API 1.x (LiteRT-LM v0.19 and later) returns a status code and writes results through
 trailing out parameters. Older runtimes return results directly. Tools call the
 wrappers here so one tool can qualify both, for example when comparing a
 candidate against a published baseline.

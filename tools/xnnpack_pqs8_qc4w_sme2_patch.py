@@ -33,8 +33,17 @@ V019_SOURCES = {
     ),
 }
 
+V020_SOURCES = {
+    "src/configs/gemm-config.c": (
+        "0eff752814ec351176c48461832907ab8841c81d06c330483dae1cf45d233a9c",
+        "3bad8691babc6044975b8720fd88be0e7e420322533330f108df2901ca15110d",
+    ),
+}
+
 
 def sources_for(compatibility_tag: str) -> dict[str, tuple[str, str]]:
+    if compatibility_tag == "v0.20.0":
+        return V020_SOURCES
     return V019_SOURCES if compatibility_tag in V019_TAGS else SOURCES
 
 

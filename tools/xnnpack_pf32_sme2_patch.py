@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 PATCH_PATH = "native/bridge/xnnpack_pf32_sme2.patch"
-AUDITED_TAGS = frozenset({"v0.18.1", "v0.19.0", "v0.19.1"})
+AUDITED_TAGS = frozenset({"v0.18.1", "v0.19.0", "v0.19.1", "v0.20.0"})
 # v0.18.1 pins TensorFlow a1179d3c, whose XLA pins this XNNPACK. It contains
 # 70a9c5e8ac, which moved the PF32 SME2 GEMM/GEMV to KleidiAI kernels that are
 # nondeterministic with more than one thread (google/XNNPACK#11789). The patch
@@ -49,6 +49,28 @@ V019_SOURCES = {
     ),
 }
 
+V020_TENSORFLOW_REF = "faa06da43657488c1f7479289d11d15e03a15ba1"
+V020_XNNPACK_COMMIT = "08cc38b61f7589f84e91c6e343e0f130ae3279ca"
+V020_XNNPACK_SHA256 = "1c94d80ff3069b3510e54b41a2c82729a4053724a682fcb09840af296dcaa07c"
+V020_SOURCES = {
+    "src/configs/gemm-config.c": (
+        "77f6499beb82d69ca19dd9ca31a7c591b07c78863c158701b1125dcee0bb843d",
+        "0eff752814ec351176c48461832907ab8841c81d06c330483dae1cf45d233a9c",
+    ),
+    "src/pf32-gemm/pf32-gemm-1x32-minmax-neonsme2.c": (
+        "777115eb004977880b26ec4313d94a09f73157cbc44f3196585a1497411cbcc7",
+        "5d9972ed94ad8382fa184ffd66709cccaf932aa2a20b91b419834ca45c04f7b8",
+    ),
+    "src/pf32-gemm/pf32-gemm-32x32-minmax-neonsme2.c": (
+        "f101b386705e62f257c8c7e613474dd811d968316e968e2ff415fefe064f3abe",
+        "aa692a7cfbfa6c88df6185caba1938502842d92219c9fe3e728cf1a08aa95301",
+    ),
+    "src/x32-pack-lh/x32-packlh-neonsme2.c": (
+        "820b6c397d740e63efb03ab23be9a0c337b147a302dbce139ddcf55b7b8216f8",
+        "5aa0176053653592a86ebc848261029f2494e23f9c9be25cc9923afc901345c0",
+    ),
+}
+
 
 def archive(tensorflow_ref: str, commit: str, sha256: str) -> str:
     # Declared ahead of tf_workspace2(): XLA's tf_http_archive skips a repository
@@ -80,6 +102,9 @@ http_archive(
 ARCHIVE = archive(TENSORFLOW_REF, XNNPACK_COMMIT, XNNPACK_SHA256)
 ARCHIVES = {
     TENSORFLOW_REF: ARCHIVE,
+    V020_TENSORFLOW_REF: archive(
+        V020_TENSORFLOW_REF, V020_XNNPACK_COMMIT, V020_XNNPACK_SHA256
+    ),
     V019_TENSORFLOW_REF: archive(
         V019_TENSORFLOW_REF, V019_XNNPACK_COMMIT, V019_XNNPACK_SHA256
     ),
@@ -87,14 +112,20 @@ ARCHIVES = {
 
 
 def sources_for(compatibility_tag: str) -> dict[str, tuple[str, str]]:
+    if compatibility_tag == "v0.20.0":
+        return V020_SOURCES
     return V019_SOURCES if compatibility_tag in V019_TAGS else SOURCES
 
 
 def commit_for(compatibility_tag: str) -> str:
+    if compatibility_tag == "v0.20.0":
+        return V020_XNNPACK_COMMIT
     return V019_XNNPACK_COMMIT if compatibility_tag in V019_TAGS else XNNPACK_COMMIT
 
 
 def archive_sha256_for(compatibility_tag: str) -> str:
+    if compatibility_tag == "v0.20.0":
+        return V020_XNNPACK_SHA256
     return V019_XNNPACK_SHA256 if compatibility_tag in V019_TAGS else XNNPACK_SHA256
 
 
@@ -117,6 +148,8 @@ TENSORFLOW_ARCHIVE = '# TensorFlow\nhttp_archive(\n    name = "org_tensorflow",\
 
 def verify_patched_xnnpack_archive(workspace: str, compatibility_tag: str) -> None:
     tensorflow_ref = V019_TENSORFLOW_REF if compatibility_tag in V019_TAGS else TENSORFLOW_REF
+    if compatibility_tag == "v0.20.0":
+        tensorflow_ref = V020_TENSORFLOW_REF
     if (workspace.count(ARCHIVES[tensorflow_ref] + TENSORFLOW_ARCHIVE) != 1
             or len(re.findall(r'^\s*name = "XNNPACK",$', workspace, re.MULTILINE)) != 1):
         raise RuntimeError("Unexpected XNNPACK archive in WORKSPACE; requalify the XNNPACK patches")

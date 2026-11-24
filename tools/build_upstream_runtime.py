@@ -14,7 +14,7 @@ from pathlib import Path
 from android_protobuf_policy import validate_android_protobuf_isolation
 from android_gpu_safety_patch import apply as apply_android_gpu_safety
 from asr_litertlm_container_patch import SOURCES as CONTAINER_PATCH_SOURCES, require_container_patch_decision
-from asr_overlap_patch import AUDITED_OVERLAP_TAGS, V019_OVERLAP_TAGS, merger_source, overlap_identity, source_sha256, require_asr_patch_decision
+from asr_overlap_patch import OVERLAP_TAGS, merger_source, overlap_identity, source_sha256, require_asr_patch_decision
 from bazel_repository_provenance import release_workspace_rc, verify_resolved_archives
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
@@ -41,10 +41,7 @@ from litert_lm_symbols import (
     uses_stream_chunk_api,
 )
 from litert_stage_spatial_tensors_patch import (
-    LITERT_ARCHIVE_SHA256 as STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256,
-    LITERT_REF as STAGE_SPATIAL_TENSORS_LITERT_REF,
-    PATCH_PATH as STAGE_SPATIAL_TENSORS_PATCH_PATH,
-    SOURCES as STAGE_SPATIAL_TENSORS_SOURCES,
+    identity_for as stage_spatial_tensors_identity,
     require_stage_spatial_tensors_patch_decision,
 )
 from macos_runtime_identity import normalize_macos_runtime_identity
@@ -199,7 +196,7 @@ def uses_shared_desktop_litert(platform: str, upstream_tag: str) -> bool:
 def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
     """Carry #673 only on an audited source; require review on drift."""
     require_asr_patch_decision(upstream_tag)
-    if upstream_tag not in AUDITED_OVERLAP_TAGS | V019_OVERLAP_TAGS:
+    if upstream_tag not in OVERLAP_TAGS:
         return
     patch_path, preimage, postimage = overlap_identity(upstream_tag)
     source = source_root / merger_source(upstream_tag)
@@ -322,10 +319,12 @@ def verify_cpu_options_identifier_postimage(source_root: Path) -> None:
     print("Verified LiteRT CPU options identifier postimage", flush=True)
 
 
-def verify_stage_spatial_tensors_postimages(source_root: Path) -> None:
+def verify_stage_spatial_tensors_postimages(
+    source_root: Path, compatibility_tag: str = "v0.19.1"
+) -> None:
     """Fails unless Bazel used the audited LiteRT WebGPU and Vulkan sources."""
     repository = (source_root / "bazel-out").resolve().parents[2] / "external" / "litert"
-    for name, (_, postimage) in STAGE_SPATIAL_TENSORS_SOURCES.items():
+    for name, (_, postimage) in stage_spatial_tensors_identity(compatibility_tag)[3].items():
         source = repository / name
         if not source.is_file() or source_sha256(source.read_bytes()) != postimage:
             raise RuntimeError(f"LiteRT spatial tensor staging postimage mismatch for {name}; requalify")
@@ -380,6 +379,7 @@ def download_upstream(
     patch_upstream_workspace(
         source_root,
         patch_ios_framework_paths=has_asr_bridge(compatibility_tag),
+        compatibility_tag=compatibility_tag,
         # v0.19.0 carries an equivalent SentencePiece patch of its own.
         patch_bpe_null_piece=is_at_least(compatibility_tag, (0, 17, 0))
         and not is_at_least(compatibility_tag, (0, 19, 0)),
@@ -449,9 +449,9 @@ def verify_carried_dependency_pins(
         return
     workspace = (source_root / "WORKSPACE").read_text(encoding="utf-8")
     if spatial_staging:
+        _, litert_ref, archive_sha256, _ = stage_spatial_tensors_identity(compatibility_tag)
         verify_litert_archive_pin(
-            workspace, STAGE_SPATIAL_TENSORS_LITERT_REF,
-            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256, "LiteRT spatial tensor staging",
+            workspace, litert_ref, archive_sha256, "LiteRT spatial tensor staging",
         )
     if cpu_options:
         verify_litert_archive_pin(
@@ -471,6 +471,7 @@ def patch_upstream_workspace(
     patch_xnnpack_pf32_sme2: bool = False,
     patch_cpu_options_identifier: bool = False,
     patch_stage_spatial_tensors: bool = False,
+    compatibility_tag: str = "v0.19.1",
 ) -> None:
     workspace = source_root / "WORKSPACE"
     text = workspace.read_text(encoding="utf-8")
@@ -491,17 +492,19 @@ def patch_upstream_workspace(
         text = text.replace(needle, replacement)
     litert_patches = []
     if patch_ios_framework_paths:
-        litert_patches.append("litert_ios_framework_paths.patch")
+        litert_patches.append("litert_ios_framework_paths_v020.patch"
+                              if compatibility_tag == "v0.20.0"
+                              else "litert_ios_framework_paths.patch")
     if patch_gpu_environment_teardown:
         litert_patches.append("litert_gpu_environment_destroy_callback.patch")
     if patch_cpu_options_identifier:
         litert_patches.append("litert_cpu_options_identifier.patch")
     if patch_stage_spatial_tensors:
+        patch_path, litert_ref, archive_sha256, _ = stage_spatial_tensors_identity(compatibility_tag)
         verify_litert_archive_pin(
-            text, STAGE_SPATIAL_TENSORS_LITERT_REF,
-            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256, "LiteRT spatial tensor staging",
+            text, litert_ref, archive_sha256, "LiteRT spatial tensor staging",
         )
-        litert_patches.append(Path(STAGE_SPATIAL_TENSORS_PATCH_PATH).name)
+        litert_patches.append(Path(patch_path).name)
     litert_archive = 'http_archive(\n    name = "litert",\n'
     litert_archive_with_patch = (
         litert_archive
@@ -705,7 +708,10 @@ def build_runtime(
         command.append("--define=litert_lm_c_api_v1=true")
     if in_process_litert_abi_version(upstream_tag) == 1:
         command.append("--define=litert_lm_in_process_litert=true")
-    if platform == "android" and not has_prebuilt_topk_samplers(upstream_tag):
+    if platform == "android" and is_at_least(upstream_tag, (0, 20, 0)):
+        command.extend(("--//runtime/executor:gpu_accelerator=webgpu",
+                        "--define=litert_lm_android_opencl_sampler=true"))
+    elif platform == "android" and not has_prebuilt_topk_samplers(upstream_tag):
         command.append("--define=litert_lm_android_webgpu_sampler=true")
     if require_finish_reason_patch_decision(upstream_tag):
         command.append(FINISH_REASON_DEFINE)
@@ -720,10 +726,8 @@ def build_runtime(
         command.append(f"--jobs={jobs}")
     pins = {}
     if patch_stage_spatial_tensors:
-        pins["litert"] = (
-            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256,
-            f"LiteRT-{STAGE_SPATIAL_TENSORS_LITERT_REF}",
-        )
+        _, litert_ref, archive_sha256, _ = stage_spatial_tensors_identity(upstream_tag)
+        pins["litert"] = (archive_sha256, f"LiteRT-{litert_ref}")
     if patch_cpu_options_identifier:
         pins["litert"] = (CPU_OPTIONS_LITERT_ARCHIVE_SHA256, f"LiteRT-{CPU_OPTIONS_LITERT_REF}")
     if patch_xnnpack:
@@ -747,7 +751,7 @@ def build_runtime(
     if patch_cpu_options_identifier:
         verify_cpu_options_identifier_postimage(source_root)
     if patch_stage_spatial_tensors:
-        verify_stage_spatial_tensors_postimages(source_root)
+        verify_stage_spatial_tensors_postimages(source_root, upstream_tag)
 
     if "output" in target:
         output = source_root / target["output"]

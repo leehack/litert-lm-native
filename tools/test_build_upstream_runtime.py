@@ -677,7 +677,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             (source_root / "bazel-out").symlink_to(exec_root / "bazel-out", target_is_directory=True)
             sources = {}
             files = []
-            for name in build_upstream_runtime.STAGE_SPATIAL_TENSORS_SOURCES:
+            for name in build_upstream_runtime.stage_spatial_tensors_identity("v0.19.1")[3]:
                 postimage = name.encode() + b"\n"
                 sources[name] = ("", build_upstream_runtime.source_sha256(postimage))
                 file = output_base / "external" / "litert" / name
@@ -685,7 +685,8 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 file.write_bytes(postimage.replace(b"\n", b"\r\n"))
                 files.append(file)
 
-            with patch.object(build_upstream_runtime, "STAGE_SPATIAL_TENSORS_SOURCES", sources):
+            with patch.object(build_upstream_runtime, "stage_spatial_tensors_identity",
+                              return_value=("", "", "", sources)):
                 build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
                 for file in files:
                     with self.subTest(file=file.name):

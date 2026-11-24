@@ -13,6 +13,7 @@ from ios_framework_metadata import validate_framework_metadata
 from runtime_dependency_utils import (
     elf_exported_symbols,
     elf_has_global_flag,
+    elf_imported_symbols,
     elf_load_alignments,
     elf_needed_libraries,
     is_elf,
@@ -21,6 +22,7 @@ from runtime_dependency_utils import (
 from litert_lm_symbols import (
     ANDROID_OPENCL_SAMPLER_SYMBOLS,
     android_static_gpu_sampler_symbols,
+    is_at_least,
     APPLE_METAL_ACCELERATOR_SYMBOLS,
     APPLE_METAL_SAMPLER_SYMBOLS,
 )
@@ -115,6 +117,18 @@ def validate_elf_dependencies(root: Path, upstream_tag: str) -> int:
                     "sampler plugins."
                 )
             if library.name == "libLiteRtLm.so":
+                if is_at_least(upstream_tag, (0, 20, 0)):
+                    dawn = library.with_name("libwebgpu_dawn.so")
+                    if dawn.is_file():
+                        missing_dawn = sorted(
+                            {name for name in elf_imported_symbols(library)
+                             if name.startswith("wgpu")} - elf_exported_symbols(dawn)
+                        )
+                        if missing_dawn:
+                            errors.append(
+                                f"{library.relative_to(root).as_posix()} imports Dawn symbols "
+                                f"absent from {dawn.name}: {', '.join(missing_dawn)}"
+                            )
                 try:
                     validate_android_protobuf_isolation(library, platform, upstream_tag)
                 except RuntimeError as error:

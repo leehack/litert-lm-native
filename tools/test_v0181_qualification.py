@@ -103,8 +103,8 @@ class V0181QualificationTest(unittest.TestCase):
 
     def test_qualification_workflow_uses_exact_stable_candidate(self):
         workflow = (REPO / ".github/workflows/pr_release_qualification.yml").read_text()
-        self.assertIn("QUALIFICATION_UPSTREAM_TAG: v0.19.1", workflow)
-        self.assertIn("QUALIFICATION_UPSTREAM_COMMIT: 7a03724cece417f1724c923b3d527b4319730841", workflow)
+        self.assertIn("QUALIFICATION_UPSTREAM_TAG: v0.20.0", workflow)
+        self.assertIn("QUALIFICATION_UPSTREAM_COMMIT: 95df4c2a932b4917ace66fcfef6c154e8d2a6699", workflow)
 
 
 if __name__ == "__main__":

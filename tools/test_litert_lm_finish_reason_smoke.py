@@ -98,6 +98,19 @@ class FinishReasonSmokeTest(unittest.TestCase):
                     redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(smoke.main(), expected_status)
 
+    def test_v020_abi_only_requires_c_api_1_1_0(self) -> None:
+        argv = ["smoke", "--library", "runtime.so", "--abi-only",
+                "--upstream-tag", "v0.20.0"]
+        library = SimpleNamespace(
+            stream_proxy_finish_reason_abi_version=Mock(return_value=1),
+            litert_lm_native_in_process_litert_abi_version=Mock(return_value=1),
+        )
+        for version, expected in (((1, 0, 0), 1), ((1, 1, 0), 0), ((1, 2, 0), 1)):
+            api = SimpleNamespace(library=library, api_version=lambda: version)
+            with self.subTest(version=version), patch.object(sys, "argv", argv), \
+                    patch.object(smoke, "bind", return_value=api), redirect_stdout(io.StringIO()):
+                self.assertEqual(smoke.main(), expected)
+
 
 if __name__ == "__main__":
     unittest.main()

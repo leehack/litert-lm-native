@@ -228,6 +228,11 @@ def main() -> int:
         expected = expected_abi_version(args.upstream_tag)
         print(f"stream_proxy_finish_reason_abi_version() = {version}; "
               f"{args.upstream_tag} expects {expected}")
+        if args.upstream_tag == "v0.20.0":
+            c_version = api.api_version()
+            print(f"LiteRT-LM C API version: {c_version}; expected (1, 1, 0)")
+            if c_version != (1, 1, 0):
+                return 1
         in_process = in_process_litert_matches(library, args.upstream_tag)
         return 0 if version == expected and in_process else 1
     if version != 1:

@@ -8,11 +8,20 @@ PATCH_PATH = "native/bridge/step_zero_state_v0191.patch"
 SOURCE = "runtime/executor/llm_litert_compiled_model_executor.cc"
 PREIMAGE = "5e6898eb07178719c554ed49e4bc79d891badea4ad0576d00af54ef1bd8dbb4c"
 POSTIMAGE = "b2c73fbcb400654072bf926dbaa3b81e252acf750f8fc1a60dd0b51df84d890d"
-PATCH = Path(__file__).resolve().parents[1] / PATCH_PATH
+
+V020_PATCH_PATH = "native/bridge/step_zero_state_v020.patch"
+V020_PREIMAGE = "4ccb5ef331ab7d10927d618fee8041cf030500700646efeb2aab0e57c3212c32"
+V020_POSTIMAGE = "96ebbe1e0cdbdcfe00407cf6ead2b2df1073ab9eb53695a917bf487da3482e7a"
+
+
+def identity_for(tag: str) -> tuple[str, str, str]:
+    if tag == "v0.20.0":
+        return V020_PATCH_PATH, V020_PREIMAGE, V020_POSTIMAGE
+    return PATCH_PATH, PREIMAGE, POSTIMAGE
 
 
 def applies(tag: str) -> bool:
-    if tag == "v0.19.1":
+    if tag in {"v0.19.1", "v0.20.0"}:
         return True
     version = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag)
     if version and tuple(map(int, version.groups())) < (0, 19, 1):
@@ -28,28 +37,31 @@ def _digest(path: Path) -> str:
 def apply(source_root: Path, tag: str) -> None:
     if not applies(tag):
         return
+    patch_path, preimage, postimage = identity_for(tag)
     path = source_root / SOURCE
     digest = _digest(path)
-    if digest == POSTIMAGE:
+    if digest == postimage:
         return
-    if digest != PREIMAGE:
+    if digest != preimage:
         raise RuntimeError("Executor source changed; requalify the step-zero state patch")
-    args = ["--ignore-space-change", str(PATCH)]
+    args = ["--ignore-space-change", str(Path(__file__).resolve().parents[1] / patch_path)]
     subprocess.run(["git", "apply", "--check", *args], check=True, cwd=source_root)
     subprocess.run(["git", "apply", *args], check=True, cwd=source_root)
-    if _digest(path) != POSTIMAGE:
+    if _digest(path) != postimage:
         raise RuntimeError("Executor step-zero state postimage mismatch")
 
 
 def manifest(tag: str) -> list[dict]:
     if not applies(tag):
         return []
+    patch_path, preimage, postimage = identity_for(tag)
+    patch = Path(__file__).resolve().parents[1] / patch_path
     return [{
         "id": "step-zero-state",
-        "path": PATCH_PATH,
-        "sha256": hashlib.sha256(PATCH.read_bytes()).hexdigest(),
+        "path": patch_path,
+        "sha256": hashlib.sha256(patch.read_bytes()).hexdigest(),
         "source": SOURCE,
-        "preimageSha256Lf": PREIMAGE,
-        "postimageSha256Lf": POSTIMAGE,
+        "preimageSha256Lf": preimage,
+        "postimageSha256Lf": postimage,
         "scope": "source-built runtimes only; excludes official upstream prebuilts",
     }]

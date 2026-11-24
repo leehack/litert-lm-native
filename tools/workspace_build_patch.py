@@ -12,7 +12,7 @@ UPSTREAM_EQUIVALENT = "d99b438f0a961ac2a449d341c2431e49332c1076"
 AUDITED_TAGS = frozenset({"v0.18.1"})
 # v0.19.0 and v0.19.1 descend from UPSTREAM_EQUIVALENT and declare the same
 # plumbing.
-UPSTREAM_FIX_TAGS = frozenset({"v0.19.0", "v0.19.1"})
+UPSTREAM_FIX_TAGS = frozenset({"v0.19.0", "v0.19.1", "v0.20.0"})
 # LF-normalized (preimage, postimage) SHA-256 per patched v0.18.1 file.
 SOURCES = {
     ".bazelrc": (

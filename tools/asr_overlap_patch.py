@@ -28,14 +28,21 @@ V019_PATCH_PATH = "native/bridge/asr_untimed_overlap_v019.patch"
 V019_MERGER_SOURCE = "omni/speech2text/timestamp_text_merger.cc"
 V019_OVERLAP_TAGS = frozenset({"v0.19.0", "v0.19.1"})
 
+V020_OVERLAP_TAG = "v0.20.0"
+V020_PREIMAGE_SHA256 = "f6091439b29114fdb6cb010480e9b9b3961cd7c868925dc08f458f822ddecd65"
+V020_POSTIMAGE_SHA256 = "4a7949344fb79d7c7e7c6fc4261b74031b1244f6bb83f741229483775efdd835"
+OVERLAP_TAGS = AUDITED_OVERLAP_TAGS | V019_OVERLAP_TAGS | {V020_OVERLAP_TAG}
+
 
 def merger_source(compatibility_tag: str) -> str:
-    return (V019_MERGER_SOURCE if compatibility_tag in V019_OVERLAP_TAGS
+    return (V019_MERGER_SOURCE if compatibility_tag in V019_OVERLAP_TAGS | {V020_OVERLAP_TAG}
             else MERGER_SOURCE)
 
 
 def overlap_identity(compatibility_tag: str) -> tuple[str, str, str]:
     """Returns the patch path, preimage and postimage for an audited tag."""
+    if compatibility_tag == V020_OVERLAP_TAG:
+        return V019_PATCH_PATH, V020_PREIMAGE_SHA256, V020_POSTIMAGE_SHA256
     if compatibility_tag in V019_OVERLAP_TAGS:
         return V019_PATCH_PATH, V019_PREIMAGE_SHA256, V019_POSTIMAGE_SHA256
     return PATCH_PATH, PREIMAGE_SHA256, POSTIMAGE_SHA256
@@ -55,7 +62,7 @@ def require_asr_patch_decision(compatibility_tag: str) -> None:
     version = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", compatibility_tag)
     if version and tuple(map(int, version.groups())) < (0, 18, 0):
         return
-    if compatibility_tag in AUDITED_OVERLAP_TAGS | V019_OVERLAP_TAGS:
+    if compatibility_tag in OVERLAP_TAGS:
         return
     raise RuntimeError(
         f"ASR untimed overlap has no explicit decision for {compatibility_tag}; "
@@ -66,7 +73,7 @@ def require_asr_patch_decision(compatibility_tag: str) -> None:
 
 def source_patch_manifest(compatibility_tag: str) -> list[dict]:
     require_asr_patch_decision(compatibility_tag)
-    carried = compatibility_tag in AUDITED_OVERLAP_TAGS | V019_OVERLAP_TAGS
+    carried = compatibility_tag in OVERLAP_TAGS
     patch_path, preimage, postimage = overlap_identity(compatibility_tag)
     overlap = [] if not carried else [{
         "id": "asr-untimed-overlap",

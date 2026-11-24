@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 import unittest
 
-from android_gpu_safety_patch import SOURCES, apply, applies, digest, manifest
+from android_gpu_safety_patch import SOURCES, apply, applies, digest, manifest, sources_for
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -16,7 +16,7 @@ class AndroidGpuSafetyTest(unittest.TestCase):
         self.assertFalse(applies("v0.18.1"))
         self.assertTrue(applies("v0.19.0"))
         with self.assertRaises(RuntimeError):
-            applies("v0.20.0")
+            applies("v0.20.1")
         records = manifest("v0.19.0")
         self.assertEqual({r["source"] for r in records}, set(SOURCES))
         self.assertEqual(manifest("v0.18.1"), [])
@@ -56,15 +56,17 @@ class AndroidGpuSafetyTest(unittest.TestCase):
                          "set exact upstream source root to audit patch application")
     def test_exact_source_patch_and_idempotence(self):
         source = Path(os.environ["LITERT_GPU_SAFETY_SOURCE"])
+        tag = os.environ.get("LITERT_GPU_SAFETY_TAG", "v0.19.0")
+        sources = sources_for(tag)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            for name in SOURCES:
+            for name in sources:
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source / name, target)
-            apply(root, "v0.19.0")
-            apply(root, "v0.19.0")
-            for name, (_, post) in SOURCES.items():
+            apply(root, tag)
+            apply(root, tag)
+            for name, (_, post) in sources.items():
                 self.assertEqual(digest(root / name), post)
             text = (root / "c/engine.cc").read_text()
             start = text.index("LiteRtLmStatusCode litert_lm_engine_create(\n")
@@ -76,9 +78,14 @@ class AndroidGpuSafetyTest(unittest.TestCase):
                 unit = root / "engine_test.cc"
                 selected = body
                 if mutation:
-                    selected = selected.replace(
-                        "if (!safety.ok()) return litert::lm::c::ToCStatus(safety);",
-                        "// Evidence control: ignore preflight refusal.")
+                    refusal = (
+                        "LITERT_LM_C_RETURN_IF_ERROR(\n"
+                        "      litert_lm_native::PrepareAndroidGpuSafety(guarded_settings));"
+                        if tag == "v0.20.0"
+                        else "if (!safety.ok()) return litert::lm::c::ToCStatus(safety);"
+                    )
+                    self.assertIn(refusal, selected)
+                    selected = selected.replace(refusal, "// Ignore preflight refusal.")
                 unit.write_text(harness.replace("// PRODUCTION_ENGINE_CREATE", selected))
                 binary = root / ("mutant" if mutation else "guard")
                 subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra",

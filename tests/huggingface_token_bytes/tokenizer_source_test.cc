@@ -41,12 +41,12 @@ void* tokenizers_new_from_str(const char* data, size_t size) {
 }
 void tokenizers_free(void* data) { delete static_cast<Inventory*>(data); }
 void tokenizers_encode(void*, const char*, size_t, int,
-                       TokenizerEncodeResult*) {
-  std::abort();
+                       TokenizerEncodeResult* result) {
+  // This seam provides a vocabulary without a tokenizer for the text probes.
+  static uint32_t unused = 0;
+  *result = {&unused, 0};
 }
-void tokenizers_free_encode_results(TokenizerEncodeResult*, size_t) {
-  std::abort();
-}
+void tokenizers_free_encode_results(TokenizerEncodeResult*, size_t) {}
 void tokenizers_token_to_id(void*, const char*, size_t, int32_t*) {
   std::abort();
 }
@@ -93,7 +93,11 @@ int main(int argc, char** argv) {
             "actual HF special ID");
     }
     litert::lm::LlGuidanceConfig llg_config;
+#ifdef LITERT_LM_LLGUIDANCE_V2
+    llg_config.eos_ids = {0, 1};
+#else
     llg_config.eos_id = 0;
+#endif
     llg_config.special_tokens = {raw.at(0)};
     auto provider =
         litert::lm::LlgConstraintProvider::Create(*tokenizer, llg_config);
@@ -103,7 +107,10 @@ int main(int argc, char** argv) {
     Check(captured_llg_tokens.size() == bytes->size(),
           "provider preserves IDs");
     for (size_t id = 0; id < bytes->size(); ++id) {
-      const bool special = tokenizer->IsSpecialToken(id) || raw[id] == raw[0];
+      bool special = tokenizer->IsSpecialToken(id) || raw[id] == raw[0];
+#ifdef LITERT_LM_LLGUIDANCE_V2
+      special = special || id == 1;
+#endif
       const std::string expected =
           special ? std::string(1, '\xFF') + raw[id] : bytes->at(id);
       Check(captured_llg_tokens[id] == expected,

@@ -18,13 +18,14 @@ class StepZeroStatePatchTest(unittest.TestCase):
         self.assertEqual(records, [{
             "id": "step-zero-state",
             "path": carry.PATCH_PATH,
-            "sha256": hashlib.sha256(carry.PATCH.read_bytes()).hexdigest(),
+            "sha256": hashlib.sha256((Path(__file__).resolve().parents[1] / carry.PATCH_PATH).read_bytes()).hexdigest(),
             "source": carry.SOURCE,
             "preimageSha256Lf": carry.PREIMAGE,
             "postimageSha256Lf": "b2c73fbcb400654072bf926dbaa3b81e252acf750f8fc1a60dd0b51df84d890d",
             "scope": "source-built runtimes only; excludes official upstream prebuilts",
         }])
-        headers = [line for line in carry.PATCH.read_text().splitlines()
+        patch_path = Path(__file__).resolve().parents[1] / carry.PATCH_PATH
+        headers = [line for line in patch_path.read_text().splitlines()
                    if line.startswith(("--- ", "+++ "))]
         self.assertEqual(headers, [f"--- a/{carry.SOURCE}", f"+++ b/{carry.SOURCE}"])
 
@@ -38,7 +39,7 @@ class StepZeroStatePatchTest(unittest.TestCase):
             patch_path = root / "fixture.patch"
             patch_path.write_text(f"--- a/{carry.SOURCE}\n+++ b/{carry.SOURCE}\n"
                                   "@@ -1 +1 @@\n-old executor\n+new executor\n")
-            with (patch.object(carry, "PATCH", patch_path),
+            with (patch.object(carry, "PATCH_PATH", str(patch_path)),
                   patch.object(carry, "PREIMAGE", hashlib.sha256(before).hexdigest()),
                   patch.object(carry, "POSTIMAGE", hashlib.sha256(after).hexdigest())):
                 source.write_bytes(before)

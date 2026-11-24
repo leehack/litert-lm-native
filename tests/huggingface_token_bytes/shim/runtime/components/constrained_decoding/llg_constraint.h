@@ -8,5 +8,8 @@ class LlgConstraint : public Constraint {
   LlgConstraint(::LlgConstraint* value, int, int) {
     captured_created_constraint = value;
   }
+  LlgConstraint(::LlgConstraint* value, int, const std::vector<int>&) {
+    captured_created_constraint = value;
+  }
 };
 }  // namespace litert::lm
