@@ -26,9 +26,6 @@ UPSTREAM_MEDIA_BASE_URL = (
     "https://media.githubusercontent.com/media/google-ai-edge/LiteRT-LM"
 )
 
-V0_15_ANDROID_SAMPLER_FIX_COMMIT = (
-    "8bee4dddc3794958b4bdd8a3a4ba75bcb71f6fbb"
-)
 ANDROID_DAWN_ROLLBACK_COMMIT = (
     "f73637c57f0940b53da184e0d5adfc52a4e55eef"
 )
@@ -56,59 +53,45 @@ ANDROID_DAWN_ROLLBACKS = (
     ),
 )
 
-PREBUILT_OVERRIDES: dict[str, tuple[PrebuiltOverride, ...]] = {
-    "v0.15.0": (
-        PrebuiltOverride(
-            upstream_target="android_arm64",
-            platform="android",
-            arch="arm64",
-            filename="libLiteRtTopKOpenClSampler.so",
-            source_commit=V0_15_ANDROID_SAMPLER_FIX_COMMIT,
-            sha256=(
-                "4404dc68786460602685cab62ddfa29035e9cfc38bb4550dec15abaaa1302a82"
-            ),
-        ),
-        PrebuiltOverride(
-            upstream_target="android_x86_64",
-            platform="android",
-            arch="x64",
-            filename="libLiteRtTopKOpenClSampler.so",
-            source_commit=V0_15_ANDROID_SAMPLER_FIX_COMMIT,
-            sha256=(
-                "747ca5ed6a175fb4c2854ccee1d6ad97f11fe14d9e0d2b0c1710e1435376d51e"
-            ),
-        ),
-        *ANDROID_DAWN_ROLLBACKS,
-    ),
-    "v0.16.0": ANDROID_DAWN_ROLLBACKS,
-    # v0.16.1 is a metadata-only release of the exact v0.16.0 source commit.
-    # Development builds using it as their compatibility baseline keep the
-    # validated Dawn correction until new device evidence retires it.
-    "v0.16.1": ANDROID_DAWN_ROLLBACKS,
-    # v0.17 still loses the Vulkan device on Pixel Mali-G715. Keep the
-    # checksum-pinned correction; do not retire it without device evidence.
-    "v0.17.0": ANDROID_DAWN_ROLLBACKS,
-    # v0.17.1 changes tool-call integer handling, not the Android Dawn inputs.
-    # Preserve the correction until matching device evidence retires it.
-    "v0.17.1": ANDROID_DAWN_ROLLBACKS,
-    # Stock v0.18 still loses the Vulkan device on Pixel Mali-G715.
-    # A single-library comparison restores inference with the pinned Dawn.
-    "v0.18.0": ANDROID_DAWN_ROLLBACKS,
-    # v0.18.1 updates LiteRT/provider dependencies but not Dawn payloads.
-    # No affected Pixel/Mali device requalification permits retirement.
-    "v0.18.1": ANDROID_DAWN_ROLLBACKS,
-    # v0.19.0 rebuilds Dawn and the accelerator. Keep the correction, whose
-    # exports cover the candidate's imports, until a Pixel Mali-G715 run retires it.
-    "v0.19.0": ANDROID_DAWN_ROLLBACKS,
-    # v0.19.1 ships the same prebuilt Dawn and accelerator payloads as v0.19.0.
-    "v0.19.1": ANDROID_DAWN_ROLLBACKS,
-}
-
 
 def prebuilt_overrides(upstream_tag: str | None) -> tuple[PrebuiltOverride, ...]:
-    if upstream_tag is None:
-        return ()
-    return PREBUILT_OVERRIDES.get(upstream_tag, ())
+    return ANDROID_DAWN_ROLLBACKS if upstream_tag == "v0.20.0" else ()
+
+
+def _recorded_overrides(upstream_tag: str | None) -> tuple[PrebuiltOverride, ...]:
+    # Published provenance and the frozen schema-2 fixture still consume these
+    # records. Historical source builds use their own release refs.
+    if upstream_tag == "v0.15.0":
+        sampler_commit = "8bee4dddc3794958b4bdd8a3a4ba75bcb71f6fbb"
+        return (
+            PrebuiltOverride(
+                upstream_target="android_arm64",
+                platform="android",
+                arch="arm64",
+                filename="libLiteRtTopKOpenClSampler.so",
+                source_commit=sampler_commit,
+                sha256=(
+                    "4404dc68786460602685cab62ddfa29035e9cfc38bb4550dec15abaaa1302a82"
+                ),
+            ),
+            PrebuiltOverride(
+                upstream_target="android_x86_64",
+                platform="android",
+                arch="x64",
+                filename="libLiteRtTopKOpenClSampler.so",
+                source_commit=sampler_commit,
+                sha256=(
+                    "747ca5ed6a175fb4c2854ccee1d6ad97f11fe14d9e0d2b0c1710e1435376d51e"
+                ),
+            ),
+            *ANDROID_DAWN_ROLLBACKS,
+        )
+    if upstream_tag in {
+        "v0.16.0", "v0.16.1", "v0.17.0", "v0.17.1", "v0.18.0", "v0.18.1",
+        "v0.19.0", "v0.19.1",
+    }:
+        return ANDROID_DAWN_ROLLBACKS
+    return prebuilt_overrides(upstream_tag)
 
 
 def prebuilt_override_manifest(upstream_tag: str | None) -> list[dict[str, str]]:
@@ -120,5 +103,5 @@ def prebuilt_override_manifest(upstream_tag: str | None) -> list[dict[str, str]]
             "targetPath": override.target_path,
             "sha256": override.sha256,
         }
-        for override in prebuilt_overrides(upstream_tag)
+        for override in _recorded_overrides(upstream_tag)
     ]

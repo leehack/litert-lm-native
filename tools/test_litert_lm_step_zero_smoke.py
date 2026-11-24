@@ -41,6 +41,19 @@ def grade_sequence(contents: list[str], reference: str = REFERENCE, **changes) -
 
 
 class StepZeroSmokeTest(unittest.TestCase):
+    def test_c_api_admission_checks_major_minor_and_patch(self) -> None:
+        with patch.object(smoke, "CApi") as api:
+            for version in ((1, 0, 0), (1, 1, 2)):
+                api.return_value.api_version.return_value = version
+                self.assertEqual(smoke.Runtime(Path("runtime")).version, version)
+            api.return_value._bind.reset_mock()
+            for version in ((0, 20, 0), (1, 2, 0), (1, 1, -1)):
+                with self.subTest(version=version):
+                    api.return_value.api_version.return_value = version
+                    with self.assertRaisesRegex(RuntimeError, "Expected C API"):
+                        smoke.Runtime(Path("runtime"))
+            api.return_value._bind.assert_not_called()
+
     def test_requires_exact_independent_content_even_if_it_still_counts(self) -> None:
         clean = [REFERENCE] * 5
         self.assertEqual(grade_sequence(clean)["failures"], [])

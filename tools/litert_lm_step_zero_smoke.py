@@ -39,8 +39,8 @@ class Runtime:
         self.api = CApi(library)
         self.library = self.api.library
         self.version = self.api.api_version()
-        if self.version[:2] != (1, 0):
-            raise RuntimeError(f"Expected C API 1.0, found {self.version}")
+        if self.version[:2] not in {(1, 0), (1, 1)} or self.version[2] < 0:
+            raise RuntimeError(f"Expected C API 1.0.x or 1.1.x, found {self.version}")
         self.api.set_min_log_level(0)
         for name, types in {
             "engine_settings_set_max_num_tokens": [ct.c_void_p, ct.c_int],

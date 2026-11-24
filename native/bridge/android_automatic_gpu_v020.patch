@@ -1,0 +1,31 @@
+diff --git a/runtime/executor/BUILD b/runtime/executor/BUILD
+--- a/runtime/executor/BUILD
++++ b/runtime/executor/BUILD
+@@ -366,11 +366,8 @@
+     name = "default_static_gpu_accelerator",
+     visibility = ["//visibility:private"],
+     deps = select({
+-        ":android_webgpu": [
++        "@platforms//os:android": [
+             "@litert//litert/runtime/accelerators/gpu:ml_drift_gpu_accelerator",
+-        ],
+-        "@platforms//os:android": [
+-            "@litert//litert/runtime/accelerators/gpu:ml_drift_cl_gl_accelerator",
+         ],
+         ":ios_webgpu": [
+             "@litert//litert/runtime/accelerators/gpu:ml_drift_webgpu_accelerator",
+diff --git a/runtime/components/BUILD b/runtime/components/BUILD
+--- a/runtime/components/BUILD
++++ b/runtime/components/BUILD
+@@ -293,7 +293,10 @@
+     name = "default_static_gpu_samplers",
+     deps = select({
+         "//runtime/executor:android_webgpu": [":top_k_webgpu_sampler_static"],
+-        "@platforms//os:android": [":top_k_opencl_sampler_static"],
++        "@platforms//os:android": [
++            ":top_k_opencl_sampler_static",
++            ":top_k_webgpu_sampler_static",
++        ],
+         "//runtime/executor:ios_webgpu": [":top_k_webgpu_sampler_static"],
+         "//runtime/executor:macos_metal": [":top_k_metal_sampler_static"],
+         "@platforms//os:ios": [":top_k_metal_sampler_static"],

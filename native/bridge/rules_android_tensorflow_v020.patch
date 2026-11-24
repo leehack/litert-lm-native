@@ -1,0 +1,131 @@
+diff --git a/toolchains/android_sdk/BUILD b/toolchains/android_sdk/BUILD
+--- a/toolchains/android_sdk/BUILD
++++ b/toolchains/android_sdk/BUILD
+@@ -31,5 +31,5 @@
+     #    "@bazel_tools//platforms:android",
+     #],
+-    toolchain = "@androidsdk//:sdk",
++    toolchain = ":toolchain_type",
+     toolchain_type = ":toolchain_type",
+ )
+@@ -37,5 +37,5 @@
+ dummy_toolchain_dep(
+     name = "dummy_sdk_tools",
+-    sdk_toolchain = "@androidsdk//:sdk",
++    sdk_toolchain = ":toolchain_type",
+     visibility = ["//visibility:public"],
+ )
+diff --git a/tools/jdk/BUILD b/tools/jdk/BUILD
+--- a/tools/jdk/BUILD
++++ b/tools/jdk/BUILD
+@@ -53,5 +53,5 @@
+     name = "toolchain_android_only",
+     bootclasspath = [
+-        ":bootclasspath_android_only",
++        "@rules_java//toolchains:platformclasspath",
+     ],
+     visibility = ["//visibility:public"],
+diff --git a/BUILD b/BUILD
+--- a/BUILD
++++ b/BUILD
+@@ -1,3 +1,2 @@
+-load("@bazel_gazelle//:def.bzl", "gazelle")
+ load("@rules_license//rules:license.bzl", "license")
+ 
+@@ -18,5 +17,4 @@
+ 
+ # gazelle:prefix github.com/bazelbuild/rules_android
+-gazelle(name = "gazelle")
+ 
+ # Common default platform definitions for use by Android projects.
+diff --git a/tools/android/BUILD b/tools/android/BUILD
+--- a/tools/android/BUILD
++++ b/tools/android/BUILD
+@@ -53,5 +53,5 @@
+     main_class = "com.android.tools.build.bundletool.BundleToolMain",
+     visibility = ["//visibility:public"],
+-    runtime_deps = ["@rules_android_maven//:com_android_tools_build_bundletool"],
++    runtime_deps = [],
+ )
+ 
+@@ -103,7 +103,5 @@
+     name = "desugar_jdk_libs_json",
+     srcs = select({
+-        "full_desugaring": [":full_desugar_jdk_libs_config_json"],
+         "minimal_desugaring": [":minimal_desugar_jdk_libs_config_json"],
+-        "//conditions:default": [":full_desugar_jdk_libs_config_json"],
+     }),
+     outs = ["desugar_jdk_libs.json"],
+@@ -143,9 +141,7 @@
+     srcs = [
+         ":desugared_jdk_libs_from_maven.jar",
+-        ":full_desugar_jdk_libs_config_json",
+     ],
+     outs = ["desugared_jdk_libs.jar"],
+     cmd = "$(location :desugar_java8) " +
+-          "--desugared_lib_config $(location :full_desugar_jdk_libs_config_json) " +
+           "--input=$(location :desugared_jdk_libs_from_maven.jar) --output=$@",
+     tools = [":desugar_java8"],
+@@ -187,7 +183,4 @@
+     srcs = [":d8_desugar.sh"],
+     data = [
+-        ":d8_desugar_params",
+-        ":full_desugar_jdk_libs_config_json",
+-        "//src/tools/java/com/google/devtools/build/android/r8:desugar",
+         "@bazel_tools//tools/bash/runfiles",
+     ],
+@@ -204,5 +197,5 @@
+     name = "desugared_java8_legacy_apis",
+     constraints = ["android"],
+-    jars = [":ijar_desugared_java8_legacy_libs"],
++    jars = [],
+     neverlink = 1,
+     visibility = ["//visibility:public"],
+@@ -213,5 +206,5 @@
+     main_class = "com.android.tools.r8.D8",
+     visibility = ["//visibility:public"],
+-    runtime_deps = ["@rules_android_maven//:com_android_tools_r8"],
++    runtime_deps = [],
+ )
+ 
+@@ -220,5 +213,5 @@
+     main_class = "com.android.tools.r8.R8",
+     visibility = ["//visibility:public"],
+-    runtime_deps = ["@rules_android_maven//:com_android_tools_r8"],
++    runtime_deps = [],
+ )
+ 
+@@ -227,5 +220,5 @@
+     main_class = "com.android.tools.r8.tracereferences.TraceReferences",
+     visibility = ["//visibility:public"],
+-    runtime_deps = ["@rules_android_maven//:com_android_tools_r8"],
++    runtime_deps = [],
+ )
+ 
+@@ -234,5 +227,5 @@
+     main_class = "com.android.build.shrinker.ResourceShrinkerCli",
+     visibility = ["//visibility:public"],
+-    runtime_deps = ["@rules_android_maven//:com_android_tools_build_gradle"],
++    runtime_deps = [],
+ )
+ 
+@@ -270,5 +263,5 @@
+     main_class = "com.google.devtools.build.android.r8.CompatDexBuilder",
+     visibility = ["//visibility:private"],
+-    runtime_deps = ["//src/tools/java/com/google/devtools/build/android/r8"],
++    runtime_deps = [],
+ )
+ 
+@@ -295,5 +288,5 @@
+     main_class = "com.google.devtools.build.android.r8.DexFileMerger",
+     visibility = ["//visibility:private"],
+-    runtime_deps = ["//src/tools/java/com/google/devtools/build/android/r8"],
++    runtime_deps = [],
+ )
+ 
+@@ -308,4 +301,4 @@
+     ],
+     main_class = "com.android.tools.r8.GlobalSyntheticsGenerator",
+-    runtime_deps = ["@rules_android_maven//:com_android_tools_r8"],
++    runtime_deps = [],
+ )

@@ -15,7 +15,6 @@ from xnnpack_pf32_sme2_patch import (
 from xnnpack_pqs8_qc4w_sme2_patch import (
     PATCH_PATH,
     SOURCES,
-    require_xnnpack_qc4w_patch_decision,
     xnnpack_qc4w_patch_manifest,
 )
 
@@ -26,17 +25,6 @@ SME2_CONDITION = "if (XNN_ENABLE_ARM_SME2 && (hardware_config->arch_flags & xnn_
 
 
 class XnnpackPqs8Qc4wSme2PatchTest(unittest.TestCase):
-    def test_decision_applies_only_to_v0181(self) -> None:
-        for tag in ("v0.17.1", "v0.18.0"):
-            self.assertFalse(require_xnnpack_qc4w_patch_decision(tag))
-            self.assertEqual(xnnpack_qc4w_patch_manifest(tag), [])
-        self.assertTrue(require_xnnpack_qc4w_patch_decision("v0.18.1"))
-        for tag in ("v0.18.2", "v0.19.2", "main"):
-            with self.subTest(tag=tag), self.assertRaisesRegex(
-                RuntimeError, "no explicit decision"
-            ):
-                require_xnnpack_qc4w_patch_decision(tag)
-
     def test_patch_disables_only_the_sme2_pqs8_qc4w_config(self) -> None:
         self.assertEqual(re.findall(r"^diff --git a/(\S+) b/\1$", PATCH, re.MULTILINE), [CONFIG])
         self.assertEqual(list(SOURCES), [CONFIG])
@@ -60,12 +48,12 @@ class XnnpackPqs8Qc4wSme2PatchTest(unittest.TestCase):
     def test_build_verifies_the_final_postimage_of_every_patched_source(self) -> None:
         expected = {name: postimage for name, (_, postimage) in PF32_SOURCES.items()}
         expected[CONFIG] = SOURCES[CONFIG][1]
-        self.assertEqual(build.xnnpack_postimages("v0.18.1"), expected)
+        self.assertEqual(build.xnnpack_postimages(), expected)
 
     def test_manifest_records_the_opt_out_last(self) -> None:
-        records = [r for r in source_patch_manifest("v0.18.1")
-                   if r["id"] != "litert-cpu-options-identifier"]
-        self.assertEqual(records[-1:], xnnpack_qc4w_patch_manifest("v0.18.1"))
+        records = [r for r in source_patch_manifest("v0.20.0")
+                   if r["id"].startswith("xnnpack-")]
+        self.assertEqual(records[-1:], xnnpack_qc4w_patch_manifest("v0.20.0"))
         record = records[-1]
         self.assertEqual(record["id"], "xnnpack-pqs8-qc4w-sme2")
         self.assertEqual(record["path"], PATCH_PATH)

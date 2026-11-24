@@ -31,16 +31,9 @@ cc_library(
 )
 
 exports_files([
-    "asr_untimed_overlap.patch",
-    "huggingface_token_bytes_v019.patch",
     "asr_untimed_overlap_v019.patch",
-    "litert_cpu_options_identifier.patch",
-    "litert_gpu_environment_destroy_callback.patch",
-    "litert_ios_framework_paths.patch",
-    "litert_stage_spatial_tensors.patch",
-    "sentencepiece_bpe_null.patch",
-    "stream_finish_reason.patch",
-    "stream_finish_reason_v019.patch",
+    "litert_stage_spatial_tensors_v020.patch",
+    "rules_android_tensorflow_v020.patch",
     "xnnpack_pf32_sme2.patch",
     "xnnpack_pqs8_qc4w_sme2.patch",
 ])
@@ -50,7 +43,6 @@ config_setting(
     define_values = {"litert_lm_stream_chunk_api": "true"},
 )
 
-# Set only when stream_finish_reason.patch is applied to the upstream source.
 config_setting(
     name = "finish_reason_api",
     define_values = {"litert_lm_finish_reason_api": "true"},
@@ -90,15 +82,6 @@ config_setting(
     define_values = {"litert_lm_c_api_v1": "true"},
 )
 
-# Upstream links only the OpenCL TopK sampler on Android, but its GPU
-# accelerator runs on WebGPU when OpenCL cannot be loaded.
-config_setting(
-    name = "android_webgpu_sampler",
-    constraint_values = ["@platforms//os:android"],
-    define_values = {"litert_lm_android_webgpu_sampler": "true"},
-)
-
-# v0.17 moved the capabilities C implementation into //c:engine.
 config_setting(
     name = "capabilities_in_c_engine",
     define_values = {"litert_lm_capabilities_in_c_engine": "true"},
@@ -287,10 +270,7 @@ cc_binary(
         ":litert_lm_bridge",
         ":litert_lm_asr_bridge",
         "//c:engine",
-    ] + CAPABILITIES_DEPS + select({
-        ":android_webgpu_sampler": ["//runtime/components:top_k_webgpu_sampler_static"],
-        "//conditions:default": [],
-    }),
+    ] + CAPABILITIES_DEPS,
 )
 
 cc_binary(

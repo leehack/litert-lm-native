@@ -27,7 +27,7 @@ class AsrUntimedOverlapTest(unittest.TestCase):
 
     def test_newer_and_unknown_versions_require_explicit_patch_decision(self):
         from asr_overlap_patch import source_patch_manifest
-        for tag in ("v0.18.2", "v0.19.2", "v1.0.0", "v0.19.0-rc.1", "main"):
+        for tag in ("v0.20.1", "v0.20.2", "v1.0.0", "v0.19.0-rc.1", "main"):
             with self.subTest(tag=tag):
                 # Check before source I/O or build, and on the release manifest
                 # path too. Updating a postimage hash cannot bypass this gate.
@@ -49,85 +49,94 @@ class AsrUntimedOverlapTest(unittest.TestCase):
     def test_patch_is_exact_idempotent_and_rejects_drift(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            source = root / "omni/asr/timestamp_text_merger.cc"
+            source = root / "omni/speech2text/timestamp_text_merger.cc"
             source.parent.mkdir(parents=True)
-            original = (REPO / "tools/fixtures/timestamp_text_merger_v018.cc").read_bytes()
+            original = (REPO / "tools/fixtures/timestamp_text_merger_v020.cc").read_bytes()
             source.write_bytes(original)
             build.patch_asr_untimed_overlap(root, "v0.17.1")
             self.assertEqual(source.read_bytes(), original)
-            build.patch_asr_untimed_overlap(root, "v0.18.0")
+            build.patch_asr_untimed_overlap(root, "v0.20.0")
             patched = source.read_bytes()
             self.assertNotEqual(patched, original)
-            build.patch_asr_untimed_overlap(root, "v0.18.0")
+            build.patch_asr_untimed_overlap(root, "v0.20.0")
             self.assertEqual(source.read_bytes(), patched)
             source.write_bytes(original + b"// drift\n")
             with self.assertRaisesRegex(RuntimeError, "requalify untimed overlap"):
-                build.patch_asr_untimed_overlap(root, "v0.18.0")
+                build.patch_asr_untimed_overlap(root, "v0.20.0")
             self.assertEqual(source.read_bytes(), original + b"// drift\n")
 
     def test_crlf_and_autocrlf_application_and_postimage(self):
         # Extends the audit crlf.sh/crlf2.sh matrix: patch bytes stay LF;
         # pre/post image hashes compare normalized source, even on Windows.
         from asr_overlap_patch import POSTIMAGE_SHA256, source_sha256
-        original = (REPO / "tools/fixtures/timestamp_text_merger_v018.cc").read_bytes()
+        original = (REPO / "tools/fixtures/timestamp_text_merger_v020.cc").read_bytes()
         for autocrlf in ("true", "false"):
             for ending in (b"\n", b"\r\n"):
                 with self.subTest(autocrlf=autocrlf, ending=ending), tempfile.TemporaryDirectory() as temp:
                     root = Path(temp)
                     config = root / "gitconfig"
                     config.write_text(f"[core]\n autocrlf = {autocrlf}\n")
-                    source = root / "omni/asr/timestamp_text_merger.cc"
+                    source = root / "omni/speech2text/timestamp_text_merger.cc"
                     source.parent.mkdir(parents=True)
                     source.write_bytes(original.replace(b"\n", ending))
                     with patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(config)}):
-                        build.patch_asr_untimed_overlap(root, "v0.18.0")
+                        build.patch_asr_untimed_overlap(root, "v0.20.0")
                         self.assertEqual(source_sha256(source.read_bytes()), POSTIMAGE_SHA256)
-                        build.patch_asr_untimed_overlap(root, "v0.18.0")
+                        build.patch_asr_untimed_overlap(root, "v0.20.0")
 
     def test_patch_attributes_preserve_lf_on_windows_checkout(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             subprocess.run(["git", "init", "-q", str(root)], check=True)
-            for name in (".gitattributes", "native/bridge/asr_untimed_overlap.patch"):
+            for name in (".gitattributes", "native/bridge/asr_untimed_overlap_v019.patch"):
                 dest = root / name
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes((REPO / name).read_bytes())
             subprocess.run(["git", "-c", "core.autocrlf=true", "add", "."], cwd=root, check=True)
-            target = root / "native/bridge/asr_untimed_overlap.patch"
+            target = root / "native/bridge/asr_untimed_overlap_v019.patch"
             target.unlink()
             subprocess.run(["git", "-c", "core.autocrlf=true", "checkout-index", "-a"], cwd=root, check=True)
-            self.assertEqual(target.read_bytes(), (REPO / "native/bridge/asr_untimed_overlap.patch").read_bytes())
+            self.assertEqual(target.read_bytes(), (REPO / "native/bridge/asr_untimed_overlap_v019.patch").read_bytes())
             self.assertNotIn(b"\r", target.read_bytes())
 
     def test_postimage_verification_rejects_incorrect_apply(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            source = root / "omni/asr/timestamp_text_merger.cc"
+            source = root / "omni/speech2text/timestamp_text_merger.cc"
             source.parent.mkdir(parents=True)
-            source.write_bytes((REPO / "tools/fixtures/timestamp_text_merger_v018.cc").read_bytes())
+            source.write_bytes((REPO / "tools/fixtures/timestamp_text_merger_v020.cc").read_bytes())
             with patch.object(build.subprocess, "run"):
                 with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
-                    build.patch_asr_untimed_overlap(root, "v0.18.0")
+                    build.patch_asr_untimed_overlap(root, "v0.20.0")
 
     def test_runtime_patches_before_bazel_including_source_root_mode(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            with patch.object(build, "patch_asr_untimed_overlap", side_effect=RuntimeError("patch gate")) as gate:
+            with (patch.object(build, "verify_carried_dependency_pins"),
+                  patch.object(build, "patch_asr_untimed_overlap", side_effect=RuntimeError("patch gate")) as gate):
                 with self.assertRaisesRegex(RuntimeError, "patch gate"):
-                    build.build_runtime(root, "macos", "arm64", "v0.18.0", "2")
-                gate.assert_called_once_with(root, "v0.18.0")
+                    build.build_runtime(root, "macos", "arm64", "v0.20.0", "2")
+                gate.assert_called_once_with(root, "v0.20.0")
 
     def test_patch_applies_inside_a_worktree_without_touching_its_root(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             subprocess.run(["git", "init", "-q", str(root)], check=True)
             upstream = root / ".tmp/upstream"
-            source = upstream / "omni/asr/timestamp_text_merger.cc"
+            source = upstream / "omni/speech2text/timestamp_text_merger.cc"
             source.parent.mkdir(parents=True)
-            original = (REPO / "tools/fixtures/timestamp_text_merger_v018.cc").read_bytes()
+            original = (REPO / "tools/fixtures/timestamp_text_merger_v020.cc").read_bytes()
             source.write_bytes(original)
-            build.patch_asr_untimed_overlap(upstream, "v0.18.0")
-            self.assertNotEqual(source.read_bytes(), original)
+            with patch.object(subprocess, "run", wraps=subprocess.run) as git:
+                build.patch_asr_untimed_overlap(upstream, "v0.20.0")
+            self.assertEqual(build.source_sha256(original), build.ASR_PREIMAGE)
+            self.assertEqual(build.source_sha256(source.read_bytes()), build.ASR_POSTIMAGE)
+            self.assertEqual(git.call_count, 2)
+            for call in git.call_args_list:
+                self.assertEqual(
+                    call.kwargs["env"]["GIT_CEILING_DIRECTORIES"],
+                    upstream.resolve().parent.as_posix(),
+                )
             self.assertFalse((root / "omni").exists())
 
     @unittest.skipUnless(os.environ.get("LITERT_LM_ASR_SOURCE"),

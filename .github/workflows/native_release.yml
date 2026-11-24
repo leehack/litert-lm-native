@@ -128,6 +128,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$NATIVE_COMMIT"
           test "$GITHUB_SHA" = "$NATIVE_COMMIT"
+          PYTHONPATH=tools python3 -c 'import sys; from build_upstream_runtime import require_source_build; require_source_build(sys.argv[1])' "$COMPATIBILITY_TAG"
           if [ -n "${CANDIDATE_SOURCE:-}" ]; then
             test "$PUBLICATION_APPROVAL" = publish
             PYTHONPATH=tools python3 -c 'import os; from candidate_promotion import parse_source; parse_source(os.environ["CANDIDATE_SOURCE"])'

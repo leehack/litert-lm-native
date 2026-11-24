@@ -183,6 +183,10 @@ Development builds use `g<first-12-of-full-upstream-SHA>` and development
 rebuilds append the same compact `-N`. Historical `-native.N` releases remain
 immutable and consumable but are never emitted again.
 
+The current source builder qualifies LiteRT-LM v0.20.0. Reproduce an older
+release from its native tag and use the tooling at that ref. The released
+archives and metadata remain available for existing consumers.
+
 When moving to a new LiteRT-LM tag:
 
 1. Let `Detect Upstream Release` prepare exact inputs, or resolve the exact
@@ -213,15 +217,14 @@ inference and ASR real-model smokes on Linux x64, Windows x64, and macOS arm64. 
 runtime/evidence artifacts for review but has no publication input or write
 permission.
 
-Pull-request qualification targets upstream `v0.19.1` at
-`7a03724cece417f1724c923b3d527b4319730841`. The v0.19 line's C API 1.0 breaks
-every pre-1.0 consumer; v0.19.1 keeps the v0.19.0 C ABI and every carried-patch
-decision. See the [v0.19 migration and carried-patch
-decisions](docs/v019_qualification.md). Android C API 1.0 source builds keep
-bundled protobuf private to the runtime link; see [isolation and qualification
-gates](docs/android_protobuf_isolation.md).
+Pull-request qualification targets upstream `v0.20.0` at
+`95df4c2a932b4917ace66fcfef6c154e8d2a6699`. Consumers must admit C API
+`1.1.0` before loading the candidate. See the [v0.20 qualification and carry
+decisions](docs/v020_qualification.md). Android C API 1.x source builds
+keep bundled protobuf private to the runtime link. See the
+[isolation and qualification gates](docs/android_protobuf_isolation.md).
 
-The v0.19 source candidate conservatively refuses the exact Qwen3-0.6B fixture
+The v0.20 source candidate conservatively refuses the exact Qwen3-0.6B fixture
 on the documented Adreno 750 driver tuple, and when this fixture's GPU safety
 facts are unavailable or ambiguous. It returns an actionable CPU remedy before
 engine creation. This source guard still needs current-candidate device
@@ -328,7 +331,9 @@ flat dylibs that App Store bundles cannot ship. v0.19 `LiteRtLm` links its GPU
 accelerator and sampler, so neither is needed; releases after `v0.19.1-2` ship
 no Metal module. Android v0.19 runtimes after `v0.19.1-4` link both the OpenCL
 and WebGPU samplers, because the linked Android GPU accelerator can serve either
-backend. Releases after `v0.19.1-3` also drop the macOS `libLiteRt` and
+backend. Android v0.20.0 source builds keep automatic GPU selection. The
+combined accelerator probes OpenCL and uses WebGPU when OpenCL is unavailable.
+Releases after `v0.19.1-3` also drop the macOS `libLiteRt` and
 `libLiteRtWebGpuAccelerator` dylibs, the iOS loose `libLiteRt` and the matching
 `LiteRt` and `LiteRtWebGpuAccelerator` XCFramework zips: v0.19 `LiteRtLm`
 embeds LiteRT and never opens them.
@@ -432,9 +437,8 @@ turn may report 0.
 
 A missing symbol or version 0 means the runtime never reports a cause; treat
 it as unknown, never infer truncation from output length. Version 1 requires
-the carried v0.18.0, v0.18.1, v0.19.0 or v0.19.1 patch described in
-[`docs/upstream_patch_audit.md`](docs/upstream_patch_audit.md); Session-API
-streams always report 0. The patch's
+the [version-specific finish-reason patch](docs/upstream_patch_audit.md).
+Session-API streams always report 0. The patch's
 `litert_lm_native_stream_chunk_get_finish_reason` can appear in the runtime's
 exported symbols (it does on macOS); it is internal to the bridge, not a
 consumer API, and may change without notice.

@@ -20,7 +20,7 @@ from pathlib import Path
 
 from litert_lm_c_api import CApi
 from litert_lm_symbols import in_process_litert_abi_version
-from stream_finish_reason_patch import require_finish_reason_patch_decision
+from source_patch_utils import active_source_carries
 
 FINISH_REASONS = {
     0: "unknown",
@@ -183,7 +183,9 @@ def mismatches(results: list[dict[str, object]]) -> list[str]:
 
 
 def expected_abi_version(upstream_tag: str) -> int:
-    return 1 if require_finish_reason_patch_decision(upstream_tag) else 0
+    if not active_source_carries(upstream_tag):
+        raise RuntimeError("Use the historical native release ref to qualify LiteRT-LM before v0.20.0")
+    return 1
 
 
 def in_process_litert_matches(library, upstream_tag: str) -> bool:
@@ -228,6 +230,11 @@ def main() -> int:
         expected = expected_abi_version(args.upstream_tag)
         print(f"stream_proxy_finish_reason_abi_version() = {version}; "
               f"{args.upstream_tag} expects {expected}")
+        if args.upstream_tag == "v0.20.0":
+            c_version = api.api_version()
+            print(f"LiteRT-LM C API version: {c_version}; expected (1, 1, 0)")
+            if c_version != (1, 1, 0):
+                return 1
         in_process = in_process_litert_matches(library, args.upstream_tag)
         return 0 if version == expected and in_process else 1
     if version != 1:

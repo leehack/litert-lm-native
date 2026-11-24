@@ -1,5 +1,8 @@
 # Untimed ASR overlap qualification (#673)
 
+The current v0.20.0 builder uses the port below with v0.20.0 source hashes.
+The v0.18 and v0.19 rebuild instructions refer to their native release refs.
+
 ## v0.19.0 port
 
 v0.19.0 moved the merger to `omni/speech2text` and replaced the word-count
@@ -29,7 +32,8 @@ for byte on every corpus; the new fallback hides their guard. The sections below
 record the original v0.18.0 audit.
 
 The v0.19.1 merger is byte-identical to v0.19.0, so v0.19.1 keeps the same
-port and pre/postimage hashes; v0.19.2 and later still require a decision.
+port and pre/postimage hashes. The v0.20.0 merger moves its text-utils include.
+The same patch applies with new hashes. See [v0.20 qualification](v020_qualification.md).
 
 ## Design and scope
 

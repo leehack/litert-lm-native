@@ -1,5 +1,8 @@
 # LiteRT-LM v0.19.0 owner qualification
 
+This historical qualification uses the files and tools at the v0.19 native
+release refs. See [v0.20 qualification](v020_qualification.md) for current carries.
+
 Upstream tag `v0.19.0` is `83ce6067f2e2a3fb697556928f93936693ded971` (LiteRT
 `dcb657e8`, TensorFlow `4f8e6d47`, XNNPACK `28d1fc6d`). Issue
 [#75](https://github.com/leehack/litert-lm-native/issues/75) was written against

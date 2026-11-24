@@ -31,6 +31,7 @@ struct LiteRtLmEngine {
 };
 using LiteRtLmStatusCode = int;
 constexpr int kLiteRtLmStatusOk = 0;
+constexpr int kLiteRtLmStatusInvalidArgument = 3;
 thread_local std::string last_error;
 thread_local int entered_factory = 0;
 namespace litert::lm::c {
@@ -66,6 +67,18 @@ struct DisabledLog {
 #define LITERT_LM_C_RETURN_IF_NULL(pointer)                                    \
   if (!(pointer))                                                              \
   return 3
+bool IsValidEngineSettings(const LiteRtLmEngineSettings* settings) {
+  return settings && settings->settings;
+}
+#define LITERT_LM_C_RETURN_IF_ERROR(expr)                                      \
+  do {                                                                        \
+    const auto status = (expr);                                               \
+    if (!status.ok()) return litert::lm::c::ToCStatus(status);                  \
+  } while (false)
+#define LITERT_LM_C_ASSIGN_OR_RETURN(lhs, expr)                                \
+  auto status_or = (expr);                                                    \
+  if (!status_or.ok()) return litert::lm::c::ToCStatus(status_or.status());    \
+  lhs = *std::move(status_or)
 // System headers are already parsed; this selects only the injected C API body.
 #define __ANDROID__ 1
 // PRODUCTION_ENGINE_CREATE

@@ -51,11 +51,16 @@ class GpuEnvironmentTeardownTest(unittest.TestCase):
                 teardown.check_initialize_disassembly(fixture(f"android_{arch}_patched"))
 
     def test_reordered_upstream_shape_passes_and_its_reverse_fails(self) -> None:
-        teardown.check_initialize_disassembly(REORDERED_UPSTREAM)
-        lines = REORDERED_UPSTREAM.splitlines()
-        lines[7], lines[8] = lines[8], lines[7]
-        with self.assertRaisesRegex(RuntimeError, "sets up OpenCL before"):
-            teardown.check_initialize_disassembly("\n".join(lines))
+        for disassembly in (
+            REORDERED_UPSTREAM,
+            REORDERED_UPSTREAM.replace("16InitializeOpenClEv", "22InitializeOpenClLockedEv"),
+        ):
+            with self.subTest(disassembly=disassembly):
+                teardown.check_initialize_disassembly(disassembly)
+                lines = disassembly.splitlines()
+                lines[7], lines[8] = lines[8], lines[7]
+                with self.assertRaisesRegex(RuntimeError, "sets up OpenCL before"):
+                    teardown.check_initialize_disassembly("\n".join(lines))
 
     def test_missing_function_or_call_is_an_error(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "was not found"):

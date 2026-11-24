@@ -53,10 +53,12 @@ def write_elf_with_flags(path: Path, flags: int | None) -> None:
     path.write_bytes(data)
 
 
-def write_elf_with_exports(path: Path, symbols: list[str]) -> None:
+def write_elf_with_exports(
+    path: Path, symbols: list[str], *, imports: tuple[str, ...] = ()
+) -> None:
     string_table = bytearray(b"\0")
     name_offsets: list[int] = []
-    for symbol in symbols:
+    for symbol in [*symbols, *imports]:
         name_offsets.append(len(string_table))
         string_table.extend(symbol.encode("utf-8") + b"\0")
 
@@ -66,7 +68,7 @@ def write_elf_with_exports(path: Path, symbols: list[str]) -> None:
     string_offset = section_header_offset + section_header_size * section_header_count
     symbol_offset = (string_offset + len(string_table) + 7) & ~7
     symbol_entry_size = 24
-    symbol_table_size = symbol_entry_size * (len(symbols) + 1)
+    symbol_table_size = symbol_entry_size * (len(name_offsets) + 1)
     data = bytearray(symbol_offset + symbol_table_size)
     data[:16] = b"\x7fELF\x02\x01\x01" + bytes(9)
     struct.pack_into(
@@ -127,7 +129,7 @@ def write_elf_with_exports(path: Path, symbols: list[str]) -> None:
             name_offset,
             (1 << 4) | 2,
             0,
-            1,
+            1 if index <= len(symbols) else 0,
             0,
             0,
         )
@@ -135,6 +137,23 @@ def write_elf_with_exports(path: Path, symbols: list[str]) -> None:
 
 
 class RuntimeDependencyUtilsTest(unittest.TestCase):
+    def test_android_dawn_override_must_cover_the_host_imports(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            host = root / "bin/android/arm64/libLiteRtLm.so"
+            dawn = host.with_name("libwebgpu_dawn.so")
+            host.parent.mkdir(parents=True)
+            samplers = ANDROID_OPENCL_SAMPLER_SYMBOLS + ANDROID_WEBGPU_SAMPLER_SYMBOLS
+            write_elf_with_exports(host, samplers, imports=("wgpuQueueSubmit", "malloc"))
+            self.assertEqual(runtime_dependency_utils.elf_exported_symbols(host), set(samplers))
+            write_elf_with_exports(dawn, [])
+            with patch("validate_runtime_dependencies.elf_has_global_flag", return_value=True), \
+                 patch("validate_runtime_dependencies.validate_android_protobuf_isolation"):
+                with self.assertRaisesRegex(SystemExit, "absent from .*: wgpuQueueSubmit"):
+                    validate_elf_dependencies(root, "v0.20.0")
+                write_elf_with_exports(dawn, ["wgpuQueueSubmit"])
+                self.assertEqual(validate_elf_dependencies(root, "v0.20.0"), 2)
+
     def test_newest_glibc_requirement_compares_numerically(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             library = Path(temp) / "lib.so"

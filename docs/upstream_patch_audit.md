@@ -1,6 +1,10 @@
 # LiteRT-LM v0.18.0 carried-fix audit
 
-For v0.19.0 and v0.19.1 decisions, see [v0.19 qualification](v019_qualification.md).
+This is a historical record. The pre-v0.20.0 patch files and build commands
+below belong to their native release refs.
+
+For later baselines, see [v0.19 qualification](v019_qualification.md) and
+[v0.20 qualification](v020_qualification.md).
 Android C API 1.0 also has an owner [protobuf link-isolation policy](android_protobuf_isolation.md);
 it does not patch upstream sources or apply to v0.18 runtimes.
 
@@ -281,6 +285,21 @@ Retire this carry only after a tagged upstream byte-equivalent correction with
 the UTF-8 callback contract and bounded-default formatting policy pass these
 controls, and the unchanged supported-model schema qualifier, including literal
 Unicode keys/values, succeeds against the packaged runtime.
+
+### v0.20.0 requalification
+
+Upstream added SentencePiece byte fallback and LLGuidance multiple-EOS support.
+It still reads raw HF vocabulary spellings without ByteLevel inversion. Its
+text callback uses the UTF-8 contract by default. When the verbatim probe
+fails, upstream removes the callback and enables approximate trie tokenization.
+The v0.20.0 carry derives ByteLevel bytes before this probe and preserves the
+SentencePiece and multiple-EOS paths.
+
+The six pinned preimage and postimage hashes were re-derived from
+`95df4c2a932b4917ace66fcfef6c154e8d2a6699`. Run the qualifier with
+`--upstream-tag v0.20.0` against that checkout. The apply step bounds Git
+repository discovery to the copied source tree so it can patch the default
+qualification directory inside the owner checkout.
 
 ### Default JSON formatting progress
 

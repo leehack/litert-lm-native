@@ -11,41 +11,37 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from android_automatic_gpu_patch import (
+    apply as patch_android_automatic_gpu,
+    executor_compile_query,
+    verify_executor_compile_actions,
+)
 from android_protobuf_policy import validate_android_protobuf_isolation
 from android_gpu_safety_patch import apply as apply_android_gpu_safety
-from asr_litertlm_container_patch import SOURCES as CONTAINER_PATCH_SOURCES, require_container_patch_decision
-from asr_overlap_patch import AUDITED_OVERLAP_TAGS, V019_OVERLAP_TAGS, merger_source, overlap_identity, source_sha256, require_asr_patch_decision
+from asr_overlap_patch import (
+    MERGER_SOURCE,
+    PATCH_PATH as ASR_PATCH_PATH,
+    POSTIMAGE_SHA256 as ASR_POSTIMAGE,
+    PREIMAGE_SHA256 as ASR_PREIMAGE,
+    source_sha256,
+)
 from bazel_repository_provenance import release_workspace_rc, verify_resolved_archives
 from ios_runtime_policy import FST_DEFINE, provider_free_ios, validate_ios_directory, verify_upstream_fst_gate
 from download_utils import download_to_path
 from git_lfs_utils import materialize_git_lfs_libraries
 from gpu_environment_teardown import find_ndk_llvm_objdump, validate_library
 from huggingface_token_bytes_patch import apply as patch_huggingface_token_bytes
-from litert_cpu_options_identifier_patch import (
-    LITERT_ARCHIVE_SHA256 as CPU_OPTIONS_LITERT_ARCHIVE_SHA256,
-    LITERT_REF as CPU_OPTIONS_LITERT_REF,
-    SOURCES as CPU_OPTIONS_IDENTIFIER_SOURCES,
-    require_cpu_options_identifier_patch_decision,
-    verify_dynamic_runtime,
-)
 from litert_lm_symbols import (
     android_static_gpu_sampler_symbols,
-    has_asr_bridge,
-    has_omni_asr_engine,
-    has_prebuilt_topk_samplers,
     in_process_litert_abi_version,
-    is_at_least,
-    uses_c_api_v1,
     required_bridge_symbols,
     required_c_api_symbols,
-    uses_stream_chunk_api,
 )
 from litert_stage_spatial_tensors_patch import (
-    LITERT_ARCHIVE_SHA256 as STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256,
-    LITERT_REF as STAGE_SPATIAL_TENSORS_LITERT_REF,
-    PATCH_PATH as STAGE_SPATIAL_TENSORS_PATCH_PATH,
-    SOURCES as STAGE_SPATIAL_TENSORS_SOURCES,
-    require_stage_spatial_tensors_patch_decision,
+    LITERT_REF as STAGING_LITERT_REF,
+    LITERT_ARCHIVE_SHA256 as STAGING_LITERT_SHA256,
+    PATCH_PATH as STAGING_PATCH_PATH,
+    SOURCES as STAGING_SOURCES,
 )
 from macos_runtime_identity import normalize_macos_runtime_identity
 from macos_runtime_policy import UNSUPPORTED_MACOS_ARCH_REASON
@@ -57,29 +53,24 @@ from runtime_dependency_utils import (
     is_elf,
     is_system_needed,
 )
-from step_zero_state_patch import apply as patch_step_zero_state
+from source_patch_utils import active_source_carries, apply_source_patch
 from stream_finish_reason_patch import (
     BAZEL_DEFINE as FINISH_REASON_DEFINE,
-    patch_path_for as finish_reason_patch_path,
-    require_finish_reason_patch_decision,
-    sources_for as finish_reason_patch_sources,
+    PATCH_PATH as FINISH_REASON_PATCH_PATH,
+    SOURCES as FINISH_REASON_SOURCES,
 )
 from windows_dxc import stage_windows_dxc
+from windows_engine_fd_patch import apply as patch_windows_engine_fd
 import windows_runtime
-from workspace_build_patch import (
-    PATCH_PATH as WORKSPACE_BUILD_PATCH_PATH,
-    SOURCES as WORKSPACE_BUILD_PATCH_SOURCES,
-    require_workspace_build_patch_decision,
-)
 from xnnpack_pf32_sme2_patch import (
-    archive_sha256_for as xnnpack_archive_sha256,
-    commit_for as xnnpack_commit,
+    TENSORFLOW_REF,
+    XNNPACK_SHA256,
+    XNNPACK_COMMIT,
     declare_patched_xnnpack,
-    require_xnnpack_pf32_patch_decision,
-    sources_for as xnnpack_pf32_sources,
+    SOURCES as XNNPACK_PF32_SOURCES,
     verify_patched_xnnpack_archive,
 )
-from xnnpack_pqs8_qc4w_sme2_patch import sources_for as xnnpack_qc4w_sources
+from xnnpack_pqs8_qc4w_sme2_patch import SOURCES as XNNPACK_QC4W_SOURCES
 from upstream_archive import github_source_archive_url
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -92,22 +83,6 @@ ZLIB_URL = "https://zlib.net/fossils/zlib-1.3.1.tar.gz"
 ZLIB_GITHUB_MIRROR_URL = (
     "https://github.com/madler/zlib/releases/download/v1.3.1/"
     "zlib-1.3.1.tar.gz"
-)
-
-# LiteRT commits known to need litert_gpu_environment_destroy_callback.patch:
-# GpuEnvironment::Initialize returns on an OpenCL load failure before it
-# records the environment options, so the WebGPU destroy callback is lost.
-# LiteRT 9c8ae4e0fc records the options first. All four pin the same
-# gpu_environment.cc. This is the set the patch has been matched against, not
-# every affected commit: validate_android_gpu_environment_teardown fails an
-# Android build of any other pin that still has the old ordering.
-LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING = frozenset(
-    {
-        "3cb830ad9c94f9922f0a88dd431b005413628919",  # LiteRT-LM v0.15.0
-        "0ff28117f1cb5556d0e015bf80b773f74e2bee51",  # LiteRT-LM v0.16.0, v0.16.1
-        "761d99cb90e20c67efcb3fe1119a60c92381bd1a",  # upstream development commits
-        "9fe5be45564c868408e6514c8aabb83e211a0911",  # LiteRT-LM v0.17.0, v0.17.1
-    }
 )
 
 RUNTIME_TARGETS = {
@@ -184,70 +159,28 @@ PREBUILT_TARGETS = {
 LIB_SUFFIXES = (".so", ".dylib", ".dll", ".lib", ".a")
 
 
-def uses_shared_desktop_litert(platform: str, upstream_tag: str) -> bool:
-    """Whether a desktop host links upstream's prebuilt libLiteRt (v0.16-v0.18).
-
-    LiteRT-LM hands external weights over by writing C++ members of LiteRT's
-    opaque options struct, which is ABI-valid only when LiteRT is compiled into
-    the host with the same C++ runtime, as on Apple and Android (#111).
-    """
-    return (platform in {"linux", "windows"}
-            and is_at_least(upstream_tag, (0, 16, 0))
-            and not is_at_least(upstream_tag, (0, 19, 0)))
-
-
 def patch_asr_untimed_overlap(source_root: Path, upstream_tag: str) -> None:
     """Carry #673 only on an audited source; require review on drift."""
-    require_asr_patch_decision(upstream_tag)
-    if upstream_tag not in AUDITED_OVERLAP_TAGS | V019_OVERLAP_TAGS:
+    if not active_source_carries(upstream_tag):
         return
-    patch_path, preimage, postimage = overlap_identity(upstream_tag)
-    source = source_root / merger_source(upstream_tag)
+    source = source_root / MERGER_SOURCE
     digest = source_sha256(source.read_bytes())
-    if digest == postimage:
+    if digest == ASR_POSTIMAGE:
         return
-    if digest != preimage:
+    if digest != ASR_PREIMAGE:
         raise RuntimeError("ASR merger source changed; requalify untimed overlap patch")
-    patch_file = BRIDGE_PACKAGE_ROOT / "bridge" / Path(patch_path).name
-    command = ["git", "apply", "--ignore-space-change", str(patch_file)]
-    # Apply from the extracted root, including roots nested in a worktree.
-    # The preimage hash and git apply's check precede any source mutation.
-    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
-                   cwd=source_root)
-    subprocess.run(command, check=True, cwd=source_root)
-    if source_sha256(source.read_bytes()) != postimage:
+    patch_file = BRIDGE_PACKAGE_ROOT / "bridge" / Path(ASR_PATCH_PATH).name
+    apply_source_patch(source_root, patch_file, ignore_space_change=True)
+    if source_sha256(source.read_bytes()) != ASR_POSTIMAGE:
         raise RuntimeError("ASR merger postimage mismatch; requalify untimed overlap patch")
     print("Applied audited untimed ASR overlap patch", flush=True)
 
 
-def patch_asr_litertlm_container(source_root: Path, upstream_tag: str) -> None:
-    """Carry upstream's ASR container routing (#77) on the audited v0.18 source."""
-    if not require_container_patch_decision(upstream_tag):
-        return
-    digests = {
-        name: source_sha256((source_root / name).read_bytes())
-        for name in CONTAINER_PATCH_SOURCES
-    }
-    if all(digests[name] == post for name, (_, post) in CONTAINER_PATCH_SOURCES.items()):
-        return
-    if any(digests[name] != pre for name, (pre, _) in CONTAINER_PATCH_SOURCES.items()):
-        raise RuntimeError("ASR engine source changed; requalify .litertlm container patch")
-    patch_file = BRIDGE_PACKAGE_ROOT / "bridge/asr_litertlm_container.patch"
-    command = ["git", "apply", "--ignore-space-change", str(patch_file)]
-    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
-                   cwd=source_root)
-    subprocess.run(command, check=True, cwd=source_root)
-    for name, (_, post) in CONTAINER_PATCH_SOURCES.items():
-        if source_sha256((source_root / name).read_bytes()) != post:
-            raise RuntimeError(".litertlm container patch postimage mismatch; requalify")
-    print("Applied audited ASR .litertlm container routing patch", flush=True)
-
-
 def patch_stream_finish_reason(source_root: Path, upstream_tag: str) -> None:
-    """Report why streamed generation ended (#78) on the audited v0.18 source."""
-    if not require_finish_reason_patch_decision(upstream_tag):
+    """Apply the audited terminal cause reported by the streaming bridge."""
+    if not active_source_carries(upstream_tag):
         return
-    sources = finish_reason_patch_sources(upstream_tag)
+    sources = FINISH_REASON_SOURCES
     digests = {
         name: source_sha256((source_root / name).read_bytes())
         for name in sources
@@ -258,11 +191,8 @@ def patch_stream_finish_reason(source_root: Path, upstream_tag: str) -> None:
         raise RuntimeError(
             "Decode or conversation source changed; requalify the stream "
             "finish-reason patch")
-    patch_file = REPO_ROOT / finish_reason_patch_path(upstream_tag)
-    command = ["git", "apply", "--ignore-space-change", str(patch_file)]
-    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
-                   cwd=source_root)
-    subprocess.run(command, check=True, cwd=source_root)
+    patch_file = REPO_ROOT / FINISH_REASON_PATCH_PATH
+    apply_source_patch(source_root, patch_file, ignore_space_change=True)
     for name, (_, post) in sources.items():
         if source_sha256((source_root / name).read_bytes()) != post:
             raise RuntimeError(
@@ -270,62 +200,32 @@ def patch_stream_finish_reason(source_root: Path, upstream_tag: str) -> None:
     print("Applied audited stream finish-reason patch", flush=True)
 
 
-def patch_workspace_build(source_root: Path, compatibility_tag: str) -> None:
-    """Repair the v0.18.1 Bazel WORKSPACE before other WORKSPACE edits."""
-    if not require_workspace_build_patch_decision(compatibility_tag):
-        return
-    for name, (pre, _) in WORKSPACE_BUILD_PATCH_SOURCES.items():
-        if source_sha256((source_root / name).read_bytes()) != pre:
-            raise RuntimeError(
-                "Upstream WORKSPACE or .bazelrc changed; requalify the "
-                "WORKSPACE build repair")
-    command = ["git", "apply", str(REPO_ROOT / WORKSPACE_BUILD_PATCH_PATH)]
-    subprocess.run([*command[:2], "--check", *command[2:]], check=True,
-                   cwd=source_root)
-    subprocess.run(command, check=True, cwd=source_root)
-    for name, (_, post) in WORKSPACE_BUILD_PATCH_SOURCES.items():
-        if source_sha256((source_root / name).read_bytes()) != post:
-            raise RuntimeError(
-                "WORKSPACE build repair postimage mismatch; requalify")
-    print("Applied audited v0.18.1 WORKSPACE build repair", flush=True)
-
-
-def xnnpack_postimages(compatibility_tag: str) -> dict[str, str]:
+def xnnpack_postimages() -> dict[str, str]:
     """Final XNNPACK sources after both patches; the QC4W opt-out applies last."""
     return {
         name: postimage
         for sources in (
-            xnnpack_pf32_sources(compatibility_tag),
-            xnnpack_qc4w_sources(compatibility_tag),
+            XNNPACK_PF32_SOURCES,
+            XNNPACK_QC4W_SOURCES,
         )
         for name, (_, postimage) in sources.items()
     }
 
 
-def verify_xnnpack_postimages(source_root: Path, compatibility_tag: str) -> None:
+def verify_xnnpack_postimages(source_root: Path) -> None:
     """Fails unless Bazel compiled the patched XNNPACK sources."""
     repository = (source_root / "bazel-out").resolve().parents[2] / "external" / "XNNPACK"
-    for name, postimage in xnnpack_postimages(compatibility_tag).items():
+    for name, postimage in xnnpack_postimages().items():
         source = repository / name
         if not source.is_file() or source_sha256(source.read_bytes()) != postimage:
             raise RuntimeError("XNNPACK patch postimage mismatch; requalify")
     print("Verified XNNPACK PF32 rollback and PQS8/QC4W opt-out postimages", flush=True)
 
 
-def verify_cpu_options_identifier_postimage(source_root: Path) -> None:
-    """Fails unless Bazel compiled the patched LiteRT CPU options identifier."""
-    repository = (source_root / "bazel-out").resolve().parents[2] / "external" / "litert"
-    for name, (_, postimage) in CPU_OPTIONS_IDENTIFIER_SOURCES.items():
-        source = repository / name
-        if not source.is_file() or source_sha256(source.read_bytes()) != postimage:
-            raise RuntimeError("LiteRT CPU options identifier postimage mismatch; requalify")
-    print("Verified LiteRT CPU options identifier postimage", flush=True)
-
-
 def verify_stage_spatial_tensors_postimages(source_root: Path) -> None:
     """Fails unless Bazel used the audited LiteRT WebGPU and Vulkan sources."""
     repository = (source_root / "bazel-out").resolve().parents[2] / "external" / "litert"
-    for name, (_, postimage) in STAGE_SPATIAL_TENSORS_SOURCES.items():
+    for name, (_, postimage) in STAGING_SOURCES.items():
         source = repository / name
         if not source.is_file() or source_sha256(source.read_bytes()) != postimage:
             raise RuntimeError(f"LiteRT spatial tensor staging postimage mismatch for {name}; requalify")
@@ -360,6 +260,7 @@ def reject_ambiguous_workspace(source_root: Path) -> None:
 def download_upstream(
     upstream_ref: str, compatibility_tag: str, work_dir: Path
 ) -> Path:
+    require_source_build(compatibility_tag)
     archive_path = source_archive_path(work_dir, upstream_ref)
     url = github_source_archive_url(UPSTREAM_REPO, upstream_ref)
     print(f"Downloading {url}", flush=True)
@@ -376,43 +277,12 @@ def download_upstream(
         raise RuntimeError(f"Expected one extracted source directory, got {candidates}")
     source_root = candidates[0]
     reject_ambiguous_workspace(source_root)
-    patch_workspace_build(source_root, compatibility_tag)
     patch_upstream_workspace(
         source_root,
-        patch_ios_framework_paths=has_asr_bridge(compatibility_tag),
-        # v0.19.0 carries an equivalent SentencePiece patch of its own.
-        patch_bpe_null_piece=is_at_least(compatibility_tag, (0, 17, 0))
-        and not is_at_least(compatibility_tag, (0, 19, 0)),
-        patch_gpu_environment_teardown=needs_gpu_environment_teardown_patch(
-            (source_root / "WORKSPACE").read_text(encoding="utf-8"),
-            compatibility_tag,
-        ),
-        patch_xnnpack_pf32_sme2=require_xnnpack_pf32_patch_decision(compatibility_tag),
-        patch_cpu_options_identifier=require_cpu_options_identifier_patch_decision(
-            compatibility_tag
-        ),
-        patch_stage_spatial_tensors=require_stage_spatial_tensors_patch_decision(
-            compatibility_tag
-        ),
+        patch_xnnpack_pf32_sme2=True,
+        patch_stage_spatial_tensors=True,
     )
     return source_root
-
-
-def needs_gpu_environment_teardown_patch(
-    workspace_text: str, compatibility_tag: str
-) -> bool:
-    # The decision follows the pinned LiteRT commit, not the LiteRT-LM version:
-    # a development build of a later upstream commit keeps the 0.17
-    # compatibility tag but already pins a LiteRT with the reordering.
-    matches = re.findall(
-        r'^LITERT_REF = "([0-9a-f]{40})"$', workspace_text, re.MULTILINE
-    )
-    if not matches:
-        if is_at_least(compatibility_tag, (0, 17, 0)):
-            raise RuntimeError("Expected a pinned LITERT_REF in the upstream WORKSPACE")
-        return False
-    # Starlark uses the last assignment; v0.18.1 keeps its old pin above it.
-    return matches[-1] in LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING
 
 
 def verify_litert_archive_pin(workspace: str, ref: str, sha256: str, carry: str) -> None:
@@ -440,36 +310,19 @@ def verify_litert_archive_pin(workspace: str, ref: str, sha256: str, carry: str)
             raise RuntimeError(f"Unexpected LiteRT archive {name} for {carry}; requalify")
 
 
-def verify_carried_dependency_pins(
-    source_root: Path, compatibility_tag: str, *,
-    spatial_staging: bool, cpu_options: bool, xnnpack: bool,
-) -> None:
+def verify_carried_dependency_pins(source_root: Path, compatibility_tag: str) -> None:
     reject_ambiguous_workspace(source_root)
-    if not (spatial_staging or cpu_options or xnnpack):
-        return
     workspace = (source_root / "WORKSPACE").read_text(encoding="utf-8")
-    if spatial_staging:
-        verify_litert_archive_pin(
-            workspace, STAGE_SPATIAL_TENSORS_LITERT_REF,
-            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256, "LiteRT spatial tensor staging",
-        )
-    if cpu_options:
-        verify_litert_archive_pin(
-            workspace, CPU_OPTIONS_LITERT_REF, CPU_OPTIONS_LITERT_ARCHIVE_SHA256,
-            "LiteRT CPU options identifier rollback",
-        )
-    if xnnpack:
-        verify_patched_xnnpack_archive(workspace, compatibility_tag)
+    verify_litert_archive_pin(
+        workspace, STAGING_LITERT_REF, STAGING_LITERT_SHA256, "LiteRT spatial tensor staging",
+    )
+    verify_patched_xnnpack_archive(workspace, compatibility_tag)
 
 
 def patch_upstream_workspace(
     source_root: Path,
     *,
-    patch_ios_framework_paths: bool = True,
-    patch_bpe_null_piece: bool = False,
-    patch_gpu_environment_teardown: bool = False,
     patch_xnnpack_pf32_sme2: bool = False,
-    patch_cpu_options_identifier: bool = False,
     patch_stage_spatial_tensors: bool = False,
 ) -> None:
     workspace = source_root / "WORKSPACE"
@@ -490,18 +343,11 @@ def patch_upstream_workspace(
     else:
         text = text.replace(needle, replacement)
     litert_patches = []
-    if patch_ios_framework_paths:
-        litert_patches.append("litert_ios_framework_paths.patch")
-    if patch_gpu_environment_teardown:
-        litert_patches.append("litert_gpu_environment_destroy_callback.patch")
-    if patch_cpu_options_identifier:
-        litert_patches.append("litert_cpu_options_identifier.patch")
     if patch_stage_spatial_tensors:
         verify_litert_archive_pin(
-            text, STAGE_SPATIAL_TENSORS_LITERT_REF,
-            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256, "LiteRT spatial tensor staging",
+            text, STAGING_LITERT_REF, STAGING_LITERT_SHA256, "LiteRT spatial tensor staging",
         )
-        litert_patches.append(Path(STAGE_SPATIAL_TENSORS_PATCH_PATH).name)
+        litert_patches.append(Path(STAGING_PATCH_PATH).name)
     litert_archive = 'http_archive(\n    name = "litert",\n'
     litert_archive_with_patch = (
         litert_archive
@@ -516,59 +362,45 @@ def patch_upstream_workspace(
         if litert_archive + "    patch_args" in text:
             raise RuntimeError(f"Unexpected LiteRT patches in {workspace}")
         text = text.replace(litert_archive, litert_archive_with_patch, 1)
-    if patch_bpe_null_piece:
-        text = patch_sentencepiece_bpe_null(text)
     if patch_xnnpack_pf32_sme2:
         text = declare_patched_xnnpack(text)
     workspace.write_text(text, encoding="utf-8")
     print(
-        "Patched upstream WORKSPACE dependency URLs and iOS framework paths",
+        "Patched upstream WORKSPACE dependencies",
         flush=True,
     )
 
 
-def patch_sentencepiece_bpe_null(text: str) -> str:
-    """Preserve legacy BPE NUL IDs only against the audited SentencePiece archive."""
-    pattern = r'http_archive\(\n    name = "sentencepiece",\n.*?\n\)'
-    matches = list(re.finditer(pattern, text, re.DOTALL))
-    if len(matches) != 1:
-        raise RuntimeError("Expected exactly one SentencePiece archive")
-    match = matches[0]
-    block = match.group()
-    for expected in (
-        'sha256 = "92381f713e094a15a1ccff1ac4a5315a4c4b82a99ac1332d6ac53c9dc8e1bcf1"',
-        'strip_prefix = "sentencepiece-0.2.2"',
-        'url = "https://github.com/google/sentencepiece/archive/refs/tags/v0.2.2.tar.gz"',
-    ):
-        if expected not in block:
-            raise RuntimeError("SentencePiece source changed; requalify BPE NUL compatibility")
-    patch = ('    patch_args = ["-p1"],\n'
-             '    patches = ["@//bridge:sentencepiece_bpe_null.patch"],\n')
-    if patch in block:
-        return text
-    if re.search(r"\b(?:patches|patch_args)\s*=", block):
-        raise RuntimeError("Unexpected SentencePiece patches; requalify compatibility")
-    block = block.replace('    name = "sentencepiece",\n',
-                          '    name = "sentencepiece",\n' + patch, 1)
-    return text[:match.start()] + block + text[match.end():]
+def patch_windows_rules_android(source_root: Path) -> None:
+    workspace = source_root / "WORKSPACE"
+    text = workspace.read_text(encoding="utf-8")
+    refs = re.findall(r'^TENSORFLOW_REF[ \t]*=[ \t]*"([0-9a-f]{40})"$', text, re.MULTILINE)
+    if refs != [TENSORFLOW_REF]:
+        raise RuntimeError("TensorFlow pin changed; requalify the Windows rules_android patch")
 
+    # TensorFlow skips repos declared before tf_workspace2(). Use its archive
+    # and all four source edits without its Bash/sed repository commands.
+    url = "https://github.com/bazelbuild/rules_android/releases/download/v0.6.0/rules_android-v0.6.0.tar.gz"
+    archive = f'''http_archive(
+    name = "build_bazel_rules_android",
+    patch_args = ["-p1"],
+    patches = ["@//bridge:rules_android_tensorflow_v020.patch"],
+    sha256 = "af84b69ab3d16dd1a41056286e6511f147a94ccea995603e13e934c915c1631c",
+    strip_prefix = "rules_android-0.6.0",
+    urls = [
+        "https://storage.googleapis.com/mirror.tensorflow.org/{url[8:]}",
+        "{url}",
+    ],
+)
 
-def patch_upstream_ios_sampler_path(source_root: Path) -> None:
-    sampler = source_root / "runtime" / "components" / "sampler_factory.cc"
-    text = sampler.read_text(encoding="utf-8")
-    original = '"libLiteRtTopKMetalSampler.dylib"'
-    replacement = (
-        '"@executable_path/Frameworks/LiteRtTopKMetalSampler.framework/'
-        'LiteRtTopKMetalSampler"'
-    )
-    if replacement in text:
+'''
+    hook = '\nload("@org_tensorflow//tensorflow:workspace2.bzl", "tf_workspace2")\n'
+    declarations = re.findall(r'^\s*name\s*=\s*"build_bazel_rules_android"\s*,', text, re.MULTILINE)
+    if text.count("\n" + archive + hook) == 1 and len(declarations) == 1:
         return
-    if text.count(original) != 1:
-        raise RuntimeError(
-            f"Expected one Metal sampler library path in {sampler}"
-        )
-    sampler.write_text(text.replace(original, replacement), encoding="utf-8")
-    print("Patched upstream iOS Metal sampler framework path", flush=True)
+    if declarations or text.count(hook) != 1:
+        raise RuntimeError("Unexpected Windows rules_android declaration point in WORKSPACE; requalify")
+    workspace.write_text(text.replace(hook, "\n" + archive + hook, 1), encoding="utf-8")
 
 
 def bazel_command() -> list[str]:
@@ -633,23 +465,19 @@ def build_runtime(
     jobs: str | None,
     upstream_ref: str | None = None,
 ) -> Path:
-    patch_stage_spatial_tensors = require_stage_spatial_tensors_patch_decision(upstream_tag)
-    patch_cpu_options_identifier = require_cpu_options_identifier_patch_decision(upstream_tag)
-    patch_xnnpack = require_xnnpack_pf32_patch_decision(upstream_tag)
-    verify_carried_dependency_pins(
-        source_root, upstream_tag, spatial_staging=patch_stage_spatial_tensors,
-        cpu_options=patch_cpu_options_identifier, xnnpack=patch_xnnpack,
-    )
+    require_source_build(upstream_tag)
+    verify_carried_dependency_pins(source_root, upstream_tag)
+    if platform == "windows":
+        patch_windows_rules_android(source_root)
+    if platform == "android":
+        patch_android_automatic_gpu(source_root, upstream_tag)
     patch_asr_untimed_overlap(source_root, upstream_tag)
-    patch_asr_litertlm_container(source_root, upstream_tag)
     patch_stream_finish_reason(source_root, upstream_tag)
     patch_huggingface_token_bytes(source_root, upstream_tag)
-    patch_step_zero_state(source_root, upstream_tag)
-    apply_android_gpu_safety(source_root, upstream_tag)
-    # v0.19.0 removed the prebuilt TopK sampler this path points at.
-    if (platform == "ios" and has_asr_bridge(upstream_tag)
-            and not is_at_least(upstream_tag, (0, 19, 0))):
-        patch_upstream_ios_sampler_path(source_root)
+    if platform == "windows":
+        patch_windows_engine_fd(source_root, upstream_tag)
+    else:
+        apply_android_gpu_safety(source_root, upstream_tag)
     prebuilt_target = PREBUILT_TARGETS.get((platform, arch))
     if prebuilt_target is not None:
         source_dir = source_root / "prebuilt" / prebuilt_target
@@ -665,8 +493,6 @@ def build_runtime(
                 f"{platform}/{arch}",
                 flush=True,
             )
-    if patch_cpu_options_identifier:
-        verify_dynamic_runtime(source_root / "prebuilt", platform, arch)
     target = RUNTIME_TARGETS[(platform, arch)]
     configs = [
         f"--config={config}"
@@ -682,72 +508,52 @@ def build_runtime(
             output_user_root = Path(output_user_root).resolve().as_posix()
         startup.append(f"--output_user_root={output_user_root}")
     bridge_options = prepare_bridge_package(source_root)
-    command = [
-        "build",
+    options = [
         *bridge_options,
         *configs,
         *target.get("bazel_options", []),
-        target["bazel_target"],
-        ("--define=litert_runtime_link_mode=dynamic"
-         if uses_shared_desktop_litert(platform, upstream_tag)
-         else "--define=litert_link_capi_so=true"),
+        "--define=litert_link_capi_so=true",
         "--define=resolve_symbols_in_exec=false",
+        "--define=litert_lm_stream_chunk_api=true",
+        "--define=litert_lm_capabilities_in_c_engine=true",
+        "--define=litert_lm_asr_api=true",
+        "--define=litert_lm_asr_omni_engine=true",
+        "--define=litert_lm_c_api_v1=true",
+        "--define=litert_lm_in_process_litert=true",
     ]
-    if uses_stream_chunk_api(upstream_tag):
-        command.append("--define=litert_lm_stream_chunk_api=true")
-    if is_at_least(upstream_tag, (0, 17, 0)):
-        command.append("--define=litert_lm_capabilities_in_c_engine=true")
-    if has_asr_bridge(upstream_tag):
-        command.append("--define=litert_lm_asr_api=true")
-    if has_omni_asr_engine(upstream_tag):
-        command.append("--define=litert_lm_asr_omni_engine=true")
-    if uses_c_api_v1(upstream_tag):
-        command.append("--define=litert_lm_c_api_v1=true")
-    if in_process_litert_abi_version(upstream_tag) == 1:
-        command.append("--define=litert_lm_in_process_litert=true")
-    if platform == "android" and not has_prebuilt_topk_samplers(upstream_tag):
-        command.append("--define=litert_lm_android_webgpu_sampler=true")
-    if require_finish_reason_patch_decision(upstream_tag):
-        command.append(FINISH_REASON_DEFINE)
+    options.append(FINISH_REASON_DEFINE)
     if platform == "macos":
-        command.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
+        options.append(f"--macos_minimum_os={MACOS_MINIMUM_OS}")
     if platform == "ios":
         if provider_free_ios(upstream_tag):
             verify_upstream_fst_gate(source_root)
-            command.append(FST_DEFINE)
-        command.append("--ios_minimum_os=13.0")
+            options.append(FST_DEFINE)
+        options.append("--ios_minimum_os=13.0")
     if jobs:
-        command.append(f"--jobs={jobs}")
-    pins = {}
-    if patch_stage_spatial_tensors:
-        pins["litert"] = (
-            STAGE_SPATIAL_TENSORS_LITERT_ARCHIVE_SHA256,
-            f"LiteRT-{STAGE_SPATIAL_TENSORS_LITERT_REF}",
-        )
-    if patch_cpu_options_identifier:
-        pins["litert"] = (CPU_OPTIONS_LITERT_ARCHIVE_SHA256, f"LiteRT-{CPU_OPTIONS_LITERT_REF}")
-    if patch_xnnpack:
-        pins["XNNPACK"] = (xnnpack_archive_sha256(upstream_tag), f"XNNPACK-{xnnpack_commit(upstream_tag)}")
-
-    if pins:
-        workspace_rc = source_root / ".bazelrc"
-        rc_text = workspace_rc.read_text(encoding="utf-8") if workspace_rc.is_file() else ""
-        with tempfile.TemporaryDirectory(prefix="litert-bazel-") as temp:
-            config = Path(temp) / "release.bazelrc"
-            config.write_text(release_workspace_rc(rc_text), encoding="utf-8")
-            startup.extend(("--noworkspace_rc", f"--bazelrc={bazel_path(config)}"))
-            # Keep both commands in the WORKSPACE mode used by the pin verifier.
-            command.append("--noenable_bzlmod")
-            fetch_audited_archives(startup, source_root, bridge_options, Path(temp) / "resolved.bzl", pins)
-            run([*startup, *command], source_root)
-    else:
-        run([*startup, *command], source_root)
-    if patch_xnnpack:
-        verify_xnnpack_postimages(source_root, upstream_tag)
-    if patch_cpu_options_identifier:
-        verify_cpu_options_identifier_postimage(source_root)
-    if patch_stage_spatial_tensors:
-        verify_stage_spatial_tensors_postimages(source_root)
+        options.append(f"--jobs={jobs}")
+    pins = {
+        "litert": (STAGING_LITERT_SHA256, f"LiteRT-{STAGING_LITERT_REF}"),
+        "XNNPACK": (XNNPACK_SHA256, f"XNNPACK-{XNNPACK_COMMIT}"),
+    }
+    workspace_rc = source_root / ".bazelrc"
+    rc_text = workspace_rc.read_text(encoding="utf-8") if workspace_rc.is_file() else ""
+    with tempfile.TemporaryDirectory(prefix="litert-bazel-") as temp:
+        config = Path(temp) / "release.bazelrc"
+        config.write_text(release_workspace_rc(rc_text), encoding="utf-8")
+        startup.extend(("--noworkspace_rc", f"--bazelrc={bazel_path(config)}"))
+        # Keep both commands in the WORKSPACE mode used by the pin verifier.
+        options.append("--noenable_bzlmod")
+        fetch_audited_archives(startup, source_root, bridge_options, Path(temp) / "resolved.bzl", pins)
+        bazel_target = target["bazel_target"]
+        if platform == "android":
+            result = run([
+                *startup, "aquery", *options, "--output=jsonproto", "--include_param_files",
+                "--noinclude_artifacts", executor_compile_query(bazel_target),
+            ], source_root, capture_output=True)
+            verify_executor_compile_actions(result.stdout)
+        run([*startup, "build", *options, bazel_target], source_root)
+    verify_xnnpack_postimages(source_root)
+    verify_stage_spatial_tensors_postimages(source_root)
 
     if "output" in target:
         output = source_root / target["output"]
@@ -1075,6 +881,11 @@ def validate_runtime(output: Path, platform: str, upstream_tag: str) -> None:
     validate_android_gpu_environment_teardown(output, platform)
 
 
+def require_source_build(compatibility_tag: str) -> None:
+    if not active_source_carries(compatibility_tag):
+        raise RuntimeError("Use the historical native release ref to build LiteRT-LM before v0.20.0")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=f"Build the upstream {UPSTREAM_REPO} C runtime library."
@@ -1094,6 +905,7 @@ def main() -> int:
     parser.add_argument("--jobs")
     args = parser.parse_args()
     upstream_ref = args.upstream_ref or args.upstream_tag
+    require_source_build(args.upstream_tag)
 
     key = (args.platform, args.arch)
     if key == ("macos", "x64"):

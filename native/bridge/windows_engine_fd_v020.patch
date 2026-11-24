@@ -1,0 +1,29 @@
+diff --git a/c/engine.cc b/c/engine.cc
+--- a/c/engine.cc
++++ b/c/engine.cc
+@@ -709,17 +709,16 @@
+     return litert::lm::c::ReturnError(absl::StatusCode::kInvalidArgument,
+                                       "Invalid file descriptor.");
+   }
++#if defined(_WIN32)
++  const auto platform_file =
++      reinterpret_cast<litert::lm::ScopedFile::PlatformFile>(_get_osfhandle(fd));
++#else
++  const auto platform_file = fd;
++#endif
+   LITERT_LM_C_ASSIGN_OR_RETURN(
+       ModelAssets model_assets,
+-      ModelAssets::Create(
+-#if defined(_WIN32)
+-          std::make_shared<litert::lm::ScopedFile>(litert::lm::ScopedFile(
+-              reinterpret_cast<litert::lm::ScopedFile::PlatformFile>(
+-                  _get_osfhandle(fd))))));
+-#else
+-          std::make_shared<litert::lm::ScopedFile>(
+-              litert::lm::ScopedFile(fd))));
+-#endif
++      ModelAssets::Create(std::make_shared<litert::lm::ScopedFile>(
++          litert::lm::ScopedFile(platform_file))));
+   ABSL_VLOG(1) << "LiteRT-LM successfully created EngineSettings directly "
+                   "from raw File Descriptor: "
+                << fd;

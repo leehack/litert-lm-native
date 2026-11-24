@@ -34,9 +34,15 @@ class IosSourcePolicyTest(unittest.TestCase):
             for text in ("", fixture.replace('"LITERT_LM_FST_CONSTRAINTS_DISABLED": "1"', '"OTHER": "1"'),
                          fixture.replace(':litert_lm_fst_constraints_disabled": []', ':other": []', 1)):
                 gate.write_text(text)
-                with patch.object(builder, "materialize_git_lfs_libraries"), patch.object(builder, "patch_upstream_ios_sampler_path"), patch.object(builder, "run") as run:
+                with (patch.object(builder, "materialize_git_lfs_libraries", return_value=0),
+                      patch.object(builder, "verify_carried_dependency_pins"),
+                      patch.object(builder, "patch_asr_untimed_overlap"),
+                      patch.object(builder, "patch_stream_finish_reason"),
+                      patch.object(builder, "patch_huggingface_token_bytes"),
+                      patch.object(builder, "apply_android_gpu_safety"),
+                      patch.object(builder, "run") as run):
                     with self.assertRaisesRegex(RuntimeError, "gate"):
-                        builder.build_runtime(root, "ios", "arm64", "v0.17.0", "1")
+                        builder.build_runtime(root, "ios", "arm64", "v0.20.0", "1")
                     run.assert_not_called()
 
     def test_unknown_compatibility_tag_cannot_disable_policy(self) -> None:
@@ -173,10 +179,10 @@ class IosBinaryPolicyTest(unittest.TestCase):
                 output = self.build(root / "source", "LiteRtLm")
                 directory = root / "bin/ios/arm64"
                 provider = self.build(directory, "GemmaModelConstraintProvider")
-                arguments = ["builder", "--upstream-tag", "v0.17.0", "--platform", "ios", "--arch", "arm64"]
+                arguments = ["builder", "--upstream-tag", "v0.20.0", "--platform", "ios", "--arch", "arm64"]
                 if local_source:
                     arguments += ["--source-root", str(root / "source")]
-                with patch.object(sys, "argv", arguments), patch.object(builder, "BIN_DIR", root / "bin"), patch.object(builder, "download_upstream", return_value=root / "source"), patch.object(builder, "build_runtime", return_value=output), patch.object(builder, "validate_exported_symbols"), patch.object(builder, "stage_runtime_dependencies"), patch.object(builder, "stage_runtime_overrides"):
+                with patch.object(sys, "argv", arguments), patch.object(builder, "BIN_DIR", root / "bin"), patch.object(builder, "download_upstream", return_value=root / "source"), patch.object(builder, "build_runtime", return_value=output), patch.object(builder, "validate_exported_symbols"), patch.object(builder, "validate_in_process_litert_linkage"), patch.object(builder, "stage_runtime_dependencies"), patch.object(builder, "stage_runtime_overrides"):
                     self.assertEqual(builder.main(), 0)
                 self.assertFalse(provider.exists())
                 policy.validate_ios_directory(directory)

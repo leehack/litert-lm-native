@@ -33,6 +33,27 @@ inline LlgTokenizer* llg_new_tokenizer(const LlgTokenizerInit* init, char*,
   }
   return new LlgTokenizer;
 }
+struct LlgTokenizerInitV2 {
+  size_t struct_size;
+  uint32_t vocab_size;
+  uint32_t tok_eos;
+  const uint32_t* token_lens;
+  const uint8_t* token_bytes;
+  bool tokenize_assumes_string;
+  size_t (*tokenize_fn)(const void*, const uint8_t*, size_t, uint32_t*, size_t);
+  const void* tokenize_user_data;
+  const uint32_t* tok_eos_extra;
+  uint32_t tok_eos_extra_count;
+  bool use_approximate_greedy_tokenize_fn = false;
+};
+inline LlgTokenizer* llg_new_tokenizer_v2(const LlgTokenizerInitV2* init,
+                                         char* error, size_t size) {
+  const LlgTokenizerInit legacy{init->vocab_size, init->tok_eos,
+                                init->token_lens, init->token_bytes,
+                                init->tokenize_assumes_string, init->tokenize_fn,
+                                init->tokenize_user_data};
+  return llg_new_tokenizer(&legacy, error, size);
+}
 inline void llg_free_tokenizer(LlgTokenizer* tokenizer) { delete tokenizer; }
 inline std::string captured_constraint;
 inline std::string captured_constraint_kind;

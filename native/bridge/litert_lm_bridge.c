@@ -77,7 +77,7 @@ extern const char *litert_lm_stream_chunk_get_error(
     const LiteRtLmStreamChunk *chunk);
 #endif
 #if defined(LITERT_LM_FINISH_REASON_API)
-// Defined in the runtime by stream_finish_reason.patch.
+// Defined in the runtime by stream_finish_reason_v020.patch.
 extern int litert_lm_native_stream_chunk_get_finish_reason(
     const LiteRtLmStreamChunk *chunk);
 #endif

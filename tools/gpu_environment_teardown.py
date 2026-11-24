@@ -26,12 +26,13 @@ RECORD_OPTIONS_SYMBOL = (
     "_ZN6litert8internal27CreateGpuEnvironmentOptions"
     "ERK25LiteRtEnvironmentOptionsT"
 )
-# LiteRT 9c8ae4e0fc moved the OpenCL setup, and with it the LoadOpenCL call,
-# into GpuEnvironment::InitializeOpenCl.
+# LiteRT first moved LoadOpenCL into InitializeOpenCl and then renamed that
+# entry point to InitializeOpenClLocked when setup became lazy.
 OPENCL_SETUP_SYMBOLS = frozenset(
     {
         "_ZN6tflite3gpu2cl10LoadOpenCLEv",
         "_ZN6litert8internal14GpuEnvironment16InitializeOpenClEv",
+        "_ZN6litert8internal14GpuEnvironment22InitializeOpenClLockedEv",
     }
 )
 
@@ -86,10 +87,8 @@ def check_initialize_disassembly(disassembly: str) -> None:
         raise RuntimeError(
             "GpuEnvironment::Initialize sets up OpenCL before it records the "
             "environment options, so an OpenCL load failure drops the WebGPU "
-            "destroy callback and engine deletes leak graphics memory. Add the "
-            "pinned LiteRT commit to LITERT_REFS_WITHOUT_GPU_TEARDOWN_ORDERING "
-            "in tools/build_upstream_runtime.py after confirming that "
-            "native/bridge/litert_gpu_environment_destroy_callback.patch applies."
+            "destroy callback and engine deletes leak graphics memory. "
+            "Requalify the pinned LiteRT GPU environment initialization."
         )
 
 

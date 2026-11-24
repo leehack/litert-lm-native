@@ -163,6 +163,14 @@ def elf_has_global_flag(path: Path) -> bool:
 
 
 def elf_exported_symbols(path: Path, *, include_hidden: bool = False) -> set[str]:
+    return _elf_dynamic_symbols(path, undefined=False, include_hidden=include_hidden)
+
+
+def elf_imported_symbols(path: Path) -> set[str]:
+    return _elf_dynamic_symbols(path, undefined=True, include_hidden=False)
+
+
+def _elf_dynamic_symbols(path: Path, *, undefined: bool, include_hidden: bool) -> set[str]:
     data = path.read_bytes()
     if len(data) < 64 or not data.startswith(ELF_MAGIC):
         return set()
@@ -219,7 +227,7 @@ def elf_exported_symbols(path: Path, *, include_hidden: bool = False) -> set[str
             binding = info >> 4
             if (
                 name_offset == 0
-                or section_index == SHN_UNDEF
+                or (section_index == SHN_UNDEF) != undefined
                 or binding not in (STB_GLOBAL, STB_WEAK, STB_GNU_UNIQUE)
                 or (not include_hidden and (other & 3) not in (0, 3))
             ):

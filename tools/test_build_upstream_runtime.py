@@ -16,10 +16,6 @@ from unittest.mock import DEFAULT, MagicMock, patch
 import build_upstream_runtime
 import package_upstream_prebuilts
 from bazel_repository_provenance import HTTP_ARCHIVE, UPSTREAM_REGISTRY
-from litert_cpu_options_identifier_patch import (
-    LITERT_ARCHIVE_SHA256 as CPU_OPTIONS_SHA256,
-    LITERT_REF as CPU_OPTIONS_REF,
-)
 from litert_lm_symbols import ANDROID_OPENCL_SAMPLER_SYMBOLS, ANDROID_WEBGPU_SAMPLER_SYMBOLS
 from litert_stage_spatial_tensors_patch import (
     LITERT_ARCHIVE_SHA256,
@@ -29,9 +25,9 @@ from litert_stage_spatial_tensors_patch import (
 from test_runtime_dependency_utils import write_elf_with_exports
 from xnnpack_pf32_sme2_patch import (
     TENSORFLOW_ARCHIVE,
-    V019_TENSORFLOW_REF,
-    V019_XNNPACK_COMMIT,
-    V019_XNNPACK_SHA256,
+    TENSORFLOW_REF,
+    XNNPACK_COMMIT,
+    XNNPACK_SHA256,
     declare_patched_xnnpack,
 )
 
@@ -50,175 +46,46 @@ def litert_workspace(ref: str, digest: str) -> str:
 
 
 class BuildUpstreamRuntimeTest(unittest.TestCase):
-    def test_ios_framework_patch_applies_to_old_and_current_litert(self) -> None:
-        patch_file = (
-            build_upstream_runtime.REPO_ROOT
-            / "native/bridge/litert_ios_framework_paths.patch"
-        )
-        for version in ("17", "18"):
-            with self.subTest(version=version), tempfile.TemporaryDirectory() as temp:
-                root = Path(temp)
-                target = root / "litert/runtime/accelerators/gpu_registry.cc"
-                target.parent.mkdir(parents=True)
-                original = (
-                    Path(__file__).parent
-                    / f"fixtures/litert_v0_{version}_gpu_registry_excerpt.cc"
-                ).read_text()
-                target.write_text(original)
-                subprocess.run(
-                    ["git", "apply", "--unidiff-zero", "--check", str(patch_file)],
-                    cwd=root,
-                    check=True,
-                    capture_output=True,
-                )
-                subprocess.run(
-                    ["git", "apply", "--unidiff-zero", str(patch_file)],
-                    cwd=root,
-                    check=True,
-                    capture_output=True,
-                )
-                patched = target.read_text()
-                self.assertIn(
-                    '"@executable_path/Frameworks/LiteRtMetalAccelerator.framework/"',
-                    patched,
-                )
-                self.assertNotIn('"libLiteRtMetalAccelerator" SO_EXT', patched)
-                self.assertIn('"libLiteRtWebGpuAccelerator" SO_EXT', patched)
-                if version == "18":
-                    self.assertIn("// Inside an Apple framework bundle", patched)
-                    self.assertEqual(patched.count('"LiteRtMetalAccelerator",'), 2)
-                # Unknown iOS layouts must still fail instead of silently dropping the path fix.
-                target.write_text(
-                    original.replace("#elif TARGET_OS_IPHONE", "#elif CHANGED_PLATFORM")
-                )
-                result = subprocess.run(
-                    ["git", "apply", "--unidiff-zero", "--check", str(patch_file)],
-                    cwd=root,
-                    capture_output=True,
-                )
-                self.assertNotEqual(result.returncode, 0)
+    def test_source_build_rejects_an_older_compatibility_tag(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "historical native release ref"):
+            build_upstream_runtime.build_runtime(Path("missing"), "macos", "arm64", "v0.19.1", None)
 
-    def test_sentencepiece_patch_delimits_each_file_for_bazel(self) -> None:
-        lines = (Path(__file__).resolve().parents[1] / "native/bridge/sentencepiece_bpe_null.patch").read_text().splitlines()
-        files = []
-        for index, line in enumerate(lines):
-            if line.startswith("--- a/"):
-                name = line.removeprefix("--- a/")
-                self.assertEqual(lines[index - 1], f"diff --git a/{name} b/{name}")
-                files.append(name)
-        self.assertEqual(set(files), {"src/bpe_model.cc", "src/model_interface.cc", "src/model_interface.h"})
-
-    def test_download_wires_bpe_compatibility_only_for_v017_and_later(self) -> None:
-        affected = 'LITERT_REF = "9fe5be45564c868408e6514c8aabb83e211a0911"\n'
-        for tag, workspace, enabled in [("v0.16.0", "", False), ("v0.17.0", affected, True), ("v0.17.1", affected, True)]:
-            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
-                root = Path(temp)
-                source = root / "source"
-                source.mkdir()
-                (source / "WORKSPACE").write_text(workspace, encoding="utf-8")
-                with patch.object(build_upstream_runtime, "download_to_path"), \
-                     patch.object(build_upstream_runtime.tarfile, "open"), \
-                     patch.object(build_upstream_runtime, "patch_upstream_workspace") as apply:
-                    self.assertEqual(build_upstream_runtime.download_upstream(tag, tag, root), source)
-                self.assertEqual(apply.call_args.kwargs["patch_bpe_null_piece"], enabled)
-                self.assertEqual(apply.call_args.kwargs["patch_gpu_environment_teardown"], enabled)
-
-    def test_workspace_applies_bpe_patch_and_preserves_file_on_rejection(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
+    def test_android_build_checks_executor_actions_before_compiling(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.multiple(
+            build_upstream_runtime,
+            verify_carried_dependency_pins=DEFAULT,
+            patch_android_automatic_gpu=DEFAULT,
+            patch_asr_untimed_overlap=DEFAULT,
+            patch_stream_finish_reason=DEFAULT,
+            patch_huggingface_token_bytes=DEFAULT,
+            apply_android_gpu_safety=DEFAULT,
+            materialize_git_lfs_libraries=DEFAULT,
+            bazel_command=DEFAULT,
+            prepare_bridge_package=DEFAULT,
+            fetch_audited_archives=DEFAULT,
+            verify_executor_compile_actions=DEFAULT,
+            run=DEFAULT,
+        ) as calls:
             root = Path(temp)
-            path = root / "WORKSPACE"
-            text = ('http_archive(\n    name = "minizip",\n'
-                    f'    url = "{build_upstream_runtime.ZLIB_URL}",\n)\n'
-                    'http_archive(\n    name = "sentencepiece",\n'
-                    '    sha256 = "92381f713e094a15a1ccff1ac4a5315a4c4b82a99ac1332d6ac53c9dc8e1bcf1",\n'
-                    '    strip_prefix = "sentencepiece-0.2.2",\n'
-                    '    url = "https://github.com/google/sentencepiece/archive/refs/tags/v0.2.2.tar.gz",\n)')
-            path.write_text(text)
-            build_upstream_runtime.patch_upstream_workspace(root, patch_ios_framework_paths=False, patch_bpe_null_piece=True)
-            self.assertIn('patches = ["@//bridge:sentencepiece_bpe_null.patch"]', path.read_text())
-            invalid = text.replace('92381f', '000000')
-            path.write_text(invalid)
-            with self.assertRaisesRegex(RuntimeError, "source changed"):
-                build_upstream_runtime.patch_upstream_workspace(root, patch_ios_framework_paths=False, patch_bpe_null_piece=True)
-            self.assertEqual(path.read_text(), invalid)
+            calls["bazel_command"].return_value = ["bazel"]
+            calls["materialize_git_lfs_libraries"].return_value = 0
+            calls["prepare_bridge_package"].return_value = []
+            calls["run"].side_effect = [SimpleNamespace(stdout="graph"), RuntimeError("Bazel build reached")]
+            with self.assertRaisesRegex(RuntimeError, "Bazel build reached"):
+                build_upstream_runtime.build_runtime(root, "android", "arm64", "v0.20.0", "8")
+            calls["patch_android_automatic_gpu"].assert_called_once_with(root, "v0.20.0")
+            calls["verify_executor_compile_actions"].assert_called_once_with("graph")
+            query, build = (call.args[0] for call in calls["run"].call_args_list)
+            self.assertIn("aquery", query)
+            self.assertIn("build", build)
+            self.assertEqual(query[query.index("aquery") + 1:-4], build[build.index("build") + 1:-1])
+            self.assertNotIn("--//runtime/executor:gpu_accelerator=webgpu", build)
 
-    def test_sentencepiece_patch_is_exact_source_and_idempotent(self) -> None:
-        block = ('http_archive(\n    name = "sentencepiece",\n'
-                 '    sha256 = "92381f713e094a15a1ccff1ac4a5315a4c4b82a99ac1332d6ac53c9dc8e1bcf1",\n'
-                 '    strip_prefix = "sentencepiece-0.2.2",\n'
-                 '    url = "https://github.com/google/sentencepiece/archive/refs/tags/v0.2.2.tar.gz",\n)')
-        patched = build_upstream_runtime.patch_sentencepiece_bpe_null(block)
-        self.assertIn('patches = ["@//bridge:sentencepiece_bpe_null.patch"]', patched)
-        self.assertEqual(build_upstream_runtime.patch_sentencepiece_bpe_null(patched), patched)
-        for invalid in (block.replace('92381f', '000000'),
-                        block.replace('0.2.2', '0.2.3'),
-                        block + '\n' + block,
-                        block.replace('    sha256', '    patches = ["other.patch"],\n    sha256')):
-            with self.subTest(invalid=invalid), self.assertRaises(RuntimeError):
-                build_upstream_runtime.patch_sentencepiece_bpe_null(invalid)
-
-    def test_runtime_selects_capabilities_owner_by_upstream_version(self) -> None:
-        for tag, expected in [("v0.16.0", False), ("v0.17.0", True), ("v0.17.1", True)]:
-            with self.subTest(tag=tag), tempfile.TemporaryDirectory() as temp:
-                root = Path(temp)
-                with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
-                     patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]), \
-                     patch.object(build_upstream_runtime, "run", side_effect=RuntimeError("captured build")) as run:
-                    with self.assertRaisesRegex(RuntimeError, "captured build"):
-                        build_upstream_runtime.build_runtime(root, "macos", "arm64", tag, "3")
-                command = run.call_args.args[0]
-                self.assertEqual("--define=litert_lm_capabilities_in_c_engine=true" in command, expected)
-
-    def test_desktop_build_selects_shared_runtime_only_for_v016_to_v018(self) -> None:
-        for platform, arch in build_upstream_runtime.RUNTIME_TARGETS:
-            for tag in ("v0.15.0", "v0.16.0", "v0.17.0", "v0.17.1", "v0.18.1", "v0.19.0", "v0.19.1"):
-                with self.subTest(platform=platform, arch=arch, tag=tag), tempfile.TemporaryDirectory() as temp:
-                    root = Path(temp)
-                    gate = root / "runtime/conversation/model_data_processor/BUILD"
-                    gate.parent.mkdir(parents=True)
-                    gate.write_bytes((Path(__file__).parent / "fixtures/ios_fst_gate.BUILD").read_bytes())
-                    with patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0), \
-                         patch.object(build_upstream_runtime, "patch_upstream_ios_sampler_path"), \
-                         patch.object(build_upstream_runtime, "patch_asr_untimed_overlap"), \
-                         patch.object(build_upstream_runtime, "patch_asr_litertlm_container"), \
-                         patch.object(build_upstream_runtime, "patch_stream_finish_reason"), \
-                         patch.object(build_upstream_runtime, "patch_huggingface_token_bytes"), \
-                         patch.object(build_upstream_runtime, "patch_step_zero_state") as apply_state, \
-                         patch.object(build_upstream_runtime, "verify_carried_dependency_pins"), \
-                         patch.object(build_upstream_runtime, "fetch_audited_archives"), \
-                         patch.object(build_upstream_runtime, "apply_android_gpu_safety"), \
-                         patch.object(build_upstream_runtime, "verify_dynamic_runtime"), \
-                         patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]), \
-                         patch.object(build_upstream_runtime, "run", side_effect=RuntimeError("captured build")) as run:
-                        with self.assertRaisesRegex(RuntimeError, "captured build"):
-                            build_upstream_runtime.build_runtime(root, platform, arch, tag, "3")
-                    apply_state.assert_called_once_with(root, tag)
-                    command = run.call_args.args[0]
-                    self.assertEqual("--define=LITERT_LM_FST_CONSTRAINTS_DISABLED=1" in command, platform == "ios" and tag not in {"v0.15.0", "v0.16.0"})
-                    dynamic = platform in {"linux", "windows"} and tag not in {"v0.15.0", "v0.19.0", "v0.19.1"}
-                    self.assertEqual("--define=litert_runtime_link_mode=dynamic" in command, dynamic)
-                    self.assertEqual("--define=litert_link_capi_so=true" in command, not dynamic)
-                    self.assertEqual("--define=litert_lm_in_process_litert=true" in command,
-                                     tag in {"v0.19.0", "v0.19.1"})
-                    self.assertIn("--define=resolve_symbols_in_exec=false", command)
-                    self.assertIn("--nohome_rc", command)
-                    self.assertIn("--nosystem_rc", command)
-                    self.assertEqual("--noenable_bzlmod" in command,
-                                     tag in {"v0.18.1", "v0.19.0", "v0.19.1"})
-                    self.assertEqual("--define=litert_lm_android_webgpu_sampler=true" in command,
-                                     platform == "android" and tag in {"v0.19.0", "v0.19.1"})
-
-    def test_android_webgpu_sampler_define_links_the_static_sampler(self) -> None:
-        bazel = (build_upstream_runtime.REPO_ROOT / "native/bridge/BUILD.bazel").read_text()
-        setting = re.search(
-            r'name = "android_webgpu_sampler",\s*constraint_values = \["@platforms//os:android"\],'
-            r'\s*define_values = \{"([^"]+)": "true"\}', bazel)
-        self.assertIsNotNone(setting)
-        script = Path(build_upstream_runtime.__file__).read_text()
-        self.assertIn(f'"--define={setting.group(1)}=true"', script)
-        self.assertEqual(len(re.findall(
-            r'":android_webgpu_sampler": \["//runtime/components:top_k_webgpu_sampler_static"\]',
-            bazel)), 1)
+            calls["run"].reset_mock(side_effect=True)
+            calls["verify_executor_compile_actions"].side_effect = RuntimeError("unexpected GPU backend")
+            with self.assertRaisesRegex(RuntimeError, "unexpected GPU backend"):
+                build_upstream_runtime.build_runtime(root, "android", "x64", "v0.20.0", "8")
+            self.assertEqual(calls["run"].call_count, 1)
 
     def test_android_v019_build_rejects_a_runtime_without_both_gpu_samplers(self) -> None:
         both = ANDROID_OPENCL_SAMPLER_SYMBOLS + ANDROID_WEBGPU_SAMPLER_SYMBOLS
@@ -272,7 +139,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
     def test_main_rejects_shared_litert_on_both_build_paths(self) -> None:
         for source_root in (True, False):
             with self.subTest(source_root=source_root), tempfile.TemporaryDirectory() as temp:
-                argv = ["build_upstream_runtime.py", "--upstream-tag", "v0.19.1",
+                argv = ["build_upstream_runtime.py", "--upstream-tag", "v0.20.0",
                         "--platform", "linux", "--arch", "x64"]
                 if source_root:
                     argv += ["--source-root", temp]
@@ -330,12 +197,12 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                     f'        "{build_upstream_runtime.ZLIB_URL}",\n    ],\n)\n')
             workspace.write_text(text)
             build_upstream_runtime.patch_upstream_workspace(
-                root, patch_ios_framework_paths=False)
+                root)
             self.assertEqual(workspace.read_text(), text)
             workspace.write_text(text.replace(build_upstream_runtime.ZLIB_URL, "https://invalid.example/zlib"))
             with self.assertRaisesRegex(RuntimeError, "Expected zlib URL"):
                 build_upstream_runtime.patch_upstream_workspace(
-                    root, patch_ios_framework_paths=False)
+                    root)
 
     def test_source_archive_filename_never_contains_the_raw_ref_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -373,9 +240,73 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                         )
                     self.assertEqual(workspace.read_text(encoding="utf-8"), drift)
 
+    def test_windows_v020_uses_the_android_rules_and_engine_fd_patches(self) -> None:
+        call = "tf_workspace2()\n"
+        original = (
+            f'TENSORFLOW_REF = "{TENSORFLOW_REF}"\n'
+            'load("@org_tensorflow//tensorflow:workspace2.bzl", "tf_workspace2")\n\n'
+            + call
+        )
+        with tempfile.TemporaryDirectory() as temp, patch.multiple(
+            build_upstream_runtime,
+            verify_carried_dependency_pins=DEFAULT,
+            patch_asr_untimed_overlap=DEFAULT,
+            patch_stream_finish_reason=DEFAULT,
+            patch_huggingface_token_bytes=DEFAULT,
+            apply_android_gpu_safety=DEFAULT,
+            patch_windows_engine_fd=DEFAULT,
+            materialize_git_lfs_libraries=DEFAULT,
+            bazel_command=DEFAULT,
+            prepare_bridge_package=DEFAULT,
+            fetch_audited_archives=DEFAULT,
+            run=DEFAULT,
+        ) as calls:
+            root = Path(temp)
+            workspace = root / "WORKSPACE"
+            fd_patch = calls["patch_windows_engine_fd"]
+            calls["bazel_command"].return_value = ["bazel"]
+            calls["materialize_git_lfs_libraries"].return_value = 0
+            calls["prepare_bridge_package"].return_value = []
+            calls["run"].side_effect = RuntimeError("Bazel reached")
+            for platform, tag in (("windows", "v0.20.0"), ("linux", "v0.20.0")):
+                with self.subTest(platform=platform, tag=tag):
+                    workspace.write_text(original, encoding="utf-8")
+                    fd_patch.reset_mock()
+                    for _ in range(2):
+                        with self.assertRaisesRegex(RuntimeError, "Bazel reached"):
+                            build_upstream_runtime.build_runtime(root, platform, "x64", tag, None)
+                    text = workspace.read_text(encoding="utf-8")
+                    if (platform, tag) == ("windows", "v0.20.0"):
+                        self.assertEqual([call.args for call in fd_patch.call_args_list],
+                                         [(root, tag), (root, tag)])
+                        name = 'name = "build_bazel_rules_android"'
+                        self.assertEqual(text.count(name), 1)
+                        self.assertLess(text.index(name), text.index(call))
+                        self.assertIn('patch_args = ["-p1"]', text)
+                        self.assertIn('patches = ["@//bridge:rules_android_tensorflow_v020.patch"]', text)
+                        self.assertIn('sha256 = "af84b69ab3d16dd1a41056286e6511f147a94ccea995603e13e934c915c1631c"', text)
+                        self.assertNotIn("patch_cmds", text)
+                    else:
+                        fd_patch.assert_not_called()
+                        self.assertEqual(text, original)
+
+    def test_windows_android_rules_patch_rejects_a_different_tensorflow_ref(self) -> None:
+        original = (
+            f'TENSORFLOW_REF = "{"0" * 40}"\n'
+            'load("@org_tensorflow//tensorflow:workspace2.bzl", "tf_workspace2")\n\n'
+            'tf_workspace2()\n'
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "WORKSPACE"
+            workspace.write_text(original, encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "TensorFlow pin changed"):
+                build_upstream_runtime.patch_windows_rules_android(root)
+            self.assertEqual(workspace.read_text(encoding="utf-8"), original)
+
     def test_source_root_verifies_resolved_archives_before_compilation(self) -> None:
         workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(
-            f'TENSORFLOW_REF = "{V019_TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
+            f'TENSORFLOW_REF = "{TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
         )
 
         tree_hash = (
@@ -397,7 +328,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             }
 
         litert = resolved_archive("litert", LITERT_ARCHIVE_SHA256, f"LiteRT-{LITERT_REF}")
-        xnnpack = resolved_archive("XNNPACK", V019_XNNPACK_SHA256, f"XNNPACK-{V019_XNNPACK_COMMIT}")
+        xnnpack = resolved_archive("XNNPACK", XNNPACK_SHA256, f"XNNPACK-{XNNPACK_COMMIT}")
         wrong = resolved_archive("litert", "0" * 64, f"LiteRT-{LITERT_REF}")
         wrong_tree = resolved_archive("litert", LITERT_ARCHIVE_SHA256, f"LiteRT-{LITERT_REF}", "f" * 64)
         local = {**litert, "original_rule_class": "local_repository"}
@@ -426,7 +357,6 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 patch_asr_untimed_overlap=DEFAULT,
                 patch_stream_finish_reason=DEFAULT,
                 patch_huggingface_token_bytes=DEFAULT,
-                patch_step_zero_state=DEFAULT,
                 apply_android_gpu_safety=DEFAULT,
                 materialize_git_lfs_libraries=DEFAULT,
                 run=DEFAULT,
@@ -532,7 +462,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
 
                 calls["run"].side_effect = run
                 args = ["build_upstream_runtime.py", "--source-root", str(root),
-                        "--upstream-tag", "v0.19.1", "--platform", "macos", "--arch", "arm64"]
+                        "--upstream-tag", "v0.20.0", "--platform", "macos", "--arch", "arm64"]
                 with patch("sys.argv", args), self.assertRaisesRegex(RuntimeError, message) as failure:
                     build_upstream_runtime.main()
                 compilations = [call for call in calls["run"].call_args_list if "build" in call.args[0]]
@@ -546,7 +476,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
 
     def test_source_root_rejects_workspace_rc_repository_overrides_before_bazel(self) -> None:
         workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(
-            f'TENSORFLOW_REF = "{V019_TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
+            f'TENSORFLOW_REF = "{TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
         )
         fixtures = (
             ("build --override_repository=litert=alternate_repo", "override_repository"),
@@ -557,14 +487,13 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             root = Path(temp)
             (root / "WORKSPACE").write_text(workspace, encoding="utf-8")
             args = ["build_upstream_runtime.py", "--source-root", str(root),
-                    "--upstream-tag", "v0.19.1", "--platform", "macos", "--arch", "arm64"]
+                    "--upstream-tag", "v0.20.0", "--platform", "macos", "--arch", "arm64"]
             for fixture, option in fixtures:
                 with self.subTest(fixture=fixture), patch("sys.argv", args), patch.multiple(
                     build_upstream_runtime,
                     patch_asr_untimed_overlap=DEFAULT,
                     patch_stream_finish_reason=DEFAULT,
                     patch_huggingface_token_bytes=DEFAULT,
-                    patch_step_zero_state=DEFAULT,
                     apply_android_gpu_safety=DEFAULT,
                     materialize_git_lfs_libraries=DEFAULT,
                     run=DEFAULT,
@@ -578,7 +507,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
 
     def test_build_routes_reject_identical_workspace_files_before_patching(self) -> None:
         workspace = litert_workspace(LITERT_REF, LITERT_ARCHIVE_SHA256) + declare_patched_xnnpack(
-            f'TENSORFLOW_REF = "{V019_TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
+            f'TENSORFLOW_REF = "{TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
         )
         with tempfile.TemporaryDirectory() as temp:
             work_dir = Path(temp)
@@ -589,7 +518,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             message = "both WORKSPACE and WORKSPACE.bazel"
 
             args = ["build_upstream_runtime.py", "--source-root", str(root),
-                    "--upstream-tag", "v0.19.1", "--platform", "macos", "--arch", "arm64"]
+                    "--upstream-tag", "v0.20.0", "--platform", "macos", "--arch", "arm64"]
             with self.subTest(route="prepared"), patch("sys.argv", args), patch.object(
                 build_upstream_runtime, "patch_asr_untimed_overlap",
                 side_effect=RuntimeError("reached source patching"),
@@ -602,16 +531,16 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             with self.subTest(route="archive"), patch.object(
                 build_upstream_runtime, "download_to_path",
             ), patch.object(build_upstream_runtime.tarfile, "open"), patch.object(
-                build_upstream_runtime, "patch_workspace_build",
+                build_upstream_runtime, "patch_upstream_workspace",
                 side_effect=RuntimeError("reached workspace patching"),
             ) as patch_workspace:
                 with self.assertRaisesRegex(RuntimeError, message):
-                    build_upstream_runtime.download_upstream("v0.19.1", "v0.19.1", work_dir)
+                    build_upstream_runtime.download_upstream("v0.20.0", "v0.20.0", work_dir)
                 patch_workspace.assert_not_called()
 
             with self.subTest(route="verifier"), self.assertRaisesRegex(RuntimeError, message):
                 build_upstream_runtime.verify_carried_dependency_pins(
-                    root, "v0.19.1", spatial_staging=True, cpu_options=False, xnnpack=True,
+                    root, "v0.20.0",
                 )
 
             for name in ("WORKSPACE", "WORKSPACE.bazel"):
@@ -625,33 +554,28 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             f'    name = "litert",\n    patches = ["@//bridge:{Path(STAGING_PATCH).name}"],\n',
         )
         xnnpack = declare_patched_xnnpack(
-            f'TENSORFLOW_REF = "{V019_TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
+            f'TENSORFLOW_REF = "{TENSORFLOW_REF}"\n' + TENSORFLOW_ARCHIVE + ")\n"
         )
         cases = (
-            ("alternate LiteRT archive", "v0.19.1", litert.replace(LITERT_REF, parent_ref)
+            ("alternate LiteRT archive", "v0.20.0", litert.replace(LITERT_REF, parent_ref)
              .replace(LITERT_ARCHIVE_SHA256, parent_sha) + xnnpack, "Unexpected LITERT_REF"),
-            ("changed LiteRT digest", "v0.19.1",
+            ("changed LiteRT digest", "v0.20.0",
              litert.replace(LITERT_ARCHIVE_SHA256, parent_sha) + xnnpack, "Unexpected LITERT_SHA256"),
-            ("archive overrides digest", "v0.19.1",
+            ("archive overrides digest", "v0.20.0",
              litert.replace("sha256 = LITERT_SHA256,", f'sha256 = "{parent_sha}",') + xnnpack,
              "Unexpected LiteRT archive sha256"),
-            ("shadowed LiteRT revision", "v0.19.1",
+            ("shadowed LiteRT revision", "v0.20.0",
              f'LITERT_REF="{parent_ref}"\n' + litert + xnnpack, "Unexpected LITERT_REF"),
-            ("CPU options LiteRT pin drift", "v0.18.1",
-             litert_workspace(CPU_OPTIONS_REF, CPU_OPTIONS_SHA256).replace(CPU_OPTIONS_REF, LITERT_REF),
-             "Unexpected LITERT_REF for LiteRT CPU options"),
-            ("XNNPACK digest drift", "v0.19.1",
-             litert + xnnpack.replace(V019_XNNPACK_SHA256, "0" * 64), "Unexpected XNNPACK archive"),
-            ("XNNPACK archive missing", "v0.19.0", litert, "Unexpected XNNPACK archive"),
+            ("XNNPACK digest drift", "v0.20.0",
+             litert + xnnpack.replace(XNNPACK_SHA256, "0" * 64), "Unexpected XNNPACK archive"),
+            ("XNNPACK archive missing", "v0.20.0", litert, "Unexpected XNNPACK archive"),
         )
         for label, tag, workspace, message in cases:
             with self.subTest(label=label), tempfile.TemporaryDirectory() as temp, patch.multiple(
                 build_upstream_runtime,
                 patch_asr_untimed_overlap=DEFAULT,
-                patch_asr_litertlm_container=DEFAULT,
                 patch_stream_finish_reason=DEFAULT,
                 patch_huggingface_token_bytes=DEFAULT,
-                patch_step_zero_state=DEFAULT,
                 apply_android_gpu_safety=DEFAULT,
                 materialize_git_lfs_libraries=DEFAULT,
                 run=DEFAULT,
@@ -665,7 +589,6 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 with patch("sys.argv", args), self.assertRaisesRegex(RuntimeError, message):
                     build_upstream_runtime.main()
                 calls["run"].assert_not_called()
-                calls["patch_step_zero_state"].assert_not_called()
 
     def test_spatial_staging_postimages_fail_on_drift_or_missing_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -677,7 +600,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
             (source_root / "bazel-out").symlink_to(exec_root / "bazel-out", target_is_directory=True)
             sources = {}
             files = []
-            for name in build_upstream_runtime.STAGE_SPATIAL_TENSORS_SOURCES:
+            for name in build_upstream_runtime.STAGING_SOURCES:
                 postimage = name.encode() + b"\n"
                 sources[name] = ("", build_upstream_runtime.source_sha256(postimage))
                 file = output_base / "external" / "litert" / name
@@ -685,7 +608,7 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 file.write_bytes(postimage.replace(b"\n", b"\r\n"))
                 files.append(file)
 
-            with patch.object(build_upstream_runtime, "STAGE_SPATIAL_TENSORS_SOURCES", sources):
+            with patch.object(build_upstream_runtime, "STAGING_SOURCES", sources):
                 build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
                 for file in files:
                     with self.subTest(file=file.name):
@@ -697,189 +620,6 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                         with self.assertRaisesRegex(RuntimeError, f"postimage mismatch for .*{file.name}"):
                             build_upstream_runtime.verify_stage_spatial_tensors_postimages(source_root)
                         file.write_bytes(original)
-
-    def test_workspace_adds_litert_apple_framework_patch(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            workspace = root / "WORKSPACE"
-            workspace.write_text(
-                "\n".join(
-                    [
-                        "http_archive(",
-                        '    name = "minizip",',
-                        f'    url = "{build_upstream_runtime.ZLIB_URL}",',
-                        ")",
-                        "http_archive(",
-                        '    name = "litert",',
-                        ")",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            build_upstream_runtime.patch_upstream_workspace(root)
-            build_upstream_runtime.patch_upstream_workspace(root)
-
-            patched = workspace.read_text(encoding="utf-8")
-            self.assertEqual(
-                patched.count("litert_ios_framework_paths.patch"),
-                1,
-            )
-            self.assertIn(
-                build_upstream_runtime.ZLIB_GITHUB_MIRROR_URL,
-                patched,
-            )
-
-    def test_workspace_adds_gpu_environment_teardown_patch_for_v017(self) -> None:
-        needs = build_upstream_runtime.needs_gpu_environment_teardown_patch
-        affected = 'LITERT_REF = "9fe5be45564c868408e6514c8aabb83e211a0911"\n'
-        reordered = 'LITERT_REF = "86112a3263efdbcf2183c48580c9aa1b89850c98"\n'
-        self.assertTrue(needs(affected, "v0.17.0"))
-        self.assertTrue(needs(affected, "v0.17.1"))
-        # A development build keeps the stable compatibility tag.
-        self.assertFalse(needs(reordered, "v0.17.1"))
-        for ref, tag in [
-            ("3cb830ad9c94f9922f0a88dd431b005413628919", "v0.15.0"),
-            ("0ff28117f1cb5556d0e015bf80b773f74e2bee51", "v0.16.1"),
-            ("761d99cb90e20c67efcb3fe1119a60c92381bd1a", "v0.17.0"),
-        ]:
-            self.assertTrue(needs(f'LITERT_REF = "{ref}"\n', tag), ref)
-        self.assertFalse(needs("", "v0.16.1"))
-        with self.assertRaisesRegex(RuntimeError, "LITERT_REF"):
-            needs("", "v0.17.0")
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            workspace = root / "WORKSPACE"
-            workspace.write_text(
-                f'http_archive(\n    name = "minizip",\n    url = "{build_upstream_runtime.ZLIB_URL}",\n)\n'
-                'http_archive(\n    name = "litert",\n)\n',
-                encoding="utf-8",
-            )
-
-            for _ in range(2):
-                build_upstream_runtime.patch_upstream_workspace(
-                    root, patch_gpu_environment_teardown=True)
-
-            patched = workspace.read_text(encoding="utf-8")
-            self.assertEqual(
-                patched.count(
-                    '    patches = ["@//bridge:litert_ios_framework_paths.patch", '
-                    '"@//bridge:litert_gpu_environment_destroy_callback.patch"],\n'
-                ),
-                1,
-            )
-            with self.assertRaisesRegex(RuntimeError, "Unexpected LiteRT patches"):
-                build_upstream_runtime.patch_upstream_workspace(root)
-
-    def test_real_v017_workspace_selects_and_takes_the_teardown_patch(self) -> None:
-        # An excerpt of the upstream v0.17.0 WORKSPACE: LITERT_REF is not on
-        # its first line, and the litert archive has its own patch_cmds.
-        excerpt = (
-            Path(build_upstream_runtime.__file__).parent
-            / "fixtures"
-            / "litert_lm_v0.17.0_workspace_excerpt.txt"
-        ).read_text(encoding="utf-8")
-        self.assertTrue(
-            build_upstream_runtime.needs_gpu_environment_teardown_patch(
-                excerpt, "v0.17.0"
-            )
-        )
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            (root / "WORKSPACE").write_text(excerpt, encoding="utf-8")
-            build_upstream_runtime.patch_upstream_workspace(
-                root, patch_bpe_null_piece=True, patch_gpu_environment_teardown=True
-            )
-            patched = (root / "WORKSPACE").read_text(encoding="utf-8")
-        self.assertIn(
-            'http_archive(\n    name = "litert",\n    patch_args = ["-p1"],\n'
-            '    patches = ["@//bridge:litert_ios_framework_paths.patch", '
-            '"@//bridge:litert_gpu_environment_destroy_callback.patch"],\n'
-            "    patch_cmds = [\n",
-            patched,
-        )
-        self.assertIn(
-            'LITERT_REF = "9fe5be45564c868408e6514c8aabb83e211a0911"\n', patched
-        )
-
-    def test_v018_workspace_keeps_tokenizer_and_ios_fixes_without_teardown_patch(self) -> None:
-        excerpt = (Path(__file__).parent / "fixtures/litert_lm_v0.18.0_workspace_excerpt.txt").read_text()
-        needs = build_upstream_runtime.needs_gpu_environment_teardown_patch(excerpt, "v0.18.0")
-        self.assertFalse(needs)
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            (root / "WORKSPACE").write_text(excerpt)
-            build_upstream_runtime.patch_upstream_workspace(
-                root, patch_bpe_null_piece=True, patch_gpu_environment_teardown=needs)
-            patched = (root / "WORKSPACE").read_text()
-        self.assertIn('patches = ["@//bridge:litert_ios_framework_paths.patch"]', patched)
-        self.assertIn('patches = ["@//bridge:sentencepiece_bpe_null.patch"]', patched)
-        self.assertNotIn('litert_gpu_environment_destroy_callback.patch', patched)
-        self.assertIn('LITERT_REF = "26895c9fbcc25c43faa8c1a98cd1fd28951602c3"', patched)
-
-    def test_gpu_environment_teardown_patch_records_callback_before_opencl(self) -> None:
-        patch = (
-            build_upstream_runtime.BRIDGE_PACKAGE_ROOT
-            / "bridge"
-            / "litert_gpu_environment_destroy_callback.patch"
-        ).read_text(encoding="utf-8")
-        added = patch.index("+  options_ = CreateGpuEnvironmentOptions(environment_options);")
-        opencl = patch.index("LITERT_RETURN_IF_ERROR(tflite::gpu::cl::LoadOpenCL().ok())")
-        removed = patch.index("-  options_ = CreateGpuEnvironmentOptions(environment_options);")
-        self.assertLess(added, opencl)
-        self.assertLess(opencl, removed)
-        self.assertIn(
-            '"litert_gpu_environment_destroy_callback.patch"',
-            (build_upstream_runtime.BRIDGE_PACKAGE_ROOT / "bridge" / "BUILD.bazel").read_text(
-                encoding="utf-8"
-            ),
-        )
-
-    def test_legacy_workspace_keeps_litert_archive_unpatched(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            workspace = root / "WORKSPACE"
-            workspace.write_text(
-                "\n".join(
-                    [
-                        "http_archive(",
-                        '    name = "minizip",',
-                        f'    url = "{build_upstream_runtime.ZLIB_URL}",',
-                        ")",
-                        "http_archive(",
-                        '    name = "litert",',
-                        ")",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            build_upstream_runtime.patch_upstream_workspace(
-                root,
-                patch_ios_framework_paths=False,
-            )
-
-            patched = workspace.read_text(encoding="utf-8")
-            self.assertNotIn("litert_ios_framework_paths.patch", patched)
-            self.assertIn(build_upstream_runtime.ZLIB_GITHUB_MIRROR_URL, patched)
-
-    def test_ios_sampler_uses_embedded_framework_path(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            sampler = root / "runtime" / "components" / "sampler_factory.cc"
-            sampler.parent.mkdir(parents=True)
-            sampler.write_text(
-                'auto path = "libLiteRtTopKMetalSampler.dylib";\n',
-                encoding="utf-8",
-            )
-
-            build_upstream_runtime.patch_upstream_ios_sampler_path(root)
-
-            self.assertIn(
-                "@executable_path/Frameworks/"
-                "LiteRtTopKMetalSampler.framework/LiteRtTopKMetalSampler",
-                sampler.read_text(encoding="utf-8"),
-            )
 
     def test_windows_stages_materialized_runtime_dlls_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -905,11 +645,11 @@ class BuildUpstreamRuntimeTest(unittest.TestCase):
                 (output / "windows" / "x64" / "LiteRt.lib").exists()
             )
 
-    def test_v017_source_build_stages_the_pinned_dawn_correction(self) -> None:
+    def test_v020_source_build_stages_the_pinned_dawn_correction(self) -> None:
         with patch.object(
             package_upstream_prebuilts, "apply_prebuilt_override"
         ) as apply_override:
-            build_upstream_runtime.stage_runtime_overrides("v0.17.0", "android", "arm64")
+            build_upstream_runtime.stage_runtime_overrides("v0.20.0", "android", "arm64")
         apply_override.assert_called_once()
         selected = apply_override.call_args.args[0]
         self.assertEqual(selected.target_path, "bin/android/arm64/libwebgpu_dawn.so")

@@ -1,8 +1,26 @@
+diff --git a/c/c_api_internal.h b/c/c_api_internal.h
+index d19e38cb..2cadd626 100644
+--- a/c/c_api_internal.h
++++ b/c/c_api_internal.h
+@@ -70,8 +70,9 @@ void SetExecutorCacheDirs(
+ // Invokes a C streaming callback with a single `LiteRtLmStreamChunk`.
+ inline void EmitStreamChunk(LiteRtLmStreamCallback callback,
+                             void* callback_data, const char* text,
+-                            bool is_final, const char* error_msg) {
+-  LiteRtLmStreamChunk chunk{text, is_final, error_msg};
++                            bool is_final, const char* error_msg,
++                            int finish_reason = 0) {
++  LiteRtLmStreamChunk chunk{text, is_final, error_msg, finish_reason};
+   callback(callback_data, &chunk);
+ }
+ 
+diff --git a/c/conversation.cc b/c/conversation.cc
+index 1e1f23a4..eaeada6d 100644
 --- a/c/conversation.cc
 +++ b/c/conversation.cc
-@@ -44,15 +44,44 @@
- 
- namespace {
+@@ -54,18 +54,47 @@ using ::litert::lm::c::IsValidEngine;
+ using ::litert::lm::c::IsValidSessionConfig;
+ using ::litert::lm::c::RawEnumValue;
  
 +// litert-lm-native stream_proxy finish-reason wire values.
 +enum FinishReason : int {
@@ -37,37 +55,30 @@
 +          conversation](absl::StatusOr<litert::lm::Message> message) {
      if (!message.ok()) {
        std::string error_str = message.status().ToString();
-       LiteRtLmStreamChunk chunk;
-       chunk.text = nullptr;
-       chunk.is_final = true;
-       chunk.error_msg = error_str.c_str();
-+      chunk.finish_reason = absl::IsCancelled(message.status())
-+                                ? kFinishReasonCancelled
-+                                : kFinishReasonError;
-       callback(user_data, &chunk);
+       EmitStreamChunk(callback, user_data, /*text=*/nullptr, /*is_final=*/true,
+-                      error_str.c_str());
++                      error_str.c_str(), absl::IsCancelled(message.status())
++                                             ? kFinishReasonCancelled
++                                             : kFinishReasonError);
        return;
      }
-@@ -61,6 +90,8 @@ CreateConversationCallback(LiteRtLmStreamCallback callback, void* user_data) {
-       chunk.text = nullptr;
-       chunk.is_final = true;
-       chunk.error_msg = nullptr;
-+      chunk.finish_reason =
-+          ToFinishReason(conversation->GetLastDecodeStopReason());
-       callback(user_data, &chunk);
+     if (message->empty()) {  // End of stream marker
+       EmitStreamChunk(callback, user_data, /*text=*/nullptr, /*is_final=*/true,
+-                      /*error_msg=*/nullptr);
++                      /*error_msg=*/nullptr,
++                      ToFinishReason(conversation->GetLastDecodeStopReason()));
      } else {
        std::string json_str = message->dump();
-@@ -667,7 +698,9 @@ LiteRtLmStatusCode litert_lm_conversation_send_message_stream(
+       EmitStreamChunk(callback, user_data, json_str.c_str(), /*is_final=*/false,
+@@ -743,11 +772,19 @@ LiteRtLmStatusCode litert_lm_conversation_send_message_stream(
        conversation->conversation.get(), extra_context, optional_args);
  
-   absl::Status status = conversation->conversation->SendMessageAsync(
+   LITERT_LM_C_RETURN_IF_ERROR(conversation->conversation->SendMessageAsync(
 -      json_message, CreateConversationCallback(callback, callback_data),
 +      json_message,
 +      CreateConversationCallback(callback, callback_data,
 +                                 conversation->conversation.get()),
-       std::move(litert_lm_optional_args));
- 
-   if (!status.ok()) {
-@@ -677,6 +710,12 @@ LiteRtLmStatusCode litert_lm_conversation_send_message_stream(
+       std::move(litert_lm_optional_args)));
    return kLiteRtLmStatusOk;
  }
  
@@ -80,6 +91,8 @@
  LiteRtLmStatusCode litert_lm_conversation_render_message_to_string(
      LiteRtLmConversation* conversation, const char* message_json,
      const char** out_text) {
+diff --git a/c/engine_internal.h b/c/engine_internal.h
+index 8d3ad14e..2966aa58 100644
 --- a/c/engine_internal.h
 +++ b/c/engine_internal.h
 @@ -48,6 +48,8 @@ struct LiteRtLmStreamChunk {
@@ -91,9 +104,11 @@
  };
  
  struct LiteRtLmRepetitionPenaltyConfig {
+diff --git a/runtime/conversation/conversation.cc b/runtime/conversation/conversation.cc
+index 4dcd8e15..9ae967e2 100644
 --- a/runtime/conversation/conversation.cc
 +++ b/runtime/conversation/conversation.cc
-@@ -589,6 +589,7 @@ absl::Status Conversation::SendMessageAsync(
+@@ -755,6 +755,7 @@ absl::Status Conversation::SendMessageAsync(
      const Message& message,
      absl::AnyInvocable<void(absl::StatusOr<Message>)> user_callback,
      OptionalArgs optional_args) {
@@ -101,7 +116,7 @@
    if (!message.is_object()) {
      return absl::InvalidArgumentError("Message must be a JSON object.");
    }
-@@ -812,13 +813,28 @@ absl::Status Conversation::SendMessageAsync(
+@@ -968,13 +969,28 @@ absl::Status Conversation::SendMessageAsync(
  
    auto internal_callback =
        std::make_shared<absl::AnyInvocable<void(absl::StatusOr<Responses>)>>(
@@ -137,6 +152,8 @@
  
    if (session_inputs.empty()) {
      auto decode_task_controller = session_->RunDecodeAsync(
+diff --git a/runtime/conversation/conversation.h b/runtime/conversation/conversation.h
+index 986fa1a6..622a7fa9 100644
 --- a/runtime/conversation/conversation.h
 +++ b/runtime/conversation/conversation.h
 @@ -15,6 +15,7 @@
@@ -147,8 +164,8 @@
  #include <memory>
  #include <optional>
  #include <string>
-@@ -635,6 +636,12 @@ class Conversation {
-   // decode).
+@@ -655,6 +656,12 @@ class Conversation {
+   // non-callback thread) to observe the settled token count.
    absl::StatusOr<int> GetTokenCount() const;
  
 +  // Returns why the latest SendMessageAsync decode stopped. It is set before
@@ -157,10 +174,10 @@
 +    return last_decode_stop_reason_.load();
 +  }
 +
-   // Returns the number of tokens the given message would consume if added
+   // Returns the number of tokens the given messages would consume if added
    // to the conversation, including template tokens and media (vision/audio)
    // soft tokens. This does not mutate the conversation or the KV cache.
-@@ -829,6 +836,9 @@ class Conversation {
+@@ -857,6 +864,9 @@ class Conversation {
    // Whether the current conversation is in message appending state.
    bool is_appending_message_ ABSL_GUARDED_BY(history_mutex_) = false;
  
@@ -170,10 +187,12 @@
    // Mutex for task_controllers_.
    mutable absl::Mutex task_controllers_mutex_;
    // Map of task group id to task controllers.
+diff --git a/runtime/core/tasks.cc b/runtime/core/tasks.cc
+index bd7a1c0c..5ca67a48 100644
 --- a/runtime/core/tasks.cc
 +++ b/runtime/core/tasks.cc
-@@ -92,28 +92,30 @@ int TryGetMaxNumTokens(const LlmExecutor& executor) {
-   return settings->GetMaxNumTokens();
+@@ -136,28 +136,30 @@ absl::StatusOr<absl::Span<const float>> GetLogitsAsFloats(
+   return logits_data;
  }
  
 -// Check whether the decoding loop should stop.
@@ -212,15 +231,15 @@
  }
  
  // A helper class to filter the token stream based on stop tokens.
-@@ -739,6 +741,7 @@ absl::StatusOr<Responses> Decode(
-           benchmark_info, sampler, std::move(repetition_penalty_config),
+@@ -857,6 +859,7 @@ absl::StatusOr<Responses> Decode(
            std::move(no_repeat_ngram_config), std::move(suppress_tokens_config),
-           constraint, cancelled, speculative_decoding_config));
+           constraint, cancelled, speculative_decoding_config,
+           std::vector<int>(draft_token_ids.begin(), draft_token_ids.end())));
 +  DecodeStopReason stop_reason = DecodeStopReason::kUnspecified;
    while (true) {
      if (cancelled != nullptr && cancelled->load()) {
        if (benchmark_info.has_value()) {
-@@ -811,8 +814,10 @@ absl::StatusOr<Responses> Decode(
+@@ -943,8 +946,10 @@ absl::StatusOr<Responses> Decode(
  
      ABSL_ASSIGN_OR_RETURN(int current_step, executor.GetCurrentStep());
      int num_decode_steps = current_step - executor_step_before_decode;
@@ -233,7 +252,7 @@
        break;
      }
    }
-@@ -866,10 +871,11 @@ absl::StatusOr<Responses> Decode(
+@@ -998,10 +1003,11 @@ absl::StatusOr<Responses> Decode(
    }
  
    if (is_streaming) {
@@ -249,7 +268,7 @@
    }
  
    // Finalize scores for non-streaming custom sampling.
-@@ -885,9 +891,11 @@ absl::StatusOr<Responses> Decode(
+@@ -1017,9 +1023,11 @@ absl::StatusOr<Responses> Decode(
    TaskState task_state = executor.GetCurrentStep().value() >= max_num_tokens
                               ? TaskState::kMaxNumTokensReached
                               : TaskState::kDone;
@@ -264,6 +283,8 @@
  }
  
  absl::StatusOr<Responses> Score(
+diff --git a/runtime/engine/io_types.h b/runtime/engine/io_types.h
+index 2bd5649c..47cdecf5 100644
 --- a/runtime/engine/io_types.h
 +++ b/runtime/engine/io_types.h
 @@ -89,6 +89,14 @@ enum class TaskState {
@@ -293,7 +314,7 @@
    // Returns the const texts vector.
    // The returned vector contains the response texts for each candidate output
    // string. In most cases, the candidate number is 1, the vector will contain a
-@@ -166,6 +179,8 @@ class Responses {
+@@ -166,5 +179,7 @@ class Responses {
    // The state of the task.
    TaskState task_state_;
  
@@ -301,4 +322,3 @@
 +
    // The output vector of response tokens (as strings).
    std::vector<std::string> response_texts_;
- 

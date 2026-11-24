@@ -1,8 +1,7 @@
 diff --git a/ml_drift_delegate/delegate/gpu_backend_vulkan.cc b/ml_drift_delegate/delegate/gpu_backend_vulkan.cc
-index 9cd89f1..d0062fe 100644
 --- a/ml_drift_delegate/delegate/gpu_backend_vulkan.cc
 +++ b/ml_drift_delegate/delegate/gpu_backend_vulkan.cc
-@@ -380,16 +380,42 @@ GpuInferenceContextVulkan::GpuInferenceContextVulkan(
+@@ -380,16 +380,42 @@
        num_nodes_per_command_buffer_(kDefaultMaxNumNodesPerCommandBuffer) {}
  
  GpuInferenceContextVulkan::~GpuInferenceContextVulkan() {
@@ -47,7 +46,7 @@ index 9cd89f1..d0062fe 100644
    absl::MutexLock lock(ctx_mutex_);
    auto* tensor = ctx_.GetTensor(id);
    if (tensor == nullptr) {
-@@ -403,8 +429,13 @@ GpuInferenceContextVulkan::GetSpatialTensor(::ml_drift::ValueId id) {
+@@ -403,8 +429,13 @@
  
  absl::Status GpuInferenceContextVulkan::BindSpatialTensor(
      ::ml_drift::ValueId id, ::ml_drift::GpuSpatialTensor* tensor) {
@@ -62,7 +61,7 @@ index 9cd89f1..d0062fe 100644
  }
  
  absl::Status GpuInferenceContextVulkan::WriteDataToWeightTensor(
-@@ -436,9 +467,8 @@ absl::Status GpuInferenceContextVulkan::Dispatch() {
+@@ -436,9 +467,8 @@
      return shared_env.AddToPendingCommandBuffers(std::move(command_buffers));
    }
  
@@ -74,7 +73,7 @@ index 9cd89f1..d0062fe 100644
  
    if (last_ctx_ != this) {
      last_ctx_ = this;
-@@ -557,6 +587,11 @@ absl::Status GpuInferenceContextVulkan::ReportMemoryBenchmarkIfEnabled(
+@@ -557,6 +587,11 @@
  
  absl::Status GpuInferenceContextVulkan::SetCommandBufferHint(
      int num_nodes_per_command_buffer) {
@@ -87,10 +86,9 @@ index 9cd89f1..d0062fe 100644
    return absl::OkStatus();
  }
 diff --git a/ml_drift_delegate/delegate/gpu_backend_vulkan.h b/ml_drift_delegate/delegate/gpu_backend_vulkan.h
-index 9bfdc60..9c4b9f2 100644
 --- a/ml_drift_delegate/delegate/gpu_backend_vulkan.h
 +++ b/ml_drift_delegate/delegate/gpu_backend_vulkan.h
-@@ -228,6 +228,7 @@ class GpuInferenceContextVulkan : public GpuInferenceContext {
+@@ -228,6 +228,7 @@
        const override;
    absl::Status ReportMemoryBenchmarkIfEnabled(
        const ::ml_drift::CreateGpuModelInfo& create_info) override;
@@ -98,7 +96,7 @@ index 9bfdc60..9c4b9f2 100644
    absl::Status SetCommandBufferHint(int num_nodes_per_command_buffer) override;
  
    // Underlying Vulkan inference context.
-@@ -237,9 +238,17 @@ class GpuInferenceContextVulkan : public GpuInferenceContext {
+@@ -237,9 +238,17 @@
    }
  
   private:
@@ -116,7 +114,7 @@ index 9bfdc60..9c4b9f2 100644
  
    // Command buffers prepared ahead to reduce the overhead of command buffer
    // preparation.
-@@ -251,6 +260,9 @@ class GpuInferenceContextVulkan : public GpuInferenceContext {
+@@ -251,6 +260,9 @@
    // Whether next_command_buffers_ is ready to use. It's set to true when
    // all next_command_buffers_ are prepared.
    bool next_command_buffers_ready_ = false;
@@ -127,23 +125,24 @@ index 9bfdc60..9c4b9f2 100644
  
    // Static member var indicating the last context which built the command
 diff --git a/ml_drift_delegate/delegate/gpu_backend_webgpu.cc b/ml_drift_delegate/delegate/gpu_backend_webgpu.cc
-index d0a6834..77ad89c 100644
 --- a/ml_drift_delegate/delegate/gpu_backend_webgpu.cc
 +++ b/ml_drift_delegate/delegate/gpu_backend_webgpu.cc
-@@ -418,13 +418,39 @@ GpuInferenceContextWebGpu::GpuInferenceContextWebGpu(
+@@ -422,14 +422,40 @@
        num_nodes_per_command_encoder_(kNumNodesPerCommandEncoder) {}
  
  GpuInferenceContextWebGpu::~GpuInferenceContextWebGpu() {
 +  JoinNextCommandBuffersThread();
++  SharedWebGpuEnv::Get().ClearLastContextIfMatched(&backend_->wgpu_env(), this);
 +}
 +
 +void GpuInferenceContextWebGpu::JoinNextCommandBuffersThread() {
    if (next_command_buffers_thread_) {
      next_command_buffers_thread_->join();
 +    next_command_buffers_thread_.reset();
-+  }
-+}
-+
+   }
+-  SharedWebGpuEnv::Get().ClearLastContextIfMatched(&backend_->wgpu_env(), this);
+ }
+ 
 +absl::Status GpuInferenceContextWebGpu::FlushPendingSpatialTensors() {
 +  if (pending_spatial_tensors_.empty()) {
 +    return absl::OkStatus();
@@ -153,10 +152,10 @@ index d0a6834..77ad89c 100644
 +  absl::MutexLock lock(backend_->memory_manager_mutex());
 +  for (const auto& [id, tensor] : pending) {
 +    ABSL_RETURN_IF_ERROR(ctx_->SetTensor(id, tensor));
-   }
++  }
 +  return absl::OkStatus();
- }
- 
++}
++
  absl::StatusOr<::ml_drift::webgpu::SpatialTensor*>
  GpuInferenceContextWebGpu::GetSpatialTensorInternal(::ml_drift::ValueId id) {
 +  if (auto it = pending_spatial_tensors_.find(id);
@@ -170,7 +169,7 @@ index d0a6834..77ad89c 100644
    absl::MutexLock lock(backend_->memory_manager_mutex());
    auto* tensor = ctx_->GetTensor(id);
    if (tensor == nullptr) {
-@@ -443,9 +469,13 @@ GpuInferenceContextWebGpu::GetSpatialTensor(::ml_drift::ValueId id) {
+@@ -448,9 +474,13 @@
  
  absl::Status GpuInferenceContextWebGpu::BindSpatialTensor(
      ::ml_drift::ValueId id, ::ml_drift::GpuSpatialTensor* tensor) {
@@ -186,7 +185,7 @@ index d0a6834..77ad89c 100644
  }
  
  absl::Status GpuInferenceContextWebGpu::WriteDataToWeightTensor(
-@@ -526,9 +556,8 @@ absl::Status GpuInferenceContextWebGpu::PrepareCommandBuffersFromCached(
+@@ -529,9 +559,8 @@
                                   /*submit_command_buffers=*/true);
    }
  
@@ -196,9 +195,9 @@ index d0a6834..77ad89c 100644
 +  JoinNextCommandBuffersThread();
 +  ABSL_RETURN_IF_ERROR(FlushPendingSpatialTensors());
  
-   if (last_ctx_ != this) {
-     last_ctx_ = this;
-@@ -669,6 +698,11 @@ absl::Status GpuInferenceContextWebGpu::ReportMemoryBenchmarkIfEnabled(
+   SharedWebGpuEnv& shared_env = SharedWebGpuEnv::Get();
+   const ::ml_drift::webgpu::ExecutionEnvironment* env = &backend_->wgpu_env();
+@@ -674,6 +703,11 @@
  
  absl::Status GpuInferenceContextWebGpu::SetCommandBufferHint(
      int num_nodes_per_command_encoder) {
@@ -211,10 +210,9 @@ index d0a6834..77ad89c 100644
    return absl::OkStatus();
  }
 diff --git a/ml_drift_delegate/delegate/gpu_backend_webgpu.h b/ml_drift_delegate/delegate/gpu_backend_webgpu.h
-index 32d6b6f..dea1a01 100644
 --- a/ml_drift_delegate/delegate/gpu_backend_webgpu.h
 +++ b/ml_drift_delegate/delegate/gpu_backend_webgpu.h
-@@ -256,6 +256,7 @@ class GpuInferenceContextWebGpu : public GpuInferenceContext {
+@@ -256,6 +256,7 @@
        const override;
    absl::Status ReportMemoryBenchmarkIfEnabled(
        const ::ml_drift::CreateGpuModelInfo& create_info) override;
@@ -222,7 +220,7 @@ index 32d6b6f..dea1a01 100644
    absl::Status SetCommandBufferHint(int num_nodes_per_command_encoder) override;
  
    // Underlying WebGPU inference context.
-@@ -267,6 +268,8 @@ class GpuInferenceContextWebGpu : public GpuInferenceContext {
+@@ -267,6 +268,8 @@
   private:
    absl::StatusOr<::ml_drift::webgpu::SpatialTensor*> GetSpatialTensorInternal(
        ::ml_drift::ValueId id);
@@ -231,7 +229,7 @@ index 32d6b6f..dea1a01 100644
    // Prepares command buffers for Dispatch() call.
    absl::Status PrepareCommandBuffers(
        std::vector<wgpu::CommandBuffer>& command_buffers,
-@@ -281,6 +284,10 @@ class GpuInferenceContextWebGpu : public GpuInferenceContext {
+@@ -281,6 +284,10 @@
    GpuBackendWebGpu* const backend_;
    std::unique_ptr<::ml_drift::webgpu::InferenceContext> ctx_;
    std::vector<std::shared_ptr<absl::Notification>> async_upload_notifications_;
@@ -242,13 +240,16 @@ index 32d6b6f..dea1a01 100644
  
    // Command buffers prepared in advance for the next Dispatch() call.
    std::vector<std::vector<wgpu::CommandBuffer>> next_command_buffers_;
-@@ -291,6 +298,9 @@ class GpuInferenceContextWebGpu : public GpuInferenceContext {
-   // Whether next_command_buffers_ is ready to use. It's set to true when
+@@ -292,9 +299,8 @@
    // all next_command_buffers_ are prepared.
    bool next_command_buffers_ready_ = false;
-+  // Prepares next_command_buffers_ in parallel with the current Dispatch()
+   // Prepares next_command_buffers_ in parallel with the current Dispatch()
+-  // call. It is only accessed by the thread calling Dispatch(), which joins it
+-  // before touching next_command_buffers_ again, so no synchronization is
+-  // needed; see SharedWebGpuEnv for how a Dispatch() by a different context on
+-  // the same environment is handled.
 +  // call. JoinNextCommandBuffersThread() joins and resets it before flushing
 +  // staged bindings to ctx_ or touching next_command_buffers_ again.
++  // SharedWebGpuEnv tracks context changes per environment.
    std::unique_ptr<std::thread> next_command_buffers_thread_;
- 
-   // Static member var indicating the last context which built the command
+ };

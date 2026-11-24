@@ -21,13 +21,13 @@ NATIVE_COMMIT = "451ba0ce7c366972b4dc0e58f08ffe590958f943"
 class PackageReleaseTest(unittest.TestCase):
     def test_newer_upstream_requires_asr_decision_before_release_io(self) -> None:
         with patch.object(package_release, "iter_artifacts", side_effect=AssertionError("release I/O")):
-            with self.assertRaisesRegex(RuntimeError, "ASR untimed overlap has no explicit decision"):
+            with self.assertRaisesRegex(RuntimeError, "LiteRT-LM source carries have no explicit decision"):
                 package_release.build_manifest(
-                    upstream_tag="v0.19.2", upstream_commit=UPSTREAM_COMMIT,
-                    compatibility_tag="v0.19.2", release_tag="v0.19.2-1",
+                    upstream_tag="v0.20.1", upstream_commit=UPSTREAM_COMMIT,
+                    compatibility_tag="v0.20.1", release_tag="v0.20.1-1",
                     native_commit=NATIVE_COMMIT, official_upstream_assets=True)
 
-    def test_v018_source_patch_provenance_is_emitted_and_validated(self) -> None:
+    def test_v020_source_patch_provenance_is_emitted_and_validated(self) -> None:
         import hashlib
         from asr_overlap_patch import PATCH_PATH, PREIMAGE_SHA256, POSTIMAGE_SHA256
         from validate_release_manifest import validate_schema_2_identity
@@ -36,8 +36,8 @@ class PackageReleaseTest(unittest.TestCase):
                   patch.object(package_release, "provider_free_ios", return_value=False),
                   patch.object(package_release, "SHA256SUMS_PATH", Path(temp) / "SHA256SUMS")):
                 manifest = package_release.build_manifest(
-                    upstream_tag="v0.18.0", upstream_commit=UPSTREAM_COMMIT,
-                    compatibility_tag="v0.18.0", release_tag="v0.18.0-1",
+                    upstream_tag="v0.20.0", upstream_commit=UPSTREAM_COMMIT,
+                    compatibility_tag="v0.20.0", release_tag="v0.20.0-1",
                     native_commit=NATIVE_COMMIT, official_upstream_assets=True)
             from stream_finish_reason_patch import (
                 PATCH_PATH as FINISH_REASON_PATCH_PATH,
@@ -45,9 +45,12 @@ class PackageReleaseTest(unittest.TestCase):
             )
             records = manifest["upstream"]["sourcePatches"]
             self.assertEqual([record["id"] for record in records],
-                             ["asr-untimed-overlap"] + ["asr-litertlm-container"] * 3
-                             + ["stream-finish-reason"] * len(FINISH_REASON_SOURCES))
-            finish_records = records[-len(FINISH_REASON_SOURCES):]
+                             ["asr-untimed-overlap"] + ["stream-finish-reason"] * len(FINISH_REASON_SOURCES)
+                             + ["android-qwen3-gpu-safety"] * 2 + ["android-automatic-gpu"] * 2 + ["windows-engine-fd"]
+                             + ["xnnpack-pf32-sme2"] * 4 + ["xnnpack-pqs8-qc4w-sme2"]
+                             + ["huggingface-token-bytes"] * 6
+                             + ["litert-stage-spatial-tensors"] * 4)
+            finish_records = [r for r in records if r["id"] == "stream-finish-reason"]
             finish_reason_sha256 = hashlib.sha256(
                 (Path(__file__).resolve().parents[1] / FINISH_REASON_PATCH_PATH).read_bytes()
             ).hexdigest()
@@ -63,9 +66,9 @@ class PackageReleaseTest(unittest.TestCase):
             self.assertEqual(records[0]["postimageSha256Lf"], POSTIMAGE_SHA256)
             def validate():
                 validate_schema_2_identity(
-                    manifest, upstream_tag="v0.18.0", upstream_commit=UPSTREAM_COMMIT,
-                    compatibility_tag="v0.18.0", native_commit=NATIVE_COMMIT,
-                    release_tag="v0.18.0-1")
+                    manifest, upstream_tag="v0.20.0", upstream_commit=UPSTREAM_COMMIT,
+                    compatibility_tag="v0.20.0", native_commit=NATIVE_COMMIT,
+                    release_tag="v0.20.0-1")
             validate()
             tampered = deepcopy(records)
             records[-1]["postimageSha256Lf"] = "0" * 64

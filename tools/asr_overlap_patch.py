@@ -1,44 +1,21 @@
-"""Identity of the carried v0.18 untimed merger source transformation."""
+"""Identity of the carried untimed merger patch and release patch inventory."""
 import hashlib
-import re
 from pathlib import Path
 
+from android_automatic_gpu_patch import manifest as android_automatic_gpu_manifest
 from android_gpu_safety_patch import manifest as android_gpu_safety_manifest
-from asr_litertlm_container_patch import container_patch_manifest
 from huggingface_token_bytes_patch import token_bytes_patch_manifest
-from litert_cpu_options_identifier_patch import cpu_options_identifier_patch_manifest
 from litert_stage_spatial_tensors_patch import stage_spatial_tensors_patch_manifest
-from step_zero_state_patch import manifest as step_zero_state_manifest
+from source_patch_utils import active_source_carries
 from stream_finish_reason_patch import finish_reason_patch_manifest
-from workspace_build_patch import workspace_build_patch_manifest
+from windows_engine_fd_patch import manifest as windows_engine_fd_manifest
 from xnnpack_pf32_sme2_patch import xnnpack_pf32_patch_manifest
 from xnnpack_pqs8_qc4w_sme2_patch import xnnpack_qc4w_patch_manifest
 
-PREIMAGE_SHA256 = "6458bdfb32cbb32250c5be8843d303a9759da96f5675eae2d23a5f01f41dc826"
-AUDITED_OVERLAP_TAGS = frozenset({"v0.18.0", "v0.18.1"})
-POSTIMAGE_SHA256 = "c320a49202fcaed40ef2619e977b3a44303e7aa9aa04012c94a6ca07c016caee"
-PATCH_PATH = "native/bridge/asr_untimed_overlap.patch"
-MERGER_SOURCE = "omni/asr/timestamp_text_merger.cc"
-# v0.19.0 moved and rewrote the merger; its seam-run fallback still mis-seams
-# repeated phrases at the bridge's 0.4 overlap (docs/asr_untimed_overlap.md).
-# The v0.19.1 merger is byte-identical to v0.19.0.
-V019_PREIMAGE_SHA256 = "1ddbc15f935d63ca123011e7e4864b33b78b8cd5ee292b9d3bccf90d2bdb378f"
-V019_POSTIMAGE_SHA256 = "3b135f027b369ceadb734117d416071e4e64837304f49b90e77e8f9d19fec060"
-V019_PATCH_PATH = "native/bridge/asr_untimed_overlap_v019.patch"
-V019_MERGER_SOURCE = "omni/speech2text/timestamp_text_merger.cc"
-V019_OVERLAP_TAGS = frozenset({"v0.19.0", "v0.19.1"})
-
-
-def merger_source(compatibility_tag: str) -> str:
-    return (V019_MERGER_SOURCE if compatibility_tag in V019_OVERLAP_TAGS
-            else MERGER_SOURCE)
-
-
-def overlap_identity(compatibility_tag: str) -> tuple[str, str, str]:
-    """Returns the patch path, preimage and postimage for an audited tag."""
-    if compatibility_tag in V019_OVERLAP_TAGS:
-        return V019_PATCH_PATH, V019_PREIMAGE_SHA256, V019_POSTIMAGE_SHA256
-    return PATCH_PATH, PREIMAGE_SHA256, POSTIMAGE_SHA256
+PATCH_PATH = "native/bridge/asr_untimed_overlap_v019.patch"
+MERGER_SOURCE = "omni/speech2text/timestamp_text_merger.cc"
+PREIMAGE_SHA256 = "f6091439b29114fdb6cb010480e9b9b3961cd7c868925dc08f458f822ddecd65"
+POSTIMAGE_SHA256 = "4a7949344fb79d7c7e7c6fc4261b74031b1244f6bb83f741229483775efdd835"
 
 
 def source_sha256(data: bytes) -> str:
@@ -46,44 +23,24 @@ def source_sha256(data: bytes) -> str:
     return hashlib.sha256(data.replace(b"\r\n", b"\n")).hexdigest()
 
 
-def require_asr_patch_decision(compatibility_tag: str) -> None:
-    """Older releases predate this carry; newer/unknown sources need a decision.
-
-    Deliberately no environment/CLI bypass: extending support means checking in
-    a revalidated patch or a documented, version-specific retirement decision.
-    """
-    version = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", compatibility_tag)
-    if version and tuple(map(int, version.groups())) < (0, 18, 0):
-        return
-    if compatibility_tag in AUDITED_OVERLAP_TAGS | V019_OVERLAP_TAGS:
-        return
-    raise RuntimeError(
-        f"ASR untimed overlap has no explicit decision for {compatibility_tag}; "
-        "revalidate the carried patch or record a version-specific opt-out with "
-        "evidence in tools/asr_overlap_patch.py and docs/asr_untimed_overlap.md "
-        "before building or releasing this version")
-
-
 def source_patch_manifest(compatibility_tag: str) -> list[dict]:
-    require_asr_patch_decision(compatibility_tag)
-    carried = compatibility_tag in AUDITED_OVERLAP_TAGS | V019_OVERLAP_TAGS
-    patch_path, preimage, postimage = overlap_identity(compatibility_tag)
-    overlap = [] if not carried else [{
+    if not active_source_carries(compatibility_tag):
+        return []
+    overlap = [{
         "id": "asr-untimed-overlap",
-        "path": patch_path,
-        "sha256": hashlib.sha256((Path(__file__).resolve().parents[1] / patch_path).read_bytes()).hexdigest(),
-        "source": merger_source(compatibility_tag),
-        "preimageSha256Lf": preimage,
-        "postimageSha256Lf": postimage,
+        "path": PATCH_PATH,
+        "sha256": hashlib.sha256((Path(__file__).resolve().parents[1] / PATCH_PATH).read_bytes()).hexdigest(),
+        "source": MERGER_SOURCE,
+        "preimageSha256Lf": PREIMAGE_SHA256,
+        "postimageSha256Lf": POSTIMAGE_SHA256,
         "scope": "source-built runtimes only; excludes official upstream prebuilts",
     }]
-    return [*overlap, *container_patch_manifest(compatibility_tag),
+    return [*overlap,
         *finish_reason_patch_manifest(compatibility_tag),
         *android_gpu_safety_manifest(compatibility_tag),
-        *workspace_build_patch_manifest(compatibility_tag),
+        *android_automatic_gpu_manifest(compatibility_tag),
+        *windows_engine_fd_manifest(compatibility_tag),
         *xnnpack_pf32_patch_manifest(compatibility_tag),
         *xnnpack_qc4w_patch_manifest(compatibility_tag),
-        *cpu_options_identifier_patch_manifest(compatibility_tag),
         *token_bytes_patch_manifest(compatibility_tag),
-        *step_zero_state_manifest(compatibility_tag),
         *stage_spatial_tensors_patch_manifest(compatibility_tag)]

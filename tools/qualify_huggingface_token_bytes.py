@@ -11,7 +11,7 @@ import shlex
 import shutil
 import subprocess
 
-from huggingface_token_bytes_patch import SOURCES, apply as apply_token_bytes_patch
+from huggingface_token_bytes_patch import apply as apply_token_bytes_patch, SOURCES
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -80,7 +80,7 @@ def mutation_controls(compiler: str, cflags: list[str], work_dir: Path) -> list[
 
 def qualify(work_dir: Path, tokenizer_json: Path | None = None,
             source_root: Path | None = None, mutations: bool = False, *,
-            runtime_library: Path | None = None,
+            upstream_tag: str = "v0.20.0", runtime_library: Path | None = None,
             llguidance_include: Path | None = None,
             schema_json: Path | None = None,
             observed_output: Path | None = None) -> dict:
@@ -133,9 +133,11 @@ def qualify(work_dir: Path, tokenizer_json: Path | None = None,
             target = patched / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source_root / name, target)
-        apply_token_bytes_patch(patched, "v0.19.0")
+        apply_token_bytes_patch(patched, upstream_tag)
         source_binary = work_dir / "huggingface_tokenizer_source_test"
         packages = ["absl_statusor", "absl_leak_check", "absl_status_macros", "absl_flat_hash_set"]
+        if upstream_tag == "v0.20.0":
+            packages += ["absl_log", "absl_strings", "absl_synchronization"]
         flags = shlex.split(subprocess.check_output(
             ["pkg-config", "--cflags", "--libs", *packages], text=True))
         source_command = [compiler, "-std=c++17", "-O2", "-Wall", "-Wextra", *cflags,
@@ -145,6 +147,8 @@ def qualify(work_dir: Path, tokenizer_json: Path | None = None,
                         str(patched / "runtime/components/constrained_decoding/llg_constraint_provider.cc"),
                         str(REPO / "tests/huggingface_token_bytes/tokenizer_source_test.cc"),
                         *flags, "-o", str(source_binary)]
+        if upstream_tag == "v0.20.0":
+            source_command.insert(1, "-DLITERT_LM_LLGUIDANCE_V2")
         subprocess.run(source_command, check=True, timeout=120)
         subprocess.run([str(source_binary.resolve()), *command[1:]],
                        check=True, timeout=30)
@@ -260,6 +264,7 @@ def main() -> None:
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--tokenizer-json", type=Path)
     parser.add_argument("--source-root", type=Path)
+    parser.add_argument("--upstream-tag", default="v0.20.0")
     parser.add_argument("--mutations", action="store_true")
     parser.add_argument("--runtime-library", type=Path)
     parser.add_argument("--llguidance-include", type=Path)
@@ -268,7 +273,7 @@ def main() -> None:
     args = parser.parse_args()
     print(json.dumps(qualify(
         args.work_dir, args.tokenizer_json, args.source_root, args.mutations,
-        runtime_library=args.runtime_library, llguidance_include=args.llguidance_include,
+        upstream_tag=args.upstream_tag, runtime_library=args.runtime_library, llguidance_include=args.llguidance_include,
         schema_json=args.schema_json, observed_output=args.observed_output), indent=2))
 
 

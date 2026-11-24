@@ -1,0 +1,43 @@
+diff --git a/c/BUILD b/c/BUILD
+index cca1092c..7aba4ef7 100644
+--- a/c/BUILD
++++ b/c/BUILD
+@@ -45,6 +45,7 @@ exports_files([
+ ])
+ 
+ ENGINE_LITE_COMMON_DEPS = [
++    "//bridge:litert_lm_android_gpu_preflight",
+     ":c_api_internal",
+     ":engine_internal",
+     ":error_reporter",
+diff --git a/c/engine.cc b/c/engine.cc
+index 4e216335..46bfb4ba 100644
+--- a/c/engine.cc
++++ b/c/engine.cc
+@@ -13,6 +13,7 @@
+ // limitations under the License.
+ 
+ #include "c/engine.h"
++#include "bridge/litert_lm_android_gpu_preflight.h"
+ 
+ #include <cstddef>
+ #include <cstdint>
+@@ -1041,9 +1042,17 @@ LiteRtLmStatusCode litert_lm_engine_create(
+   if (!IsValidEngineSettings(settings)) {
+     return kLiteRtLmStatusInvalidArgument;
+   }
++#if defined(__ANDROID__)
++  auto guarded_settings = *settings->settings;
++  LITERT_LM_C_RETURN_IF_ERROR(
++      litert_lm_native::PrepareAndroidGpuSafety(guarded_settings));
++  const auto& selected_settings = guarded_settings;
++#else
++  const auto& selected_settings = *settings->settings;
++#endif
+   LITERT_LM_C_ASSIGN_OR_RETURN(
+       std::unique_ptr<Engine> engine,
+-      EngineFactory::CreateDefault(*settings->settings));
++      EngineFactory::CreateDefault(selected_settings));
+   auto c_engine = std::make_unique<LiteRtLmEngine>();
+   c_engine->engine = std::move(engine);
+   *out_engine = c_engine.release();

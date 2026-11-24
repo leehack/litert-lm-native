@@ -337,7 +337,7 @@ class MacOsArm64OnlyInventoryTest(unittest.TestCase):
         self.assertIn('"platform": "macos", "arch": "arm64"', workflow)
         self.assertNotIn('"platform": "macos", "arch": "x64"', workflow)
         with patch.object(sys, "argv", [
-            "build_upstream_runtime.py", "--upstream-tag", "v0.18.0",
+            "build_upstream_runtime.py", "--upstream-tag", "v0.20.0",
             "--platform", "macos", "--arch", "x64",
         ]):
             with self.assertRaisesRegex(SystemExit, "macos/x64: macOS runtimes are published for arm64 only"):

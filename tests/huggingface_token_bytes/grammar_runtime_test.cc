@@ -80,7 +80,11 @@ int main(int argc, char** argv) {
     }
     Check(eos && space && null_id && true_id && false_id, "supported vocabulary controls");
     litert::lm::LlGuidanceConfig config;
+#ifdef LITERT_LM_LLGUIDANCE_V2
+    config.eos_ids = {eos};
+#else
     config.eos_id = eos;
+#endif
     auto provider = litert::lm::LlgConstraintProvider::Create(*tokenizer, config);
     Check(provider.ok(), "actual provider creation");
     auto New = [&](const std::string& schema) {

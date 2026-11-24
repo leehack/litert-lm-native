@@ -154,19 +154,17 @@ class StreamProxyCallbackAbiTest(unittest.TestCase):
         self.assertIn('define_values = {"litert_lm_stream_chunk_api": "true"}', source)
         self.assertIn('\":stream_chunk_api\": [\"LITERT_LM_STREAM_CHUNK_API=1\"]', source)
         for platform, arch in build_upstream_runtime.RUNTIME_TARGETS:
-            for tag, expected in (("v0.14.0", 1), ("v0.15.0", 2), ("v0.19.0", 2)):
+            for tag, expected in (("v0.20.0", 2),):
                 with self.subTest(platform=platform, arch=arch, tag=tag), tempfile.TemporaryDirectory() as temp, ExitStack() as mocks:
                     for name in (
-                        "patch_asr_untimed_overlap", "patch_asr_litertlm_container",
+                        "patch_asr_untimed_overlap", "patch_android_automatic_gpu",
                         "patch_stream_finish_reason", "patch_huggingface_token_bytes",
-                        "apply_android_gpu_safety", "patch_upstream_ios_sampler_path",
+                        "apply_android_gpu_safety", "patch_windows_engine_fd", "patch_windows_rules_android",
                         "verify_upstream_fst_gate", "verify_carried_dependency_pins",
                         "fetch_audited_archives",
                     ):
                         mocks.enter_context(patch.object(build_upstream_runtime, name))
                     mocks.enter_context(patch.object(build_upstream_runtime, "materialize_git_lfs_libraries", return_value=0))
-                    mocks.enter_context(patch.object(build_upstream_runtime, "require_cpu_options_identifier_patch_decision", return_value=False))
-                    mocks.enter_context(patch.object(build_upstream_runtime, "require_finish_reason_patch_decision", return_value=False))
                     mocks.enter_context(patch.object(build_upstream_runtime, "prepare_bridge_package", return_value=[]))
                     mocks.enter_context(patch.object(build_upstream_runtime, "bazel_command", return_value=["bazel"]))
                     run = mocks.enter_context(patch.object(build_upstream_runtime, "run", side_effect=RuntimeError("captured build")))
