@@ -1,5 +1,6 @@
 """Identity and fail-closed application of the HF ByteLevel grammar fix (#100)."""
 import hashlib
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -90,17 +91,24 @@ def _digest(path: Path) -> str:
 def apply(source_root: Path, tag: str) -> None:
     if not require_token_bytes_patch_decision(tag):
         return
-    digests = {name: _digest(source_root / name) for name in sources_for(tag)}
-    if all(digests[name] == post for name, (_, post) in sources_for(tag).items()):
+    sources = sources_for(tag)
+    digests = {name: _digest(source_root / name) for name in sources}
+    if all(digests[name] == post for name, (_, post) in sources.items()):
         return
-    if any(digests[name] != pre for name, (pre, _) in sources_for(tag).items()):
+    if any(digests[name] != pre for name, (pre, _) in sources.items()):
         raise RuntimeError("Tokenizer or grammar source changed; requalify #100 token bytes patch")
     patch = Path(__file__).resolve().parents[1] / patch_path_for(tag)
     command = ["git", "apply", "--ignore-space-change", str(patch)]
-    subprocess.run([*command[:2], "--check", *command[2:]], check=True, cwd=source_root)
-    subprocess.run(command, check=True, cwd=source_root)
-    if any(_digest(source_root / name) != post for name, (_, post) in sources_for(tag).items()):
-        raise RuntimeError("HuggingFace token bytes postimage mismatch; requalify #100")
+    # In a nested source copy, the owner's Git root can silently filter out hunks.
+    env = {**os.environ, "GIT_CEILING_DIRECTORIES": str(source_root.resolve().parent)}
+    subprocess.run([*command[:2], "--check", *command[2:]], check=True, cwd=source_root, env=env)
+    subprocess.run(command, check=True, cwd=source_root, env=env)
+    mismatches = [name for name, (_, post) in sources.items()
+                  if _digest(source_root / name) != post]
+    if mismatches:
+        raise RuntimeError(
+            f"HuggingFace token bytes postimage mismatch for {', '.join(mismatches)}; "
+            "requalify #100")
 
 
 def token_bytes_patch_manifest(tag: str) -> list[dict]:

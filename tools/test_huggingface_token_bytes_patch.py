@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -64,6 +65,39 @@ class HuggingFaceTokenBytesPatchTest(unittest.TestCase):
             with patch.object(carry, "SOURCES", sources), patch.object(carry.subprocess, "run"):
                 with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
                     carry.apply(root, "v0.19.0")
+
+    def test_nested_v020_source_applies_and_rejects_a_drifted_postimage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo = Path(temp)
+            subprocess.run(["git", "init", "--quiet", str(repo)], check=True)
+            root = repo / "token-byte-qualification" / "patched"
+            root.mkdir(parents=True)
+            (repo / "tokenizer.h").write_bytes(b"owner header\n")
+            source = root / "tokenizer.h"
+            preimage = b"context\nraw spelling\n"
+            postimage = b"context\nexact bytes\n"
+            sources = {"tokenizer.h": (hashlib.sha256(preimage).hexdigest(),
+                                       hashlib.sha256(postimage).hexdigest())}
+            patch_file = repo / "fixture.patch"
+            patch_file.write_bytes(
+                b"diff --git a/tokenizer.h b/tokenizer.h\n"
+                b"--- a/tokenizer.h\n+++ b/tokenizer.h\n"
+                b"@@ -1,2 +1,2 @@\n context\n-raw spelling\n+exact bytes\n"
+            )
+            with (patch.object(carry, "V020_SOURCES", sources),
+                  patch.object(carry, "V020_PATCH_PATH", str(patch_file))):
+                source.write_bytes(preimage)
+                carry.apply(root, "v0.20.0")
+                self.assertEqual(source.read_bytes(), postimage)
+                self.assertEqual((repo / "tokenizer.h").read_bytes(), b"owner header\n")
+                carry.apply(root, "v0.20.0")
+
+                source.write_bytes(preimage)
+                patch_file.write_bytes(patch_file.read_bytes().replace(
+                    b"+exact bytes", b"+unqualified bytes"))
+                with self.assertRaisesRegex(RuntimeError, "postimage mismatch"):
+                    carry.apply(root, "v0.20.0")
+                self.assertEqual(source.read_bytes(), b"context\nunqualified bytes\n")
 
     def test_reference_uses_special_ids_and_keeps_partial_utf8_and_all_slots(self) -> None:
         fixture = vocabulary_fixture({"model": {"vocab": {"Ã": 0, "©": 1, "Ā": 2}},

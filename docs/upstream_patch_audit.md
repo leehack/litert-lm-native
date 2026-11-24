@@ -283,6 +283,21 @@ the UTF-8 callback contract and bounded-default formatting policy pass these
 controls, and the unchanged supported-model schema qualifier, including literal
 Unicode keys/values, succeeds against the packaged runtime.
 
+### v0.20.0 requalification
+
+Upstream added SentencePiece byte fallback and LLGuidance multiple-EOS support.
+It still reads raw HF vocabulary spellings without ByteLevel inversion. Its
+text callback uses the UTF-8 contract by default. When the verbatim probe
+fails, upstream removes the callback and enables approximate trie tokenization.
+The v0.20.0 carry derives ByteLevel bytes before this probe and preserves the
+SentencePiece and multiple-EOS paths.
+
+The six pinned preimage and postimage hashes were re-derived from
+`95df4c2a932b4917ace66fcfef6c154e8d2a6699`. Run the qualifier with
+`--upstream-tag v0.20.0` against that checkout. The apply step bounds Git
+repository discovery to the copied source tree so it can patch the default
+qualification directory inside the owner checkout.
+
 ### Default JSON formatting progress
 
 The PR103 Mac diagnostic primary (`1a29401a…`) fixed the native abort but the
