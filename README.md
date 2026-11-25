@@ -217,6 +217,10 @@ inference and ASR real-model smokes on Linux x64, Windows x64, and macOS arm64. 
 runtime/evidence artifacts for review but has no publication input or write
 permission.
 
+Pull-request builds restore matching Bazel caches from the default branch by
+target, upstream commit and build-script hash. A miss builds from scratch.
+Pull requests do not save Bazel caches. Native release builds populate them.
+
 Pull-request qualification targets upstream `v0.20.0` at
 `95df4c2a932b4917ace66fcfef6c154e8d2a6699`. Consumers must admit C API
 `1.1.0` before loading the candidate. See the [v0.20 qualification and carry

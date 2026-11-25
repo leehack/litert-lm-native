@@ -188,14 +188,14 @@ jobs:
       - name: Cache Bazel
         if: matrix.platform != 'windows' && !(matrix.platform == 'linux' && matrix.arch == 'x64') && !(matrix.platform == 'android' && matrix.arch == 'x64')
         continue-on-error: true
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cache/bazel
             ~/.cache/bazelisk
             ~/Library/Caches/bazelisk
             .bazel-output-root
-          key: pr-bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ env.QUALIFICATION_UPSTREAM_COMMIT }}-${{ hashFiles('tools/build_upstream_runtime.py') }}
+          key: bazel-${{ runner.os }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ env.QUALIFICATION_UPSTREAM_COMMIT }}-${{ hashFiles('tools/build_upstream_runtime.py') }}
 
       - name: Build exact upstream LiteRT-LM runtime
         shell: bash

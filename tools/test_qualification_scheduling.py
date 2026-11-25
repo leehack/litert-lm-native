@@ -44,6 +44,19 @@ class QualificationSchedulingTest(unittest.TestCase):
         self.assertIn('test_linux_runtime_metadata.py', shared)
         self.assertNotIn('continue-on-error:', preflight)
 
+    def test_build_restores_the_release_bazel_cache_without_saving(self) -> None:
+        release = WORKFLOW_PATH.with_name('native_release.yml').read_text()
+        qualification = job('build')
+        release_build = job('build-upstream-runtime', release)
+        step_name = '      - name: Cache Bazel\n'
+        cache = qualification.split(step_name, 1)[1].split('      - ', 1)[0]
+        release_cache = release_build.split(step_name, 1)[1].split('      - ', 1)[0]
+        expected = release_cache.replace('inputs.upstream_commit', 'env.QUALIFICATION_UPSTREAM_COMMIT')
+        expected = expected.replace('actions/cache@', 'actions/cache/restore@')
+        self.assertEqual(cache, expected)
+        self.assertNotIn('uses: actions/cache@', qualification)
+        self.assertNotIn('uses: actions/cache/save@', qualification)
+
     def test_asr_job_executes_real_source_and_negative_mutations(self) -> None:
         asr = job('asr-compatibility')
         self.assertIn('ref: ${{ env.QUALIFICATION_UPSTREAM_COMMIT }}', asr)
